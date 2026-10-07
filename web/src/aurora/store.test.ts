@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actOnBehalf, getState, setState } from "./store";
+import { actOnBehalf, getState, refreshPaused, setState, togglePause } from "./store";
 
 const send = { business: "inn", kind: "msg" as const, action: "Respondeu Marcos", why: "teste", done: "Enviado", target: { kind: "reply" as const, id: "i1", text: "oi" } };
 
@@ -16,5 +16,13 @@ describe("actOnBehalf", () => {
     expect(await actOnBehalf(send)).toBe(true);
     expect(getState().activity[0]).toMatchObject({ action: "Respondeu Marcos", business: "inn", reversible: true, undone: false });
     expect(getState().toast?.text).toBe("Enviado");
+  });
+
+  it("a sincronização periódica não desfaz uma pausa feita aqui", async () => {
+    setState({ paused: false });
+    await togglePause();
+    await refreshPaused();
+    expect(getState().paused).toBe(true);
+    await togglePause();
   });
 });

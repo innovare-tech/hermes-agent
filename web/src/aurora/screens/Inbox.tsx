@@ -84,7 +84,7 @@ export function Inbox() {
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <span className="au-label">O que eu sei</span>
               {sel.context.map((c) => (
-                <div key={c} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: "var(--fg2)", lineHeight: 1.5 }}>
+                <div key={c} style={{ display: "flex", gap: 10, alignItems: "flex-start", minHeight: 23, fontSize: 13, color: "var(--fg2)", lineHeight: 1.5 }}>
                   <Icon name="brain" size={13} color="var(--acc)" className="au-mt3" />
                   {c}
                 </div>

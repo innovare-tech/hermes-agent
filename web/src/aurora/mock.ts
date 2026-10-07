@@ -78,10 +78,15 @@ const SNAPSHOT: OpsSnapshot = {
 
 const hhmm = () => new Date().toTimeString().slice(0, 5);
 
+// Kill switch do mock: guarda o estado para a sincronização periódica não despausar sozinha.
+let paused = false;
+
 export const mockAdapter: OpsAdapter = {
   load: async () => structuredClone(SNAPSHOT),
-  getPaused: async () => false,
-  setPaused: async () => {},
+  getPaused: async () => paused,
+  setPaused: async (p) => {
+    paused = p;
+  },
   perform: async (a) => ({
     id: crypto.randomUUID(),
     at: hhmm(),
