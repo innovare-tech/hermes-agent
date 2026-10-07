@@ -1,0 +1,96 @@
+// Dados mock — copiados do <script data-dc-script> do protótipo.
+import type { Activity, Approval, InboxItem, OpsAdapter, OpsSnapshot, RadarGroup, Session, Ticket } from "./adapter";
+
+const SESSIONS: Session[] = [
+  { id: "s1", title: "Revisão de PRs + resumo semanal", source: "Web", icon: "globe", when: "09:38", group: "Hoje", msgs: 14, snippet: "Agendei o resumo para toda segunda às 9h no Telegram." },
+  { id: "s2", title: "Backup noturno do Postgres no S3", source: "Cron", icon: "calendar-clock", when: "03:00", group: "Hoje", msgs: 6, snippet: "Backup concluído: 2,3 GB, checksum verificado." },
+  { id: "s3", title: "Nomes para o app de finanças", source: "Telegram", icon: "send", when: "08:12", group: "Hoje", msgs: 22, snippet: "Gostei de “Caixa Alta” e “Fôlego”." },
+  { id: "s4", title: "Migrar CI do Jenkins para Actions", source: "CLI", icon: "square-terminal", when: "ontem", group: "Ontem", msgs: 41, snippet: "Workflow de deploy passou nos 3 ambientes." },
+  { id: "s5", title: "Resumo do paper sobre DPO", source: "Discord", icon: "message-circle", when: "ontem", group: "Ontem", msgs: 9, snippet: "A contribuição central é trocar o modelo de recompensa por…" },
+  { id: "s6", title: "Configurar sandbox no Modal", source: "CLI", icon: "square-terminal", when: "seg", group: "Esta semana", msgs: 17, snippet: "O ambiente hiberna após 10 min ocioso." },
+  { id: "s7", title: "Briefing diário de IA", source: "Cron", icon: "calendar-clock", when: "seg", group: "Esta semana", msgs: 3, snippet: "Cinco destaques de hoje, em ordem de relevância." },
+  { id: "s8", title: "Planilha de gastos de setembro", source: "WhatsApp", icon: "phone", when: "dom", group: "Esta semana", msgs: 12, snippet: "Categorizei 84 transações; mercado subiu 18%." },
+];
+
+const INBOX: InboxItem[] = [
+  { id: "i1", business: "inn", channel: "WhatsApp", from: "Marcos Teles", initials: "MT", receivedAt: "06:52", priority: "urgente", autonomyMode: "Rascunhar", summary: "Painel da Teles Log fora do ar (erro 502) desde 06:40", message: "Bom dia! O painel da Teles Log não abre desde cedo, dá erro 502. Temos operação às 9h!", suggestedReply: "Bom dia, Marcos. Já identifiquei: o certificado do balanceador expirou às 06:38. Estou renovando agora — volta em até 10 minutos e te aviso por aqui.", context: ["Cliente desde 2023, plano Enterprise", "Prefere WhatsApp e prazos claros", "Último incidente em 14 ago, resolvido em 22 min"] },
+  { id: "i2", business: "unic", channel: "Grupo", from: "Unic · Suporte VIP", initials: "SV", receivedAt: "08:44", priority: "urgente", autonomyMode: "Rascunhar", summary: "3 clientes relatando lentidão na geração de relatórios", message: "Tiago: relatório mensal travado há 30 min. Bianca: aqui também. Lumen: alguma previsão?", suggestedReply: "Pessoal, já estamos em cima. A geração de relatórios está lenta desde 08:10 por uma fila travada — estou reiniciando o worker agora e aviso aqui assim que normalizar.", context: ["Grupo com 48 clientes VIP da Unic", "Ticket #2041 já aberto e ligado ao erro", "Clima do grupo caiu 40% na última hora"] },
+  { id: "i3", business: "unic", channel: "Suporte", from: "Juliana Prado", initials: "JP", receivedAt: "08:20", priority: "voce", autonomyMode: "Rascunhar", summary: "Pede estorno de cobrança em duplicidade (R$ 189,90)", message: "Fui cobrada duas vezes na mensalidade de setembro. Quero o estorno de uma das cobranças, por favor.", suggestedReply: "Oi, Juliana! Confirmei a cobrança duplicada de R$ 189,90 em 05/09. Já solicitei o estorno — aparece na sua fatura em até 7 dias úteis. Desculpe pelo transtorno.", context: ["Cliente Unic desde jan/2025, plano Pro", "Prefere contato por e-mail, tom formal", "Estorno precisa da sua aprovação (valor > R$ 100)"] },
+  { id: "i4", business: "inn", channel: "WhatsApp", from: "Carla Mendes", initials: "CM", receivedAt: "ontem", priority: "voce", autonomyMode: "Rascunhar", summary: "Propõe reajuste de 12% no contrato de hospedagem", message: "Oi! Segue a proposta de renovação com reajuste de 12% a partir de novembro. Consegue me dar um retorno até quinta?", suggestedReply: "Oi, Carla. Recebi a proposta, obrigado. Vou avaliar com o time e te retorno até quinta.", context: ["Fornecedora de hospedagem desde 2022", "Último reajuste: 6% em out/2025", "Você costuma negociar antes de aceitar"] },
+  { id: "i5", business: "pes", channel: "Telegram", from: "Ana", initials: "A", receivedAt: "07:58", priority: "voce", autonomyMode: "Rascunhar", summary: "Pergunta se você vai ao almoço de domingo", message: "Vai no almoço domingo? A mãe quer saber pra fazer a lasanha.", suggestedReply: "Vou sim! Chego por volta de 12h30 e levo a sobremesa.", context: ["Sua irmã", "Almoço na casa da sua mãe, domingo 12h", "Você levou a sobremesa da última vez também"] },
+  { id: "i6", business: "inn", channel: "Email", from: "Rafael Nunes", initials: "RN", receivedAt: "07:12", priority: "resolve", autonomyMode: "Autônomo", summary: "Pediu as NFs de setembro — anexei e respondi", message: "Bom dia, pode me mandar as notas de setembro para o fechamento?", suggestedReply: "Bom dia, Rafael. Seguem em anexo as 14 notas fiscais de setembro. Qualquer coisa, estou por aqui.", sentAt: "Enviado sozinho às 07:12 · 14 anexos", context: ["Contador da Innovare", "Pedido recorrente todo dia 7"] },
+  { id: "i7", business: "inn", channel: "Telegram", from: "Pedro Lins", initials: "PL", receivedAt: "08:05", priority: "resolve", autonomyMode: "Autônomo", summary: "Perguntou o status do deploy — respondi com o link", message: "O deploy de ontem foi pra produção?", suggestedReply: "Foi sim, às 18:42. Changelog: github.com/innovare-tech/hermes-agent/releases/v2.14", sentAt: "Enviado sozinho às 08:05", context: ["Dev da Innovare"] },
+  { id: "i8", business: "unic", channel: "Email", from: "SaaS Weekly", initials: "SW", receivedAt: "06:00", priority: "ignorar", autonomyMode: "Autônomo", summary: "Newsletter semanal", message: "Edição 212: as 10 métricas que todo SaaS deveria acompanhar…", suggestedReply: "", context: ["Você nunca abriu as últimas 8 edições"] },
+  { id: "i9", business: "pes", channel: "WhatsApp", from: "Condomínio Jardins", initials: "CJ", receivedAt: "ontem", priority: "ignorar", autonomyMode: "Observar", summary: "Aviso de manutenção da piscina na sexta", message: "Informamos que a piscina estará fechada na sexta para manutenção.", suggestedReply: "", context: ["Grupo do condomínio"] },
+];
+
+const APPROVALS: Approval[] = [
+  { id: "a1", business: "inn", kind: "comando", icon: "square-terminal", title: "Renovar o certificado do balanceador da Teles Log", risk: "baixo", createdAt: "06:44", why: "O certificado expirou às 06:38 e é a causa do erro 502 relatado pelo Marcos.", preview: "ssh lb-teles 'certbot renew --cert-name teles.app && systemctl reload nginx'", source: "detectado via WhatsApp + monitoramento" },
+  { id: "a2", business: "unic", kind: "comando", icon: "rotate-cw", title: "Reiniciar o worker de relatórios (produção)", risk: "médio", createdAt: "08:46", why: "A fila 'reports' está travada há 34 min com 212 jobs pendentes. Reinício resolveu o mesmo problema em 2 de 2 vezes.", preview: "kubectl -n unic rollout restart deploy/reports-worker", source: "ticket #2041" },
+  { id: "a3", business: "unic", kind: "reembolso", icon: "receipt", title: "Estornar R$ 189,90 para Juliana Prado", risk: "médio", createdAt: "08:21", why: "Duas transações idênticas em 05/09 no gateway de pagamento. Cobrança duplicada confirmada.", preview: "refund ch_3Pq…8Kd · R$ 189,90 · motivo: duplicidade", source: "caixa de entrada · suporte" },
+  { id: "a4", business: "inn", kind: "pagamento", icon: "credit-card", title: "Pagar fatura da AWS de setembro — US$ 1.284,10", risk: "alto", createdAt: "07:00", why: "Vence hoje. Valor 9% acima da média dos últimos 3 meses (aumento em transferência de dados).", preview: "Cartão final 4410 · fatura AWS-2026-09", source: "agendamento: contas a pagar" },
+];
+
+const RADAR: RadarGroup[] = [
+  { id: "r1", business: "unic", channel: "WhatsApp", name: "Unic · Suporte VIP", members: 48, msgsToday: 132, sentiment: [0.8, 0.78, 0.74, 0.75, 0.66, 0.6, 0.5, 0.42, 0.36, 0.3, 0.27, 0.31], alert: "3 clientes irritados com lentidão nos relatórios desde 08:10", decisions: ["Janela de manutenção movida para sábado, 22h"], mentions: ["Lumen: “@você consegue ver a fatura de outubro?” · 08:41"], unanswered: ["Quando sai a exportação em Excel? — Tiago", "Relatório travado há 30 min — Bianca"] },
+  { id: "r2", business: "inn", channel: "Telegram", name: "Innovare · Sócios", members: 4, msgsToday: 27, sentiment: [0.7, 0.72, 0.7, 0.75, 0.8, 0.78, 0.82, 0.8, 0.76, 0.8, 0.84, 0.83], decisions: ["Contratar 2 devs pleno até novembro", "Orçamento de marketing do Q4: R$ 40 mil"], mentions: ["Lucas: “@você revisa o contrato da Teles até sexta?”"], unanswered: [] },
+  { id: "r3", business: "unic", channel: "WhatsApp", name: "Unic · Comercial", members: 6, msgsToday: 18, sentiment: [0.6, 0.62, 0.6, 0.55, 0.58, 0.5, 0.52, 0.48, 0.5, 0.47, 0.5, 0.49], alert: "Um lead citou o concorrente “Ploomes” 2 vezes", decisions: ["Desconto máximo de 15% em planos anuais"], mentions: [], unanswered: ["Grupo Ápice pediu proposta até amanhã"] },
+  { id: "r4", business: "inn", channel: "Discord", name: "Innovare · Time Dev", members: 12, msgsToday: 210, sentiment: [0.7, 0.65, 0.68, 0.72, 0.7, 0.74, 0.7, 0.68, 0.72, 0.75, 0.7, 0.73], decisions: ["Congelar deploys na sexta"], mentions: [], unanswered: ["Alguém aprova o PR #421?"] },
+  { id: "r5", business: "pes", channel: "WhatsApp", name: "Família", members: 9, msgsToday: 64, sentiment: [0.85, 0.88, 0.9, 0.86, 0.9, 0.92, 0.88, 0.9, 0.93, 0.9, 0.91, 0.94], decisions: ["Almoço de domingo na casa da mãe, 12h"], mentions: ["Ana: “você vai?”"], unanswered: ["Quem leva a sobremesa?"] },
+];
+
+const TICKETS: Ticket[] = [
+  { n: 2041, business: "unic", client: "Lumen Contábil", title: "Relatório mensal não gera", system: "Relatórios", status: "investigando", owner: "Hermes", sla: "12 min", message: "O relatório mensal fica carregando e não termina. Preciso dele para o fechamento de hoje.", relatedError: "TimeoutError: job reports:monthly exceeded 300s\n  at Worker.process (workers/reports.ts:88)\n  at Queue.run (lib/queue.ts:141)\n→ 212 jobs pendentes na fila 'reports' desde 08:10", proposedFix: "Reiniciar o worker (aguardando sua aprovação) e subir o timeout para 600s. Causa raiz: query de faturas sem paginação — sugiro abrir um card." },
+  { n: 2039, business: "unic", client: "Juliana Prado", title: "Cobrança em duplicidade", system: "Pagamentos", status: "aguardando você", owner: "Hermes", sla: "38 min", message: "Fui cobrada duas vezes em setembro.", relatedError: "", proposedFix: "Estornar uma das cobranças (R$ 189,90). Já está na fila de aprovações." },
+  { n: 2037, business: "inn", client: "Teles Log", title: "Painel com erro 502", system: "Infra", status: "resolvendo", owner: "Hermes", sla: "2h 01m", message: "O painel não abre desde cedo, erro 502.", relatedError: "nginx: SSL_do_handshake() failed\ncert teles.app expired at 2026-10-07 06:38 -03", proposedFix: "Renovar o certificado e ativar renovação automática com alerta 15 dias antes." },
+  { n: 2033, business: "unic", client: "Bianca Rocha", title: "Como exportar em Excel?", system: "Relatórios", status: "resolvido", owner: "Hermes", sla: "1m 12s", message: "Tem como exportar o relatório em Excel?", relatedError: "", proposedFix: "Respondido com o artigo da base “Como exportar relatórios em Excel”." },
+  { n: 2030, business: "inn", client: "Ótica Visão", title: "Usuário sem acesso após troca de e-mail", system: "Autenticação", status: "resolvido", owner: "você", sla: "24 min", message: "Troquei meu e-mail e não consigo mais entrar.", relatedError: "", proposedFix: "Reenviar convite e invalidar sessão antiga." },
+  { n: 2028, business: "unic", client: "Grupo Ápice", title: "Integração com ERP parou", system: "Integrações", status: "aberto", owner: "você", sla: "2h 10m", message: "Os pedidos pararam de entrar no ERP desde ontem à noite.", relatedError: "401 Unauthorized · POST /erp/v2/orders\ntoken expirado em 2026-10-06 23:00", proposedFix: "O token da integração expirou. Gerar novo token no painel do ERP e atualizar o segredo ERP_TOKEN." },
+];
+
+const act = (id: number, at: string, business: string, kind: Activity["kind"], action: string, why: string, reversible: boolean): Activity => ({ id: String(id), at, business, kind, action, why, reversible, undone: false });
+
+const ACTIVITY: Activity[] = [
+  act(1, "08:52", "unic", "msg", "Respondeu Bianca Rocha com o artigo “Como exportar relatórios em Excel”", "pergunta igual a 3 tickets anteriores; canal em modo autônomo.", false),
+  act(2, "08:41", "unic", "tkt", "Abriu o ticket #2041 e ligou ao erro TimeoutError do worker de relatórios", "3 mensagens sobre lentidão no grupo VIP em 10 minutos.", false),
+  act(3, "08:05", "inn", "msg", "Respondeu Pedro Lins com o link do release v2.14", "pergunta factual, resposta verificável no GitHub.", true),
+  act(4, "07:30", "all", "msg", "Enviou o briefing da manhã no Telegram", "agendamento diário das 07:30.", false),
+  act(5, "07:12", "inn", "msg", "Enviou as 14 NFs de setembro para Rafael Nunes", "pedido recorrente todo dia 7; e-mail da contabilidade em modo autônomo.", true),
+  act(6, "06:44", "inn", "tkt", "Detectou o erro 502 da Teles Log e preparou a correção", "mensagem do cliente + certificado expirado no monitoramento.", false),
+  act(7, "03:00", "inn", "cmd", "Fez o backup do Postgres para o S3 (2,3 GB, checksum ok)", "agendamento noturno.", false),
+  act(8, "01:30", "unic", "mem", "Salvou memória: “Juliana prefere contato por e-mail”", "ela pediu isso explicitamente no ticket #2039.", true),
+  act(9, "00:10", "inn", "pay", "Pagou a fatura da Vercel — US$ 20,00", "abaixo do limite de pagamento automático (US$ 50).", false),
+];
+
+const SNAPSHOT: OpsSnapshot = {
+  account: { plan: "Nous Portal · Plus", credits: "$14,20 de $22 em créditos", home: "~/.hermes", version: "v2.14" },
+  businesses: [
+    { id: "inn", name: "Innovare", color: "#9d8cff" },
+    { id: "unic", name: "Unic", color: "#3fd0b0" },
+    { id: "pes", name: "Pessoal", color: "#f0b45a" },
+  ],
+  sessions: SESSIONS,
+  inbox: INBOX,
+  approvals: APPROVALS,
+  radar: RADAR,
+  tickets: TICKETS,
+  activity: ACTIVITY,
+  paused: false,
+};
+
+const hhmm = () => new Date().toTimeString().slice(0, 5);
+
+export const mockAdapter: OpsAdapter = {
+  load: async () => structuredClone(SNAPSHOT),
+  setPaused: async () => {},
+  perform: async (a) => ({
+    id: crypto.randomUUID(),
+    at: hhmm(),
+    business: a.business,
+    kind: a.kind,
+    action: a.action,
+    why: a.why,
+    reversible: a.reversible ?? true,
+    undone: false,
+  }),
+};

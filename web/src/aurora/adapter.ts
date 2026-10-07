@@ -1,0 +1,126 @@
+// Contrato de dados da Central de Operações. Hoje só existe o mockAdapter
+// (mesmos dados do protótipo); o apiAdapter entra tela a tela conforme os
+// endpoints do backend nascem, sem mudar os componentes.
+import { mockAdapter } from "./mock";
+
+export type BizId = string;
+export type Business = { id: BizId; name: string; color: string };
+export type Priority = "urgente" | "voce" | "resolve" | "ignorar";
+export type AutonomyMode = 0 | 1 | 2; // Observar · Rascunhar · Autônomo
+export type ActivityKind = "msg" | "cmd" | "pay" | "mem" | "tkt";
+
+export type Session = {
+  id: string;
+  title: string;
+  source: string;
+  icon: string;
+  when: string;
+  group: "Hoje" | "Ontem" | "Esta semana";
+  msgs: number;
+  snippet: string;
+};
+
+export type InboxItem = {
+  id: string;
+  business: BizId;
+  channel: string;
+  from: string;
+  initials: string;
+  receivedAt: string;
+  priority: Priority;
+  autonomyMode: string;
+  summary: string;
+  message: string;
+  suggestedReply: string;
+  sentAt?: string;
+  context: string[];
+};
+
+export type Approval = {
+  id: string;
+  business: BizId;
+  kind: "comando" | "reembolso" | "pagamento" | "mensagem";
+  icon: string;
+  title: string;
+  risk: "baixo" | "médio" | "alto";
+  createdAt: string;
+  why: string;
+  preview: string;
+  source: string;
+};
+
+export type RadarGroup = {
+  id: string;
+  business: BizId;
+  channel: string;
+  name: string;
+  members: number;
+  msgsToday: number;
+  sentiment: number[];
+  alert?: string;
+  decisions: string[];
+  mentions: string[];
+  unanswered: string[];
+};
+
+export type Ticket = {
+  n: number;
+  business: BizId;
+  client: string;
+  title: string;
+  system: string;
+  status: string;
+  owner: string;
+  sla: string;
+  message: string;
+  relatedError: string;
+  proposedFix: string;
+};
+
+export type Activity = {
+  id: string;
+  at: string;
+  business: BizId;
+  kind: ActivityKind;
+  action: string;
+  why: string;
+  reversible: boolean;
+  undone: boolean;
+};
+
+export type Account = { plan: string; credits: string; home: string; version: string };
+
+export type OpsSnapshot = {
+  account: Account;
+  businesses: Business[];
+  sessions: Session[];
+  inbox: InboxItem[];
+  approvals: Approval[];
+  radar: RadarGroup[];
+  tickets: Ticket[];
+  activity: Activity[];
+  paused: boolean;
+};
+
+/** Ação que sai em nome do usuário. Só é executada via `actOnBehalf` (kill switch + Atividade). */
+export type OnBehalf = {
+  business: BizId;
+  kind: ActivityKind;
+  action: string;
+  why: string;
+  reversible?: boolean;
+  /** Texto do toast quando executa. */
+  done: string;
+  /** Texto do toast quando o agente está pausado. */
+  blocked?: string;
+};
+
+export interface OpsAdapter {
+  load(): Promise<OpsSnapshot>;
+  /** Kill switch global: o gateway não envia nem executa nada enquanto `true`. */
+  setPaused(paused: boolean): Promise<void>;
+  /** Executa a ação e devolve a entrada que foi registrada na Atividade. */
+  perform(action: OnBehalf): Promise<Activity>;
+}
+
+export const adapter: OpsAdapter = mockAdapter;
