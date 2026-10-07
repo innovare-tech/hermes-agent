@@ -2,6 +2,7 @@ import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
 import type { Settings as S } from "../agent/types";
 import { setPrefs, setState, toast, useStore, type Direction } from "../store";
+import { ApiKeysEditor } from "../ops/ApiKeysEditor";
 import { BusinessesEditor } from "../ops/BusinessesEditor";
 import { AgentHeader } from "./Sessions";
 
@@ -37,7 +38,7 @@ function Section({ title, sub, children }: { title: string; sub: string; childre
 }
 
 export function Settings() {
-  const [s, setS] = useAgentData(() => agent.settings(), []);
+  const [s, setS, reload] = useAgentData(() => agent.settings(), []);
   const dir = useStore((x) => x.dir);
   if (!s) return <div style={{ flex: 1 }} />;
   const prov = s.providers.find((p) => p.id === s.provider) ?? s.providers[0];
@@ -57,7 +58,18 @@ export function Settings() {
           <BusinessesEditor />
         </Section>
 
+        <Section title="Chaves de API" sub="Credenciais dos provedores de modelo e das ferramentas, gravadas no .env desta máquina. O valor salvo nunca aparece de volta.">
+          <ApiKeysEditor onChange={reload} />
+        </Section>
+
         <Section title="Provedor de modelo" sub="Troque quando quiser — nada de lock-in.">
+          {s.modelError ? (
+            <p role="alert" style={{ margin: 0, fontSize: 13, color: "var(--warn)", lineHeight: 1.5 }}>
+              Não consegui listar os modelos: {s.modelError}
+            </p>
+          ) : (
+            s.providers.length === 0 && <p style={{ margin: 0, fontSize: 13, color: "var(--fg2)" }}>Nenhum provedor com credencial. Adicione uma chave em Chaves de API acima.</p>
+          )}
           <div role="radiogroup" aria-label="Provedor" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 10 }}>
             {s.providers.map((p) => (
               <button key={p.id} role="radio" aria-checked={p.id === s.provider} className="au-choice" onClick={() => p.id !== s.provider && apply({ provider: p.id, model: p.models[0] }, `${p.name} · ${p.models[0]}`)}>

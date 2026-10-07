@@ -15,7 +15,23 @@ export type CronPreview = { human: string; expr: string; dest: string };
 export type Subagent = { id: string; name: string; task: string; pct: number; now: string; elapsed: string; backend: string; tools: number; parent: string };
 export type SubagentDone = { task: string; name: string; tokens: string; dur: string };
 
-export type Gateway = { id: string; name: string; mono: string; account: string; enabled: boolean; status: "conectado" | "pareando" | "desligado" | "erro"; stat: string };
+/** Credencial/ajuste de um canal (vem do catálogo do backend, gravado no .env). */
+export type GatewayField = { key: string; label: string; help: string; url: string | null; secret: boolean; list: boolean; advanced: boolean; isSet: boolean; value: string };
+export type Gateway = {
+  id: string;
+  name: string;
+  mono: string;
+  account: string;
+  enabled: boolean;
+  configured: boolean;
+  status: "conectado" | "pareando" | "desligado" | "erro";
+  stat: string;
+  description: string;
+  docsUrl: string;
+  fields: GatewayField[];
+};
+/** Chave de API do .env (provedores de modelo e ferramentas). */
+export type ApiKey = { key: string; description: string; url: string | null; category: string; isSet: boolean; preview: string; advanced: boolean };
 export type GatewaySummary = { running: boolean; label: string };
 
 export type LogLevel = "INFO" | "TOOL" | "WARN" | "ERRO";
@@ -31,6 +47,8 @@ export type Settings = {
   personas: string[];
   persona: string;
   tools: { id: string; name: string; description: string; icon: string; enabled: boolean }[];
+  /** Opções de modelo indisponíveis (o resto da tela segue funcionando). */
+  modelError?: string;
 };
 
 export interface AgentAdapter {
@@ -48,6 +66,13 @@ export interface AgentAdapter {
   subagents(): Promise<{ running: Subagent[]; done: SubagentDone[] }>;
   gateways(): Promise<{ summary: GatewaySummary; items: Gateway[] }>;
   toggleGateway(g: Gateway): Promise<void>;
+  /** Grava credenciais (só as preenchidas) e/ou apaga as listadas em ``clear``. ``restart``: precisa reiniciar o gateway. */
+  saveGateway(id: string, env: Record<string, string>, clear?: string[]): Promise<{ restart: boolean }>;
+  testGateway(id: string): Promise<{ ok: boolean; message: string }>;
+  gatewayAction(action: "start" | "stop" | "restart"): Promise<void>;
+  apiKeys(): Promise<ApiKey[]>;
+  setApiKey(key: string, value: string): Promise<void>;
+  deleteApiKey(key: string): Promise<void>;
   logs(): Promise<LogLine[]>;
   settings(): Promise<Settings>;
   saveSettings(patch: Partial<Pick<Settings, "provider" | "model" | "backend" | "persona">> & { tool?: { id: string; enabled: boolean } }): Promise<void>;
