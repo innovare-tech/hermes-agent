@@ -1920,6 +1920,14 @@ class GatewayTurnMixin:
     ):
         """Final delivery decisions: intentional silence, voice reply, streamed-turn media/footer.
         Returns the text for the adapter to send, or ``None`` when already delivered."""
+        _ops = getattr(event, "_ops", None)
+        if _ops and not agent_result.get("failed") and not _intentional_silence:
+            from gateway import ops_hooks
+            if _ops["mode"] == ops_hooks.DRAFT:  # vira rascunho para aprovação; nada é enviado
+                if response:
+                    await asyncio.to_thread(ops_hooks.save_draft, _ops["item_id"], str(response))
+                return None
+            await asyncio.to_thread(ops_hooks.mark_replied, _ops, source, str(response or ""))
         if diagnostic_wake_muted(event):
             return None
         # Intentional silence is a delivery decision: the [SILENT] turn stays persisted (alternation).
@@ -3101,7 +3109,8 @@ class GatewayTurnMixin:
         )
         turn_runner = TurnRunner(self, turn_ctx)
         turn_ctx.mute_notification_reply = diagnostic_turn_muted(
-            turn_ctx.persist_user_display_metadata, source.platform, turn_ctx.user_config)
+            turn_ctx.persist_user_display_metadata, source.platform, turn_ctx.user_config,
+        ) or session_key in vars(self).get("_ops_draft_sessions", ())  # canal em Rascunhar
         # Agent tool-lifecycle callbacks live on the runner (bound methods, same signatures).
         turn_ctx.progress_callback = turn_runner.progress_callback
         turn_ctx.voice_ack_callback = turn_runner.voice_ack_callback

@@ -185,9 +185,10 @@ def set_draft(item_id: int, draft: str) -> None:
         c.execute("UPDATE inbox SET draft=?, status='drafted' WHERE id=?", (draft, item_id))
 
 
-def mark_auto_sent(item_id: int, reply: str) -> None:
+def mark_sent(item_id: int, reply: str, status: str = "sent") -> None:
+    """Resposta entregue: ``sent`` (aprovada por você) ou ``auto`` (Hermes respondeu sozinho)."""
     with connect() as c:
-        c.execute("UPDATE inbox SET draft=?, status='sent', sent_at=? WHERE id=?", (reply, time.time(), item_id))
+        c.execute("UPDATE inbox SET draft=?, status=?, sent_at=? WHERE id=?", (reply, status, time.time(), item_id))
 
 
 def list_inbox(include_done: bool = False, limit: int = 200) -> list[dict]:

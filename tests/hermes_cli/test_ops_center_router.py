@@ -66,3 +66,28 @@ def test_memory_add_edit_remove(client):
     assert r.json()["memory"] == [] and r.json()["user"] == ["Fuso America/Sao_Paulo."]
     assert client.post("/api/ops/memory", json={"target": "x", "content": "a"}).status_code == 400
     assert client.post("/api/ops/memory", json={"target": "memory", "content": "   "}).status_code == 400
+
+
+def test_reply_sends_marks_sent_and_respects_pause(client, monkeypatch):
+    from hermes_cli.web_routers import ops_center as routes
+    from ops_center import store
+
+    sent = []
+    monkeypatch.setattr(routes, "_send_reply", lambda *a: sent.append(a))
+    item = store.record_inbound("telegram", "-100", "oi", sender_name="Ana")["item_id"]
+    assert client.post(f"/api/ops/inbox/{item}/reply", json={"text": " "}).status_code == 400
+    r = client.post(f"/api/ops/inbox/{item}/reply", json={"text": "Olá!"})
+    assert r.status_code == 200 and r.json()["status"] == "sent" and r.json()["draft"] == "Olá!"
+    assert sent == [("telegram", "-100", "Olá!")]
+
+    monkeypatch.setattr("agent.estop.is_engaged", lambda: True)
+    assert client.post(f"/api/ops/inbox/{item}/reply", json={"text": "de novo"}).status_code == 409
+    assert len(sent) == 1
+
+    def boom(*_a):
+        raise RuntimeError("sem adaptador")
+
+    monkeypatch.setattr("agent.estop.is_engaged", lambda: False)
+    monkeypatch.setattr(routes, "_send_reply", boom)
+    r = client.post(f"/api/ops/inbox/{item}/reply", json={"text": "x"})
+    assert r.status_code == 502 and "sem adaptador" in r.json()["detail"]

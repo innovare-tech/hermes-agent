@@ -106,6 +106,43 @@ async def patch_inbox(item_id: int, body: InboxPatch):
     return item
 
 
+class ReplyBody(BaseModel):
+    text: str
+
+
+def _send_reply(platform: str, chat_id: str, text: str) -> None:
+    """Gateway rodando → envia pelo adaptador vivo (verbo ``ops-send``); senão, mesmo caminho do ``hermes send``."""
+    from gateway.control_socket import query_gateway_control
+    from gateway.ops_hooks import send_text
+    from hermes_constants import get_hermes_home
+
+    answer = query_gateway_control(get_hermes_home(), "ops-send", params={"platform": platform, "chat_id": chat_id, "text": text}, timeout=30.0)
+    if answer is None:
+        send_text(platform, chat_id, text)
+    elif not answer.get("sent"):
+        raise RuntimeError(answer.get("error") or "o gateway não enviou")
+
+
+@router.post("/inbox/{item_id}/reply")
+async def reply_inbox(item_id: int, body: ReplyBody):
+    from agent.estop import is_engaged
+
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "resposta vazia")
+    if is_engaged():
+        raise HTTPException(409, "Hermes está pausado — nada é enviado até retomar")
+    item = await _run(_store().get_inbox, item_id)
+    if not item:
+        raise HTTPException(404, "item não encontrado")
+    try:
+        await asyncio.to_thread(_send_reply, item["platform"], item["chat_id"], text)
+    except Exception as e:  # noqa: BLE001 — motivo vai pro toast
+        raise HTTPException(502, f"Falha ao enviar: {e}") from e
+    await _run(_store().mark_sent, item_id, text)
+    return await _run(_store().get_inbox, item_id)
+
+
 # ---- atividade ----
 
 class ActivityBody(BaseModel):

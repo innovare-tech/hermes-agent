@@ -1307,6 +1307,13 @@ class GatewayInboundMixin(GatewayPluginInjectionMixin):
             return _paused_notice
 
         _quick_key = self._session_key_for_source(source)
+        # Central de Operações: toda mensagem real vira item da caixa de entrada; a autonomia do
+        # canal decide se o Hermes responde (Autônomo), só rascunha (Rascunhar) ou fica quieto.
+        if not is_internal:
+            from gateway import ops_hooks
+            event._ops = await asyncio.to_thread(ops_hooks.record, event, source)
+            if event._ops and event._ops["mode"] == ops_hooks.OBSERVE:
+                return None
         _reply = await self._hm_pending_reply_intercepts(event, source, _quick_key)
         if _reply is not None:
             return _reply
@@ -1364,6 +1371,8 @@ class GatewayInboundMixin(GatewayPluginInjectionMixin):
                 _consumed, _consumer_reply = await run_post_admission_hook(self, event, source, _quick_key)
                 if _consumed:
                     return _consumer_reply
+            if (getattr(event, "_ops", None) or {}).get("mode") == 1:  # Rascunhar: turno sem streaming
+                vars(self).setdefault("_ops_draft_sessions", set()).add(_quick_key)
             try:
                 _agent_result = await self._handle_message_with_agent(event, source, _quick_key, _run_generation)
             except TurnLeaseTimeoutError as exc:
@@ -1384,6 +1393,7 @@ class GatewayInboundMixin(GatewayPluginInjectionMixin):
                 logger.debug("post-turn hook failed: %s", _goal_exc)
             return _agent_result
         finally:
+            vars(self).get("_ops_draft_sessions", set()).discard(_quick_key)
             # One-shot restore (/moa, /model --once) must run on EVERY exit path (success,
             # exception, interrupt); the generation guard makes a displaced turn's finalizer a no-op.
             self._restore_pending_one_turn_model_override(_quick_key, _run_generation)
