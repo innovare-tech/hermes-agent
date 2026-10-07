@@ -27,7 +27,7 @@ export function Logs() {
           ))}
           <button onClick={() => setPaused(!paused)} aria-pressed={paused} style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 12px", borderRadius: 999, border: "1px solid var(--line2)", background: "var(--panel)", color: "var(--fg)", fontSize: 12, cursor: "pointer" }}>
             <Icon name={paused ? "play" : "pause"} size={12} />
-            {paused ? "Retomar" : "Pausar"}
+            {paused ? "Continuar atualizando" : "Congelar rolagem"}
           </button>
         </div>
       </div>

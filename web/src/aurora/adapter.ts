@@ -130,6 +130,10 @@ export type PlaybookDraft = Omit<Playbook, "id" | "runs" | "lastRun" | "nextRun"
 
 export type Health = {
   online: boolean;
+  /** ok = tudo certo; warn = funciona mas algo precisa de você (ex.: gateway parado com canal ligado). */
+  level: "ok" | "warn";
+  /** O que precisa de atenção e onde resolver. */
+  problems: { text: string; to: string }[];
   uptime: string;
   /** Gateways/plataformas conectados. */
   items: { name: string; status: "ok" | "warn" | "err"; value: string }[];

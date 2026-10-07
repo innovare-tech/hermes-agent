@@ -23,6 +23,14 @@ describe("healthFrom", () => {
     });
     expect(healthFrom({ gateway_running: false, gateway_platforms: {} } as unknown as StatusResponse).items).toEqual([{ name: "Gateway de mensagens", status: "warn", value: "parado" }]);
   });
+
+  it("atenção: gateway parado com canal ligado; ok sem canais", () => {
+    const stopped = { gateway_running: false, gateway_platforms: {} } as unknown as StatusResponse;
+    expect(healthFrom(stopped).level).toBe("ok");
+    const h = healthFrom(stopped, [{ name: "Telegram", enabled: true, configured: true }]);
+    expect(h.level).toBe("warn");
+    expect(h.problems[0]).toMatchObject({ text: expect.stringMatching(/Gateway parado com 1 canal ligado/), to: "/gateways" });
+  });
 });
 
 describe("cleanSnippet", async () => {

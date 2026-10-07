@@ -1,4 +1,5 @@
 // Telas do agente ligadas ao backend real (mesmas rotas do dashboard antigo).
+import { ask } from "../store";
 import { api, fetchJSON, type CronJob as ApiCron } from "@/lib/api";
 import { classifyLine } from "@/lib/log-classify";
 import { shortWhen, sourceIcon, sourceLabel } from "../chat/sources";
@@ -203,7 +204,7 @@ export const liveAgent: AgentAdapter = {
       const body = { scope: "main" as const, provider: patch.provider, model: patch.model };
       const r = (await api.setModelAssignment(body)) as { confirm_required?: boolean; message?: string };
       if (r.confirm_required) {
-        if (!window.confirm(r.message ?? "Este modelo é caro. Usar mesmo assim?")) throw new Error("Troca de modelo cancelada");
+        if (!(await ask({ title: "Este modelo é caro", body: r.message ?? "Cada resposta custa mais que o normal.", confirm: "Usar mesmo assim" }))) throw new Error("Troca de modelo cancelada");
         await api.setModelAssignment({ ...body, confirm_expensive_model: true });
       }
     }

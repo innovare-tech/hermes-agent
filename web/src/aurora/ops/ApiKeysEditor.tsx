@@ -2,7 +2,7 @@ import { useState } from "react";
 import { agent, useAgentData } from "../agent";
 import type { ApiKey } from "../agent/types";
 import { Icon } from "../Icon";
-import { toast } from "../store";
+import { ask, toast } from "../store";
 
 const TABS = [
   { id: "provider", label: "Modelos" },
@@ -26,7 +26,7 @@ function Row({ k, onChange }: { k: ApiKey; onChange: () => void }) {
     }
   };
   const remove = async () => {
-    if (!window.confirm(`Remover ${k.key}?`)) return;
+    if (!(await ask({ title: `Remover ${k.key}?`, body: "O que usa essa chave para de funcionar até você cadastrar outra.", confirm: "Remover", danger: true }))) return;
     try {
       await agent.deleteApiKey(k.key);
       toast(`${k.key} removida`);

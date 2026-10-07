@@ -31,6 +31,8 @@ export type ChatApproval = {
 
 export type UserMessage = { id: string; role: "user"; text: string };
 export type AgentMessage = {
+  /** Resposta a um comando "/" (sem Refazer/Desfazer). */
+  command?: boolean;
   id: string;
   role: "agent";
   steps: ToolStep[];

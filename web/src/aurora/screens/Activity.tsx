@@ -8,7 +8,9 @@ export function Activity() {
   const s = useStore((x) => x);
   const [kind, setKind] = useState<ActivityKind | null>(null);
   const list = s.activity.filter((a) => (!kind || a.kind === kind) && inBiz(s)(a));
-  const chips: [string, ActivityKind | null][] = [["Tudo", null], ...(Object.keys(ACTIVITY_KIND) as ActivityKind[]).map((k) => [ACTIVITY_KIND[k].label, k] as [string, ActivityKind])];
+  // Só filtros de tipos que já aconteceram (nada de "Pagamentos" sem pagamento nenhum).
+  const present = new Set(s.activity.map((a) => a.kind));
+  const chips: [string, ActivityKind | null][] = [["Tudo", null], ...(Object.keys(ACTIVITY_KIND) as ActivityKind[]).filter((k) => present.has(k)).map((k) => [ACTIVITY_KIND[k].label, k] as [string, ActivityKind])];
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page">

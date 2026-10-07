@@ -38,7 +38,7 @@ const initials = (name: string) =>
     .map((w) => w[0]!.toUpperCase())
     .join("") || "?";
 
-export function healthFrom(st: StatusResponse): Health {
+export function healthFrom(st: StatusResponse, platforms: { name: string; enabled: boolean; configured: boolean; error_message?: string | null }[] = []): Health {
   const items = Object.entries(st.gateway_platforms ?? {}).map(([name, p]) => ({
     name: name[0].toUpperCase() + name.slice(1),
     status: ["connected", "running", "ready", "ok"].includes(p.state) ? ("ok" as const) : p.error_code ? ("err" as const) : ("warn" as const),
@@ -47,7 +47,12 @@ export function healthFrom(st: StatusResponse): Health {
   // O agente responde (este endpoint respondeu); o gateway de mensagens é um item à parte.
   const gateway = { name: "Gateway de mensagens", status: st.gateway_running ? ("ok" as const) : ("warn" as const), value: st.gateway_running ? "ativo" : "parado" };
   const version = st.version && st.version !== "unknown" ? "v" + st.version : "";
-  return { online: true, uptime: version, items: [gateway, ...items], responseTime: "—" };
+  const live = platforms.filter((p) => p.enabled && p.configured);
+  const problems = [
+    ...(live.length && !st.gateway_running ? [{ text: `Gateway parado com ${live.length === 1 ? "1 canal ligado" : live.length + " canais ligados"} — ninguém recebe resposta`, to: "/gateways" }] : []),
+    ...live.filter((p) => p.error_message).map((p) => ({ text: `${p.name}: ${p.error_message}`, to: "/gateways" })),
+  ];
+  return { online: true, level: problems.length ? "warn" : "ok", problems, uptime: version, items: [gateway, ...items], responseTime: "—" };
 }
 
 async function costsThisMonth(): Promise<Costs> {
@@ -159,7 +164,7 @@ function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
 
 export const liveAdapter: OpsAdapter = {
   async load() {
-    const [estop, status, costs, businesses, channels, inboxRaw, activity, watches, people, playbooks, settings] = await Promise.all([
+    const [estop, status, costs, businesses, channels, inboxRaw, activity, watches, people, playbooks, settings, messaging] = await Promise.all([
       fetchJSON<Estop>("/api/estop"),
       api.getStatus(),
       costsThisMonth(),
@@ -171,6 +176,7 @@ export const liveAdapter: OpsAdapter = {
       ops<RawPerson[]>("/people"),
       ops<RawPlaybook[]>("/playbooks"),
       ops<{ default_mode: AutonomyMode }>("/settings"),
+      api.getMessagingPlatforms().then((r) => r.platforms, () => []),
     ]);
     const inbox = inboxRaw.map(inboxFrom);
     const autonomy = channels.map(channelFrom);
@@ -187,7 +193,7 @@ export const liveAdapter: OpsAdapter = {
       autonomy,
       briefing: [],
       last24h: { saved: "", autoReplies: inboxRaw.filter((i) => (i.status === "auto" || i.status === "sent") && i.received_at >= today).length },
-      health: healthFrom(status),
+      health: healthFrom(status, messaging),
       costs,
       watches,
       support: { firstResponse: "", resolvedByHermes: "", csat: "", kbUsage: "" },

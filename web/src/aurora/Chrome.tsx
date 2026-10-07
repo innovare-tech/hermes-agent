@@ -1,7 +1,7 @@
 // Peças globais do shell: fundo atmosférico, Toast, PanicButton, faixa de pausa e helpers de página.
-import type { MouseEvent, ReactNode } from "react";
+import { useEffect, type MouseEvent, type ReactNode } from "react";
 import { Icon } from "./Icon";
-import { togglePause, useStore } from "./store";
+import { answerAsk, ask, togglePause, useStore } from "./store";
 
 /** Spotlight que segue o cursor dentro do cartão (`.au-card`). */
 export const spot = (e: MouseEvent<HTMLElement>) => {
@@ -67,10 +67,10 @@ const BITS = Array.from({ length: 10 }, (_, i) => {
 });
 
 export function Toast() {
-  const t = useStore((s) => s.toast);
+  const list = useStore((s) => s.toasts);
   return (
-    <div role="status" aria-live="polite" style={{ position: "absolute", left: "50%", top: 20, transform: "translateX(-50%)", zIndex: 70, pointerEvents: "none" }}>
-      {t && (
+    <div role="status" aria-live="polite" style={{ position: "absolute", right: 24, bottom: 24, zIndex: 70, pointerEvents: "none", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+      {list.map((t) => (
         <div key={t.id} className="au-toast">
           <span style={{ position: "relative", width: 26, height: 26, borderRadius: "50%", background: "var(--acc)", color: "var(--accFg)", display: "grid", placeItems: "center" }}>
             <Icon name="sparkles" size={13} />
@@ -80,17 +80,52 @@ export function Toast() {
           </span>
           <span>{t.text}</span>
         </div>
-      )}
+      ))}
     </div>
   );
 }
 
+/** Diálogo de confirmação (Esc cancela, Enter confirma; foco no botão principal). */
+export function AskDialog() {
+  const a = useStore((s) => s.ask);
+  useEffect(() => {
+    if (!a) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") answerAsk(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [a]);
+  if (!a) return null;
+  return (
+    <div style={{ position: "absolute", inset: 0, zIndex: 80, background: "rgba(0,0,0,.45)", display: "grid", placeItems: "center", padding: 24, animation: "hin .2s ease both" }} onMouseDown={(e) => e.target === e.currentTarget && answerAsk(false)}>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="au-ask-title" className="au-card au-float" style={{ width: "min(440px,100%)", padding: 24, display: "flex", flexDirection: "column", gap: 12 }}>
+        <span id="au-ask-title" style={{ fontSize: 16, fontWeight: 600 }}>{a.title}</span>
+        {a.body && <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: "var(--fg2)" }}>{a.body}</p>}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 6 }}>
+          <button className="au-outline" onClick={() => answerAsk(false)}>
+            Cancelar
+          </button>
+          <button autoFocus className={a.danger ? "au-primary au-danger" : "au-primary"} onClick={() => answerAsk(true)}>
+            {a.confirm}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Kill switch. Pausado, some daqui: o "Retomar" fica só na faixa do topo (um botão só). */
 export function PanicButton() {
   const paused = useStore((s) => s.paused);
+  if (paused) return null;
+  const pause = async () => {
+    if (await ask({ title: "Pausar tudo?", body: "Nada sai em seu nome — mensagens, comandos, playbooks — até você retomar. O Hermes continua lendo.", confirm: "Pausar", danger: true })) togglePause();
+  };
   return (
-    <button className="au-panic" aria-pressed={paused} onClick={togglePause}>
-      <Icon name={paused ? "play" : "octagon-pause"} size={15} />
-      {paused ? "Retomar agente" : "Pausar tudo"}
+    <button className="au-panic" aria-pressed={false} onClick={pause}>
+      <Icon name="octagon-pause" size={15} />
+      Pausar tudo
     </button>
   );
 }

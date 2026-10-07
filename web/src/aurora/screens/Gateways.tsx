@@ -3,7 +3,7 @@ import { spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
 import type { Gateway, GatewayField } from "../agent/types";
-import { toast } from "../store";
+import { ask, toast } from "../store";
 import { AgentHeader } from "./Sessions";
 
 const STATUS_COLOR: Record<Gateway["status"], string> = { conectado: "var(--ok)", pareando: "var(--warn)", desligado: "var(--fg3)", erro: "var(--err)" };
@@ -47,7 +47,7 @@ export function GatewaySetup({ g, onSaved }: { g: Gateway; onSaved: (restart: bo
     setBusy("");
   };
   const clear = async () => {
-    if (!window.confirm(`Apagar as credenciais de ${g.name}?`)) return;
+    if (!(await ask({ title: `Apagar as credenciais de ${g.name}?`, body: "O canal para de funcionar até você colar as credenciais de novo.", confirm: "Apagar", danger: true }))) return;
     try {
       await agent.saveGateway(g.id, {}, g.fields.filter((f) => f.isSet).map((f) => f.key));
       onSaved(true);
@@ -137,7 +137,7 @@ export function Gateways() {
     toast(`${g.name} ${g.enabled ? "desligado" : "ligado"}${data?.summary.running ? " — reinicie o gateway para aplicar" : ""}`);
   };
   const lifecycle = async (action: "start" | "stop" | "restart") => {
-    if (action === "stop" && !window.confirm("Parar o gateway? O Hermes deixa de receber e responder mensagens.")) return;
+    if (action === "stop" && !(await ask({ title: "Parar o gateway?", body: "O Hermes deixa de receber e responder mensagens em todos os canais.", confirm: "Parar", danger: true }))) return;
     setBusy(action);
     try {
       await agent.gatewayAction(action);
@@ -227,6 +227,17 @@ export function Gateways() {
           <input aria-label="Buscar canal" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar canal (Telegram, WhatsApp…)" style={{ flex: 1, border: 0, outline: 0, background: "transparent", color: "var(--fg)", fontSize: 13.5 }} />
         </div>
 
+        {data && !running && (data.items ?? []).some((g) => g.enabled && g.configured) && (
+          <div role="alert" className="au-card" style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 12, borderColor: "var(--warn)" }}>
+            <Icon name="octagon-pause" size={16} color="var(--warn)" />
+            <span style={{ fontSize: 13.5, lineHeight: 1.5 }}>
+              Há canais ligados, mas o gateway está parado — o Hermes não recebe nem responde mensagens.
+            </span>
+            <button className="au-primary" disabled={!!busy} onClick={() => lifecycle("start")} style={{ marginLeft: "auto" }}>
+              Iniciar gateway
+            </button>
+          </div>
+        )}
         {mine.length > 0 && (
           <>
             <span className="au-label">Seus canais</span>

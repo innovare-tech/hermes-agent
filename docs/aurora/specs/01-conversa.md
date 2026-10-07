@@ -19,6 +19,7 @@ aparece como "tui", contagens não batem, o menu "/" não fecha e mostra comando
 - **C1.7** Contagem de mensagens igual na lista de Sessões e no cabeçalho da conversa; plural correto ("1 mensagem").
 - **C1.8** Painel de contexto e rodapé da resposta usam a mesma fonte: tokens de contexto atuais
   (não soma acumulada) e custo; se o provedor não informa custo, mostrar "custo não informado" em vez de "$0,00".
+- **C1.17** "N mensagens" conta só perguntas e respostas visíveis (não as mensagens internas de ferramenta).
 - **C1.9** Cabeçalho da conversa sem jargão: título + "Web · 4 mensagens" (id da sessão só no tooltip).
 
 ### Composer

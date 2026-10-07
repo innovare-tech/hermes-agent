@@ -48,9 +48,12 @@ export function Radar() {
             value={word}
             onChange={(e) => setWord(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && add()}
-            placeholder="Me avise se alguém falar de…"
+            placeholder="Me avise se alguém falar de… (Enter para adicionar)"
             style={{ flex: 1, minWidth: 200, border: 0, outline: 0, background: "transparent", color: "var(--fg)", fontSize: 14 }}
           />
+          <button className="au-outline" onClick={add} disabled={!word.trim()} style={{ opacity: word.trim() ? 1 : 0.5 }}>
+            Adicionar
+          </button>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {s.watches.map((w) => (
               <button key={w} className="au-watch" aria-label={`Parar de vigiar ${w}`} onClick={() => setWatches(s.watches.filter((y) => y !== w))}>
@@ -86,7 +89,7 @@ export function Radar() {
         </div>
         {groups.length === 0 && (
           <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--fg2)", maxWidth: 640 }}>
-            Nenhum grupo ainda. Os grupos aparecem aqui quando o gateway recebe a primeira mensagem de cada um (Telegram, WhatsApp, Discord…). As palavras vigiadas acima já marcam como urgente qualquer mensagem que as contenha.
+            Nenhum grupo ainda. Os grupos aparecem aqui quando o gateway recebe a primeira mensagem de cada um (Telegram, WhatsApp, Discord…). {s.watches.length ? "As palavras vigiadas acima já marcam como urgente qualquer mensagem que as contenha." : "Adicione palavras acima (ex.: boleto, reembolso) para marcar como urgente qualquer mensagem que as contenha."}
           </p>
         )}
       </div>

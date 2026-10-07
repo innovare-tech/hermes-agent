@@ -46,7 +46,7 @@ export function Settings() {
 
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
-      <div className="au-page au-page-agent" style={{ maxWidth: 880, padding: "44px 36px 80px", gap: 40 }}>
+      <div className="au-page au-page-agent" style={{ gap: 40 }}>
         <AgentHeader title="Configurações" sub="Modelo, ambiente e aparência. Sem editar YAML.">
           <button className="au-outline" onClick={() => setState({ onboarding: 0 })} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, background: "var(--panel)" }}>
             <Icon name="rocket" size={14} color="var(--acc)" />

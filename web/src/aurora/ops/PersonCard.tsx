@@ -1,6 +1,7 @@
 import type { Person } from "../adapter";
 import { spot } from "../Chrome";
 import { Icon } from "../Icon";
+import { ask } from "../store";
 
 /** Ficha de uma pessoa: espera, contexto guardado pelo Hermes e pendências. */
 export function PersonCard({ p, businessName, onDraft, onHistory, onEdit, onDelete }: { p: Person; businessName: string; onDraft: () => void; onHistory: () => void; onEdit: () => void; onDelete: () => void }) {
@@ -54,7 +55,7 @@ export function PersonCard({ p, businessName, onDraft, onHistory, onEdit, onDele
         <button className="au-mini" title="Editar" aria-label="Editar contato" onClick={onEdit} style={{ marginLeft: "auto", width: 36, height: 36 }}>
           <Icon name="pencil" size={14} />
         </button>
-        <button className="au-mini danger" title="Remover" aria-label="Remover contato" onClick={() => window.confirm(`Remover ${p.name}?`) && onDelete()} style={{ width: 36, height: 36 }}>
+        <button className="au-mini danger" title="Remover" aria-label="Remover contato" onClick={async () => (await ask({ title: `Remover ${p.name}?`, body: "O contato e as pendências dele somem.", confirm: "Remover", danger: true })) && onDelete()} style={{ width: 36, height: 36 }}>
           <Icon name="trash-2" size={14} />
         </button>
       </div>

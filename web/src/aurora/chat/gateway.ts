@@ -1,6 +1,7 @@
 // Conversa real: JSON-RPC do tui_gateway via /api/ws (mesmo cliente do ChatSidebar).
 import type { RpcMethods, TranscriptMessage, Usage } from "@hermes/shared";
 import { api } from "@/lib/api";
+import { ask } from "../store";
 import { GatewayClient } from "@/lib/gatewayClient";
 import type { Session } from "../adapter";
 import type { SessionLiveInfo } from "@hermes/shared";
@@ -279,7 +280,7 @@ export const gatewayChat: ChatAdapter = {
       const body = { scope: "main" as const, provider, model };
       const r = (await api.setModelAssignment(body)) as { confirm_required?: boolean; message?: string };
       if (r.confirm_required) {
-        if (!window.confirm(r.message ?? "Este modelo é caro. Usar mesmo assim?")) throw new Error("Troca de modelo cancelada");
+        if (!(await ask({ title: "Este modelo é caro", body: r.message ?? "Cada resposta custa mais que o normal.", confirm: "Usar mesmo assim" }))) throw new Error("Troca de modelo cancelada");
         await api.setModelAssignment({ ...body, confirm_expensive_model: true });
       }
       return;
@@ -287,7 +288,7 @@ export const gatewayChat: ChatAdapter = {
     const value = `${model} --provider ${provider}`;
     const r = (await call("config.set", { session_id: id, key: "model", value })) as { confirm_required?: boolean; confirm_message?: string };
     if (r.confirm_required) {
-      if (!window.confirm(r.confirm_message ?? "Este modelo é caro. Usar mesmo assim?")) throw new Error("Troca de modelo cancelada");
+      if (!(await ask({ title: "Este modelo é caro", body: r.confirm_message ?? "Cada resposta custa mais que o normal.", confirm: "Usar mesmo assim" }))) throw new Error("Troca de modelo cancelada");
       await call("config.set", { session_id: id, key: "model", value, confirm_expensive_model: true });
     }
   },

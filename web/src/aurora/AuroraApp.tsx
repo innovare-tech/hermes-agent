@@ -1,6 +1,6 @@
 import { useEffect, useRef, type MouseEvent } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router";
-import { Background, PauseBanner, Toast } from "./Chrome";
+import { AskDialog, Background, PauseBanner, Toast } from "./Chrome";
 import { agent } from "./agent";
 import { ONBOARDED_KEY, Onboarding } from "./Onboarding";
 import { Activity } from "./screens/Activity";
@@ -20,7 +20,7 @@ import { People } from "./screens/People";
 import { Playbooks } from "./screens/Playbooks";
 import { Radar } from "./screens/Radar";
 import { Support } from "./screens/Support";
-import { Sidebar } from "./Sidebar";
+import { AGENT, OPS, Sidebar } from "./Sidebar";
 import { loadOps, loadSessions, refreshPaused, setState, toast, useStore } from "./store";
 
 // Spotlight que segue o cursor: escreve direto no style, sem re-render.
@@ -57,6 +57,13 @@ export function AuroraApp() {
   const dir = useStore((s) => s.dir);
   const theme = useStore((s) => s.theme);
   const navigate = useNavigate();
+
+  // Título da aba: "Hermes · <tela>".
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const item = [...OPS, ...AGENT].find((n) => (n.to === "/" ? pathname === "/" : pathname.startsWith(n.to)));
+    document.title = item ? `Hermes · ${item.label}` : "Hermes";
+  }, [pathname]);
 
   useEffect(() => {
     document.documentElement.dataset.hv = dir;
@@ -128,6 +135,7 @@ export function AuroraApp() {
       </div>
       <Onboarding />
       <Toast />
+      <AskDialog />
     </div>
   );
 }

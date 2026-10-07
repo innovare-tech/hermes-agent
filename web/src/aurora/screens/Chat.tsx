@@ -82,7 +82,7 @@ export function Chat() {
     setRunning(true);
     // Mensagem na tela antes de criar a sessão: sem piscar a tela vazia ("0 mensagens").
     const now = Date.now();
-    setMessages((list) => [...list, { id: "u" + now, role: "user", text }, { id: "a" + now, role: "agent", steps: [], text: "", live: true }]);
+    setMessages((list) => [...list, { id: "u" + now, role: "user", text }, { id: "a" + now, role: "agent", steps: [], text: "", live: true, command: text.startsWith("/") }]);
     try {
       let id = sid;
       if (!id) {
@@ -296,12 +296,16 @@ function AgentBubble({ m, onSend, onCron, onAnswer }: { m: AgentMessage; onSend:
               <button className="au-mini" title="Copiar" aria-label="Copiar" onClick={() => navigator.clipboard.writeText(m.text).then(() => toast("Copiado"), () => {})}>
                 <Icon name="copy" size={12} />
               </button>
-              <button className="au-mini" title="Refazer: gera a última resposta de novo" aria-label="Refazer" onClick={() => onSend("/retry")}>
-                <Icon name="rotate-ccw" size={12} />
-              </button>
-              <button className="au-mini" title="Desfazer: apaga a última pergunta e resposta" aria-label="Desfazer" onClick={() => onSend("/undo")}>
-                <Icon name="undo-2" size={12} />
-              </button>
+              {!m.command && (
+                <>
+                  <button className="au-mini" title="Refazer: gera a última resposta de novo" aria-label="Refazer" onClick={() => onSend("/retry")}>
+                    <Icon name="rotate-ccw" size={12} />
+                  </button>
+                  <button className="au-mini" title="Desfazer: apaga a última pergunta e resposta" aria-label="Desfazer" onClick={() => onSend("/undo")}>
+                    <Icon name="undo-2" size={12} />
+                  </button>
+                </>
+              )}
             </span>
             {m.learned && (
               <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, color: "var(--ok)", animation: "hpop .7s .2s cubic-bezier(.3,1.5,.5,1) both" }}>

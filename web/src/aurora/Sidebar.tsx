@@ -9,7 +9,6 @@ export const OPS: NavItem[] = [
   { to: "/inbox", label: "Caixa de entrada", icon: "inbox" },
   { to: "/approvals", label: "Aprovações", icon: "shield-check" },
   { to: "/radar", label: "Radar de grupos", icon: "radar" },
-  { to: "/support", label: "Suporte", icon: "life-buoy" },
   { to: "/people", label: "Pessoas", icon: "users" },
   { to: "/playbooks", label: "Playbooks", icon: "workflow" },
   { to: "/activity", label: "Atividade", icon: "activity" },
@@ -77,7 +76,7 @@ export function Sidebar() {
         <div className="au-logo" aria-hidden="true">☤</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span className="au-display" style={{ fontSize: 19, lineHeight: 1 }}>Hermes</span>
-          <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>{s.account ? `${s.account.home} · ${s.account.version}` : " "}</span>
+          <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>{s.account?.version || " "}</span>
         </div>
         <span
           role="status"
@@ -97,8 +96,7 @@ export function Sidebar() {
 
       <BusinessSwitcher />
 
-      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
-        <nav aria-label="Navegação" style={{ display: "flex", flexDirection: "column", gap: 1, padding: "0 8px 8px" }}>
+      <nav aria-label="Navegação" style={{ display: "flex", flexDirection: "column", gap: 1, padding: "0 8px 8px", flex: "0 1 auto", overflow: "auto", minHeight: 160 }}>
           <div className="au-label" style={{ padding: "12px 11px 6px" }}>Operação</div>
           {OPS.map((n, i) => (
             <NavRow key={n.to} item={n} index={i} hot count={counts[n.to] ? String(counts[n.to]) : ""} />
@@ -107,9 +105,11 @@ export function Sidebar() {
           {AGENT.map((n, i) => (
             <NavRow key={n.to} item={n} index={i + 8} hot={false} count="" />
           ))}
-        </nav>
+      </nav>
 
-        <div style={{ padding: "0 8px 80px", borderTop: "1px solid var(--line)" }}>
+      {/* Só as conversas rolam; o menu fica sempre à vista. */}
+      <div style={{ flex: "1 1 0", overflow: "auto", minHeight: 90, borderTop: "1px solid var(--line)" }}>
+        <div style={{ padding: "0 8px 16px" }}>
           {GROUPS.filter((g) => s.sessions.some((x) => x.group === g)).map((g) => (
             <div key={g}>
               <div className="au-label" style={{ padding: "14px 11px 6px" }}>{g}</div>

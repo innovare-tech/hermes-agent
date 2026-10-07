@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Icon } from "../Icon";
-import { deleteBusiness, saveBusiness, useStore } from "../store";
+import { ask, deleteBusiness, saveBusiness, useStore } from "../store";
 
 const PALETTE = ["#9d8cff", "#3fd0b0", "#f0b45a", "#ff8a9a", "#5eb8ff", "#c6f24e", "#e8b04a", "#b38cff"];
 
@@ -22,7 +22,7 @@ export function BusinessesEditor() {
             onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
             className="au-inline"
           />
-          <button className="au-mini danger" title="Remover" aria-label={`Remover ${b.name}`} onClick={() => window.confirm(`Remover o negócio “${b.name}”? Canais, pessoas e playbooks ficam sem negócio.`) && deleteBusiness(b.id)}>
+          <button className="au-mini danger" title="Remover" aria-label={`Remover ${b.name}`} onClick={async () => (await ask({ title: `Remover o negócio “${b.name}”?`, body: "Canais, pessoas e playbooks ficam sem negócio.", confirm: "Remover", danger: true })) && deleteBusiness(b.id)}>
             <Icon name="trash-2" size={13} />
           </button>
         </div>

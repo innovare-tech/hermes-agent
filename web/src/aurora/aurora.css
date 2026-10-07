@@ -67,6 +67,8 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 .au-display{font-family:var(--fd);font-weight:var(--fdw);letter-spacing:var(--fdt)}
 .au-label{font-family:var(--fm);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg3)}
+/* Áreas roláveis reservam a barra: filtrar/encolher a lista não desloca o layout. */
+.au-root [style*="overflow: auto"]{scrollbar-gutter:stable}
 .au-page{max-width:1180px;margin:0 auto;padding:40px 36px 72px;display:flex;flex-direction:column;gap:22px;animation:hblurin .7s cubic-bezier(.2,.7,.2,1) both}
 .au-h1{margin:0;font-family:var(--fd);font-weight:var(--fdw);letter-spacing:var(--fdt);font-size:var(--h1);line-height:1.1;padding-bottom:.06em;background:linear-gradient(100deg,var(--fg) 44%,var(--acc) 50%,var(--fg) 56%) 0 0/300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:hsheen 9s ease-in-out infinite}
 
@@ -95,7 +97,8 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-panic[aria-pressed="true"]{border-color:var(--ok);background:var(--ok);color:var(--accFg)}
 .au-pausebar{display:flex;align-items:center;gap:12px;padding:10px 26px;background:var(--err);color:#fff;font-size:13px;font-weight:500;animation:hblurin .4s both}
 .au-pausebar button{margin-left:auto;padding:5px 13px;border-radius:999px;border:1px solid rgba(255,255,255,.6);background:transparent;color:#fff;font-size:12px;font-weight:600;cursor:pointer}
-.au-toast{display:flex;align-items:center;gap:10px;padding:8px 16px 8px 8px;border-radius:999px;background:var(--panel);border:1px solid var(--line2);box-shadow:var(--shadow);font-size:13px;white-space:nowrap;animation:hpop .6s cubic-bezier(.3,1.5,.5,1) both}
+.au-primary.au-danger{background:var(--err);color:#fff}
+.au-toast{display:flex;align-items:center;gap:10px;padding:8px 16px 8px 8px;border-radius:20px;background:linear-gradient(var(--panel),var(--panel)),var(--bg);max-width:min(460px,calc(100vw - 48px));border:1px solid var(--line2);box-shadow:var(--shadow);font-size:13px;line-height:1.4;animation:hpop .6s cubic-bezier(.3,1.5,.5,1) both}
 .au-bit{position:absolute;left:11px;top:11px;width:4px;height:4px;border-radius:50%;background:var(--acc);animation:hburst 1s cubic-bezier(.2,.7,.2,1) both}
 
 /* ---- conversa ---- */

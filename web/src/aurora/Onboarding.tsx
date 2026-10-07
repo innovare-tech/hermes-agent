@@ -27,7 +27,7 @@ const markDone = () => {
 };
 
 /** Passo Modelo: escolher provedor (colando a chave quando falta) e o modelo. */
-function ModelStep({ catalog, pick, setPick, onCatalog }: { catalog: ProviderOption[]; pick: { provider: string; model: string }; setPick: (p: { provider: string; model: string }) => void; onCatalog: (c: ProviderOption[]) => void }) {
+function ModelStep({ catalog, pick, setPick, onCatalog, current }: { catalog: ProviderOption[]; pick: { provider: string; model: string }; setPick: (p: { provider: string; model: string }) => void; onCatalog: (c: ProviderOption[]) => void; current: { provider: string; model: string } }) {
   const [more, setMore] = useState(false);
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
@@ -64,7 +64,7 @@ function ModelStep({ catalog, pick, setPick, onCatalog }: { catalog: ProviderOpt
   };
 
   const row = (p: ProviderOption) => (
-    <button key={p.id} role="radio" aria-checked={p.id === pick.provider} className="au-choice" style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: "12px 16px" }} onClick={() => setPick({ provider: p.id, model: p.connected ? (p.id === pick.provider ? pick.model : (p.models[0] ?? "")) : "" })}>
+    <button key={p.id} role="radio" aria-checked={p.id === pick.provider} className="au-choice" style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: "12px 16px" }} onClick={() => setPick({ provider: p.id, model: !p.connected ? "" : p.id === pick.provider ? pick.model : p.id === current.provider && p.models.includes(current.model) ? current.model : (p.models[0] ?? "") })}>
       <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
         <span style={{ fontSize: 14, fontWeight: 500 }}>{p.name}</span>
         <span style={{ fontSize: 12, color: p.connected ? "var(--ok)" : "var(--fg2)" }}>{p.connected ? "Conectado" : "Precisa de chave de API"}</span>
@@ -152,6 +152,9 @@ export function Onboarding() {
   const loadGateways = () => agent.gateways().then((g) => setGws(g.items), () => {});
   useEffect(() => {
     if (step < 0) return;
+    // Cada abertura parte do que está salvo: "Fechar" descarta escolhas não salvas.
+    setPick({ provider: "", model: "" });
+    setOpenGw(null);
     agent.settings().then((x) => {
       setS(x);
       setBackend(x.backend);
@@ -243,7 +246,7 @@ export function Onboarding() {
               </>
             )}
 
-            {step === 1 && (catalog ? <ModelStep catalog={catalog} pick={pick} setPick={setPick} onCatalog={setCatalog} /> : <span style={{ color: "var(--fg3)" }}>Carregando provedores…</span>)}
+            {step === 1 && (catalog ? <ModelStep catalog={catalog} pick={pick} setPick={setPick} onCatalog={setCatalog} current={{ provider: s?.provider ?? "", model: s?.model ?? "" }} /> : <span style={{ color: "var(--fg3)" }}>Carregando provedores…</span>)}
 
             {step === 2 && s && (
               <>

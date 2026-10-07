@@ -4,7 +4,7 @@ import { Icon } from "../Icon";
 import { parsePlaybook } from "../ops/playbook";
 import { PlaybookFlow } from "../ops/PlaybookFlow";
 import { PlaybookSettings } from "../ops/PlaybookSettings";
-import { deletePlaybook, inBiz, savePlaybook, useStore } from "../store";
+import { ask, deletePlaybook, inBiz, savePlaybook, useStore } from "../store";
 
 export function Playbooks() {
   const s = useStore((x) => x);
@@ -98,7 +98,7 @@ export function Playbooks() {
             <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
               <PlaybookFlow key={sel.id} p={sel} />
               <PlaybookSettings key={sel.id + JSON.stringify(sel)} p={sel} />
-              <button className="au-outline danger" onClick={() => window.confirm(`Remover o playbook “${sel.name}”?`) && deletePlaybook(sel.id)} style={{ alignSelf: "flex-end" }}>
+              <button className="au-outline danger" onClick={async () => (await ask({ title: `Remover o playbook “${sel.name}”?`, body: sel.schedule ? "O agendamento dele também é removido." : undefined, confirm: "Remover", danger: true })) && deletePlaybook(sel.id)} style={{ alignSelf: "flex-end" }}>
                 Remover playbook
               </button>
             </div>

@@ -8,12 +8,12 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 
 | Spec | Estado | PR | Última validação |
 |---|---|---|---|
-| 01 Conversa e Sessões | 🧪 | — | — |
-| 02 Primeiro uso | ⬜ | — | — |
-| 03 Português e clareza | ⬜ | — | — |
-| 04 Verdade | ⬜ | — | — |
-| 05 Promessas | ⬜ | — | — |
-| 06 Acabamento | ⬜ | — | — |
+| 01 Conversa e Sessões | 👀 | — | R2 07/10: 15/15 ✅ (+C1.17 novo) |
+| 02 Primeiro uso | 🧪 | — | R1 07/10: 8✅ 1❌ |
+| 03 Português e clareza | 🔧 | — | — |
+| 04 Verdade | 🔧 | — | — |
+| 05 Promessas | 🔧 | — | — |
+| 06 Acabamento | 🔧 | — | — |
 
 ## Já entregue antes dos specs
 - 🏁 PRs #1–#8: telas Aurora, sem mocks, ops_center, gateway com autonomia, playbooks com horário.
@@ -23,36 +23,37 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 ## 01 · Conversa e Sessões
 | Critério | Estado | Nota |
 |---|---|---|
-| C1.1 URL `/chat/<id>` após 1ª mensagem | 🧪 | |
-| C1.2 F5 reabre a conversa | 🧪 | |
-| C1.3 Lista de conversas na barra lateral da Conversa | 🧪 | |
-| C1.4 Nova conversa mantém a anterior na lista | 🧪 | |
-| C1.5 Origem Web | 🧪 | |
-| C1.6 Filtros de origem corretos em Sessões | 🧪 | |
-| C1.7 Contagem de mensagens e plural | 🧪 | |
-| C1.8 Tokens/custo coerentes | 🧪 | |
-| C1.9 Cabeçalho sem jargão | 🧪 | |
-| C1.10 Menu "/" fecha (Esc, fora, enviar) | 🧪 | |
-| C1.11 Menu "/" só comandos web, em PT | 🧪 | |
-| C1.12 Modelo ativo único | 🧪 | |
-| C1.13 Botões da resposta em PT | 🧪 | |
-| C1.14 Saída real do passo | 🧪 | |
-| C1.15 Passo em PT | 🧪 | |
+| C1.1 URL `/chat/<id>` após 1ª mensagem | ✅ | R2 07/10 |
+| C1.2 F5 reabre a conversa | ✅ | R1 07/10 |
+| C1.3 Lista de conversas na barra lateral da Conversa | ✅ | R1 07/10 |
+| C1.4 Nova conversa mantém a anterior na lista | ✅ | R1 07/10 |
+| C1.5 Origem Web | ✅ | R2 07/10 |
+| C1.6 Filtros de origem corretos em Sessões | ✅ | R2 07/10 |
+| C1.7 Contagem de mensagens e plural | ✅ | R2 07/10 |
+| C1.8 Tokens/custo coerentes | ✅ | R2 07/10 |
+| C1.9 Cabeçalho sem jargão | ✅ | R1 07/10 |
+| C1.10 Menu "/" fecha (Esc, fora, enviar) | ✅ | R2 07/10 |
+| C1.11 Menu "/" só comandos web, em PT | ✅ | R1 07/10 |
+| C1.12 Modelo ativo único | ✅ | R1 07/10 |
+| C1.13 Botões da resposta em PT | ✅ | R2 07/10 |
+| C1.14 Saída real do passo | ✅ | R2 07/10 |
+| C1.15 Passo em PT | ✅ | R1 07/10 |
+| C1.17 Contagem sem mensagens internas de ferramenta | ⬜ | R2: 1 pergunta = "4 mensagens"; backend só guarda o total → precisa de contagem por papel no session.list |
 | C1.16 Markdown | ✅ | validado 07/10 (sessão "Exemplo com formatações diversas") |
 
 ## 02 · Primeiro uso
 | Critério | Estado | Nota |
 |---|---|---|
-| P2.1 Passos sem corte | ⬜ | |
-| P2.2 Chave do modelo no assistente | ⬜ | |
-| P2.3 Credencial de canal no assistente | ⬜ | |
-| P2.4 Passo Segurança (padrão Rascunhar) | ⬜ | |
-| P2.5 Salvar e continuar; sem "Pular" no fim | ⬜ | |
-| P2.6 Resumo em PT natural | ⬜ | |
-| P2.7 Abre sozinho na 1ª vez | ⬜ | |
-| P2.8 Padrão de canal novo configurável (Rascunhar) | ⬜ | |
-| P2.9 Texto de Aprovações | ⬜ | |
-| P2.10 Aviso gateway parado com canal ligado | ⬜ | |
+| P2.1 Passos sem corte | ✅ | R1 07/10 |
+| P2.2 Chave do modelo no assistente | 🧪 | R1 ❌ voltar ao provedor atual marcava outro modelo; Fechar não descartava → corrigido |
+| P2.3 Credencial de canal no assistente | ✅ | R1 07/10 |
+| P2.4 Passo Segurança (padrão Rascunhar) | ✅ | R1 07/10 |
+| P2.5 Salvar e continuar; sem "Pular" no fim | ✅ | R1 07/10 |
+| P2.6 Resumo em PT natural | ✅ | R1 07/10 |
+| P2.7 Abre sozinho na 1ª vez | ✅ | R1 07/10 (parcial: não reabre com modelo configurado; 1ª vez real não testável aqui) |
+| P2.8 Padrão de canal novo configurável (Rascunhar) | ✅ | R1 07/10 |
+| P2.9 Texto de Aprovações | ✅ | R1 07/10 |
+| P2.10 Aviso gateway parado com canal ligado | 🧪 | aviso em Gateways + "Atenção" no Painel |
 
 ## 03 · Português e clareza
 | Critério | Estado | Nota |
@@ -74,23 +75,23 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | T3.15 Skills: origem honesta | ⬜ | |
 | T3.16 Skills: detalhe + ligar/desligar | ⬜ | |
 | T3.17 Skills: descrições não-PT | ⬜ | |
-| T3.18 lang pt-BR e título da aba | ⬜ | |
-| T3.19 Ctrl K / ⌘K | ⬜ | |
-| T3.20 Sem jargão visível | ⬜ | |
-| T3.21 Contadores com unidade | ⬜ | |
+| T3.18 lang pt-BR e título da aba | 🧪 | lang pt-BR, "Hermes · <tela>" |
+| T3.19 Ctrl K / ⌘K | 🧪 | Ctrl K fora do Mac |
+| T3.20 Sem jargão visível | 🔧 | feito: FTS5, MEMORY.md/USER.md, ~/.hermes, chips da Conversa; falta varredura geral |
+| T3.21 Contadores com unidade | 🧪 | "N de M caracteres" |
 
 ## 04 · Verdade
 | Critério | Estado | Nota |
 |---|---|---|
 | V4.1 Atividade automática no backend | ⬜ | |
 | V4.2 O quê/quando/por quê/desfazer | ⬜ | |
-| V4.3 Filtros só do que existe | ⬜ | |
-| V4.4 Saúde real | ⬜ | |
+| V4.3 Filtros só do que existe | 🧪 | filtros só de tipos presentes |
+| V4.4 Saúde real | 🧪 | nível ok/atenção + problemas com "Resolver" |
 | V4.5 Avisos graves no Painel | ⬜ | |
 | V4.6 Períodos corretos | ⬜ | |
-| V4.7 "US$ 0,16" | ⬜ | |
+| V4.7 "US$ 0,16" | 🧪 | US$ |
 | V4.8 Filtro por negócio | ⬜ | |
-| V4.9 Zero neutro, sem traço solto | ⬜ | |
+| V4.9 Zero neutro, sem traço solto | 🧪 | zero neutro |
 | V4.10 Briefing cria agendamento | ⬜ | |
 | V4.11 Logs: busca e download | ⬜ | |
 | V4.12 Logs: sem duplicação; vazio | ⬜ | |
@@ -99,7 +100,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 ## 05 · Promessas
 | Critério | Estado | Nota |
 |---|---|---|
-| E5.1 Suporte fora do menu | ⬜ | |
+| E5.1 Suporte fora do menu | 🧪 | Suporte fora do menu |
 | E5.2 Pendências reais | ⬜ | |
 | E5.3 Identificadores do contato | ⬜ | |
 | E5.4 Histórico do contato | ⬜ | |
@@ -115,22 +116,24 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | E5.14 "Agendar" vazio | ⬜ | |
 | E5.15 Subagentes: vazio útil | ⬜ | |
 | E5.16 Sessões: renomear/apagar | ⬜ | |
-| E5.17 Memória: filtro vazio | ⬜ | |
+| E5.17 Memória: filtro vazio | 🧪 | "Nada com esse termo" |
 | E5.18 Anexar/Voz funcionam ou somem | ⬜ | achado na revisão do código |
 
 ## 06 · Acabamento
 | Critério | Estado | Nota |
 |---|---|---|
-| A6.1 Toasts no canto | ⬜ | |
-| A6.2 Diálogo de confirmação próprio | ⬜ | |
-| A6.3 Chips estáveis | ⬜ | |
-| A6.4 Barra lateral: só a lista rola | ⬜ | |
-| A6.5 Pausa: um "Retomar"; confirmação | ⬜ | |
-| A6.6 Configurações alinhada | ⬜ | |
-| A6.7 Datas em uma linha | ⬜ | |
-| A6.8 "Congelar rolagem" nos Logs | ⬜ | |
-| A6.9 Radar: botão + dica | ⬜ | |
-| A6.10 Cabeçalho da barra lateral | ⬜ | |
+| A6.1 Toasts no canto | 🧪 | canto inferior direito, empilham |
+| A6.2 Diálogo de confirmação próprio | 🧪 | ask() substitui window.confirm (10 lugares) |
+| A6.3 Chips estáveis | 🧪 | scrollbar-gutter estável |
+| A6.4 Barra lateral: só a lista rola | 🧪 | menu fixo, conversas rolam |
+| A6.5 Pausa: um "Retomar"; confirmação | 🧪 | um Retomar; confirma ao pausar |
+| A6.6 Configurações alinhada | 🧪 | largura igual às demais |
+| A6.7 Datas em uma linha | 🧪 | Sessões e barra lateral |
+| A6.8 "Congelar rolagem" nos Logs | 🧪 | "Congelar rolagem" |
+| A6.9 Radar: botão + dica | 🧪 | botão Adicionar + dica |
+| A6.10 Cabeçalho da barra lateral | 🧪 | só a versão |
 
 ## Diário
+- **07/10/2026** — Spec 01 R2: 15/15 ✅. Spec 02 R1: 8✅ 1❌ (P2.2) → corrigido. Adiantados itens de 03/04/05/06.
+- **07/10/2026** — Spec 01 R1: 7✅ 8❌; causa principal: rota remontava a Conversa. Corrigido. Spec 02 implementado (exceto P2.10).
 - **07/10/2026** — Auditoria completa no Chrome (17 telas). Specs 01–06 criados. Markdown entregue (PR #9).
