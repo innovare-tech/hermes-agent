@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import type { Priority } from "../adapter";
 import { BizTag, CHANNEL_ICON } from "../Chrome";
 import { Icon } from "../Icon";
@@ -8,7 +9,9 @@ import { archiveInbox, inBiz, keepInbox, replyInbox, useStore } from "../store";
 export function Inbox() {
   const s = useStore((x) => x);
   const [tab, setTab] = useState<Priority | null>(null);
-  const [selId, setSelId] = useState<string | null>(null);
+  // "Precisa de você" do Painel abre direto no item (?sel=id).
+  const [params] = useSearchParams();
+  const [selId, setSelId] = useState<string | null>(params.get("sel"));
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   const all = s.inbox.filter(inBiz(s));

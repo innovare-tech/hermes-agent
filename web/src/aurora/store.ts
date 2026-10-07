@@ -42,6 +42,10 @@ let state: State = {
   tickets: [],
   activity: [],
   autonomy: [],
+  briefing: [],
+  last24h: { saved: "", autoReplies: 0 },
+  health: { online: false, uptime: "", items: [], responseTime: "" },
+  costs: { month: "", total: 0, limit: null, projection: null, byBusiness: [] },
 };
 
 const subs = new Set<() => void>();
@@ -192,4 +196,17 @@ export async function setAutonomy(c: Channel, mode: AutonomyMode) {
   }
   setState((s) => ({ autonomy: s.autonomy.map((y) => (y.id === c.id ? { ...y, mode } : y)) }));
   toast(`${c.name} → ${MODES[mode]}`);
+}
+
+// ---- Atividade ----
+
+export async function undoActivity(id: string) {
+  try {
+    await adapter.undo(id);
+  } catch {
+    toast("Não consegui desfazer");
+    return;
+  }
+  setState((s) => ({ activity: s.activity.map((a) => (a.id === id ? { ...a, undone: true } : a)) }));
+  toast("Desfeito");
 }

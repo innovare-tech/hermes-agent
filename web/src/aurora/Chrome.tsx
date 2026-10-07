@@ -25,7 +25,7 @@ export function BizTag({ id }: { id: string }) {
 }
 
 /** Cabeçalho padrão de página: label opcional, H1 com brilho, subtítulo e Pausar tudo. */
-export function PageHeader({ label, title, sub }: { label?: string; title: string; sub: ReactNode }) {
+export function PageHeader({ label, title, sub, noPanic }: { label?: string; title: string; sub: ReactNode; noPanic?: boolean }) {
   return (
     <div style={{ display: "flex", alignItems: "flex-end", gap: 20, flexWrap: "wrap" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
@@ -33,7 +33,7 @@ export function PageHeader({ label, title, sub }: { label?: string; title: strin
         <h1 className="au-h1">{title}</h1>
         <p style={{ margin: 0, color: "var(--fg2)", fontSize: 14.5, maxWidth: 600, lineHeight: 1.55 }}>{sub}</p>
       </div>
-      <PanicButton />
+      {!noPanic && <PanicButton />}
     </div>
   );
 }

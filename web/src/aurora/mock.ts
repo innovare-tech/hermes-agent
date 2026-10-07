@@ -73,6 +73,34 @@ const SNAPSHOT: OpsSnapshot = {
   tickets: TICKETS,
   activity: ACTIVITY,
   autonomy: AUTONOMY,
+  briefing: [
+    { business: "inn", at: "07:30", text: "Teles Log com erro 502 desde 06:40 — a correção está pronta e espera sua aprovação. Carla Mendes propôs reajuste de 12% no contrato." },
+    { business: "unic", at: "07:30", text: "Relatórios lentos desde 08:10 e 3 clientes reclamaram no grupo VIP. Um estorno aguarda você. 11 tickets resolvidos sozinho durante a noite." },
+    { business: "pes", at: "07:30", text: "Almoço de domingo na casa da sua mãe, 12h. A fatura do cartão vence sexta." },
+  ],
+  last24h: { saved: "3h 40m", autoReplies: 37 },
+  health: {
+    online: true,
+    uptime: "14d 6h",
+    items: [
+      { name: "Telegram", status: "ok", value: "conectado" },
+      { name: "Discord", status: "ok", value: "conectado" },
+      { name: "WhatsApp", status: "warn", value: "pareando" },
+      { name: "Email", status: "ok", value: "conectado" },
+    ],
+    responseTime: "1,2s",
+  },
+  costs: {
+    month: "outubro",
+    total: 62.4,
+    limit: 100,
+    projection: 91,
+    byBusiness: [
+      { business: "inn", value: 28.4 },
+      { business: "unic", value: 24.1 },
+      { business: "pes", value: 9.9 },
+    ],
+  },
   paused: false,
 };
 
@@ -99,5 +127,6 @@ export const mockAdapter: OpsAdapter = {
   }),
   deny: async () => {},
   archive: async () => {},
+  undo: async () => {},
   setAutonomy: async () => {},
 };
