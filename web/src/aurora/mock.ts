@@ -1,16 +1,5 @@
 // Dados mock — copiados do <script data-dc-script> do protótipo.
-import type { Activity, Approval, InboxItem, OpsAdapter, OpsSnapshot, RadarGroup, Session, Ticket } from "./adapter";
-
-const SESSIONS: Session[] = [
-  { id: "s1", title: "Revisão de PRs + resumo semanal", source: "Web", icon: "globe", when: "09:38", group: "Hoje", msgs: 14, snippet: "Agendei o resumo para toda segunda às 9h no Telegram." },
-  { id: "s2", title: "Backup noturno do Postgres no S3", source: "Cron", icon: "calendar-clock", when: "03:00", group: "Hoje", msgs: 6, snippet: "Backup concluído: 2,3 GB, checksum verificado." },
-  { id: "s3", title: "Nomes para o app de finanças", source: "Telegram", icon: "send", when: "08:12", group: "Hoje", msgs: 22, snippet: "Gostei de “Caixa Alta” e “Fôlego”." },
-  { id: "s4", title: "Migrar CI do Jenkins para Actions", source: "CLI", icon: "square-terminal", when: "ontem", group: "Ontem", msgs: 41, snippet: "Workflow de deploy passou nos 3 ambientes." },
-  { id: "s5", title: "Resumo do paper sobre DPO", source: "Discord", icon: "message-circle", when: "ontem", group: "Ontem", msgs: 9, snippet: "A contribuição central é trocar o modelo de recompensa por…" },
-  { id: "s6", title: "Configurar sandbox no Modal", source: "CLI", icon: "square-terminal", when: "seg", group: "Esta semana", msgs: 17, snippet: "O ambiente hiberna após 10 min ocioso." },
-  { id: "s7", title: "Briefing diário de IA", source: "Cron", icon: "calendar-clock", when: "seg", group: "Esta semana", msgs: 3, snippet: "Cinco destaques de hoje, em ordem de relevância." },
-  { id: "s8", title: "Planilha de gastos de setembro", source: "WhatsApp", icon: "phone", when: "dom", group: "Esta semana", msgs: 12, snippet: "Categorizei 84 transações; mercado subiu 18%." },
-];
+import type { Activity, Approval, InboxItem, OpsAdapter, OpsSnapshot, RadarGroup, Ticket } from "./adapter";
 
 const INBOX: InboxItem[] = [
   { id: "i1", business: "inn", channel: "WhatsApp", from: "Marcos Teles", initials: "MT", receivedAt: "06:52", priority: "urgente", autonomyMode: "Rascunhar", summary: "Painel da Teles Log fora do ar (erro 502) desde 06:40", message: "Bom dia! O painel da Teles Log não abre desde cedo, dá erro 502. Temos operação às 9h!", suggestedReply: "Bom dia, Marcos. Já identifiquei: o certificado do balanceador expirou às 06:38. Estou renovando agora — volta em até 10 minutos e te aviso por aqui.", context: ["Cliente desde 2023, plano Enterprise", "Prefere WhatsApp e prazos claros", "Último incidente em 14 ago, resolvido em 22 min"] },
@@ -69,7 +58,6 @@ const SNAPSHOT: OpsSnapshot = {
     { id: "unic", name: "Unic", color: "#3fd0b0" },
     { id: "pes", name: "Pessoal", color: "#f0b45a" },
   ],
-  sessions: SESSIONS,
   inbox: INBOX,
   approvals: APPROVALS,
   radar: RADAR,

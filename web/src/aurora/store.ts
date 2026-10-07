@@ -1,11 +1,14 @@
 import { useSyncExternalStore } from "react";
-import { adapter, type OnBehalf, type OpsSnapshot } from "./adapter";
+import { adapter, type OnBehalf, type OpsSnapshot, type Session } from "./adapter";
+import { chat } from "./chat";
 
 export type Direction = "aurora" | "ambar" | "sinal";
 export type Theme = "dark" | "light";
 
 export type State = Omit<OpsSnapshot, "account"> & {
   account: OpsSnapshot["account"] | null;
+  /** Sessões recentes da sidebar — vêm do ChatAdapter (gateway real quando houver). */
+  sessions: Session[];
   dir: Direction;
   theme: Theme;
   /** "all" ou o id do negócio — filtra todas as telas. */
@@ -64,6 +67,10 @@ export const inBiz = (s: State) => (x: { business: string }) =>
 
 export async function loadOps() {
   setState(await adapter.load());
+}
+
+export async function loadSessions() {
+  setState({ sessions: await chat.sessions() });
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;

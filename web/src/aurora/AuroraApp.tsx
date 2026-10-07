@@ -1,15 +1,21 @@
 import { useEffect, type MouseEvent } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router";
 import { Background, PauseBanner, Toast } from "./Chrome";
+import { Chat } from "./screens/Chat";
 import { Home } from "./screens/Home";
 import { AGENT, OPS, Sidebar } from "./Sidebar";
-import { loadOps, toast, useStore } from "./store";
+import { loadOps, loadSessions, toast, useStore } from "./store";
 
 // Spotlight que segue o cursor: escreve direto no style, sem re-render.
 const onMove = (e: MouseEvent<HTMLDivElement>) => {
   e.currentTarget.style.setProperty("--cx", e.clientX + "px");
   e.currentTarget.style.setProperty("--cy", e.clientY + "px");
 };
+
+// Remonta a cada navegação: "Nova conversa" (ou ⌘K) já em /chat começa do zero.
+function ChatRoute() {
+  return <Chat key={useLocation().key} />;
+}
 
 function Placeholder() {
   const { pathname } = useLocation();
@@ -39,6 +45,7 @@ export function AuroraApp() {
 
   useEffect(() => {
     loadOps().catch(() => toast("Não consegui carregar os dados do agente"));
+    loadSessions().catch(() => toast("Não consegui carregar as sessões"));
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -59,6 +66,7 @@ export function AuroraApp() {
             <PauseBanner />
             <Routes>
               <Route path="/" element={<Home />} />
+              <Route path="/chat/:sid?" element={<ChatRoute />} />
               <Route path="*" element={<Placeholder />} />
             </Routes>
           </main>
