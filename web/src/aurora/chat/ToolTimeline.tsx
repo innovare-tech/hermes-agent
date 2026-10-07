@@ -57,7 +57,7 @@ export function ToolTimeline({ steps, meta }: { steps: ToolStep[]; meta?: string
   const [open, setOpen] = useState(true);
   const running = steps.some((s) => s.status === "run");
   const done = steps.filter((s) => s.status !== "run").length;
-  const head = running ? `trabalhando · passo ${done + 1}` : `${steps.length} passos${meta ? " · " + meta.split(" · ").pop() : ""}`;
+  const head = running ? `trabalhando · passo ${done + 1}` : `${steps.length} ${steps.length === 1 ? "passo" : "passos"}${meta ? " · " + meta.split(" · ").pop() : ""}`;
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
       <button className="au-ghost" aria-expanded={open} onClick={() => setOpen(!open)} style={{ alignSelf: "flex-start", padding: "4px 0 10px", fontFamily: "var(--fm)", fontSize: 11.5 }}>

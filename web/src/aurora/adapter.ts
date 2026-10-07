@@ -165,6 +165,8 @@ export type OpsSnapshot = {
   kb: KbArticle[];
   people: Person[];
   playbooks: Playbook[];
+  /** Modo aplicado a canais que ainda não falaram com o Hermes. */
+  defaultMode: AutonomyMode;
   paused: boolean;
 };
 
@@ -198,6 +200,7 @@ export interface OpsAdapter {
   /** Reverte uma ação da Atividade quando ela é reversível. */
   undo(activityId: string): Promise<void>;
   setAutonomy(channelId: string, mode: AutonomyMode): Promise<void>;
+  setDefaultMode(mode: AutonomyMode): Promise<void>;
   setChannelBusiness(channelId: string, businessId: BizId | null): Promise<void>;
   saveBusiness(b: { id?: string; name: string; color: string }): Promise<Business>;
   deleteBusiness(id: string): Promise<void>;

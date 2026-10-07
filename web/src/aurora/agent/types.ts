@@ -30,6 +30,16 @@ export type Gateway = {
   docsUrl: string;
   fields: GatewayField[];
 };
+/** Provedor de modelo no assistente: com chave (lista modelos) ou sem (pede a chave, ou o terminal). */
+export type ProviderOption = {
+  id: string;
+  name: string;
+  connected: boolean;
+  /** Variável do .env para colar a chave; null = autenticação que só o terminal faz (OAuth, nuvem). */
+  keyEnv: string | null;
+  models: string[];
+  current: boolean;
+};
 /** Chave de API do .env (provedores de modelo e ferramentas). */
 export type ApiKey = { key: string; description: string; url: string | null; category: string; isSet: boolean; preview: string; advanced: boolean };
 export type GatewaySummary = { running: boolean; label: string };
@@ -71,6 +81,7 @@ export interface AgentAdapter {
   testGateway(id: string): Promise<{ ok: boolean; message: string }>;
   gatewayAction(action: "start" | "stop" | "restart"): Promise<void>;
   apiKeys(): Promise<ApiKey[]>;
+  providerCatalog(refresh?: boolean): Promise<ProviderOption[]>;
   setApiKey(key: string, value: string): Promise<void>;
   deleteApiKey(key: string): Promise<void>;
   logs(): Promise<LogLine[]>;

@@ -159,7 +159,7 @@ function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
 
 export const liveAdapter: OpsAdapter = {
   async load() {
-    const [estop, status, costs, businesses, channels, inboxRaw, activity, watches, people, playbooks] = await Promise.all([
+    const [estop, status, costs, businesses, channels, inboxRaw, activity, watches, people, playbooks, settings] = await Promise.all([
       fetchJSON<Estop>("/api/estop"),
       api.getStatus(),
       costsThisMonth(),
@@ -170,6 +170,7 @@ export const liveAdapter: OpsAdapter = {
       ops<string[]>("/watches"),
       ops<RawPerson[]>("/people"),
       ops<RawPlaybook[]>("/playbooks"),
+      ops<{ default_mode: AutonomyMode }>("/settings"),
     ]);
     const inbox = inboxRaw.map(inboxFrom);
     const autonomy = channels.map(channelFrom);
@@ -193,6 +194,7 @@ export const liveAdapter: OpsAdapter = {
       kb: [],
       people: people.map(personFrom),
       playbooks: playbooks.map(playbookFrom),
+      defaultMode: settings.default_mode,
       paused: estop.paused,
     };
   },
@@ -225,6 +227,9 @@ export const liveAdapter: OpsAdapter = {
   },
   async undo(id) {
     await ops(`/activity/${id}/undo`, json("POST"));
+  },
+  async setDefaultMode(mode) {
+    await ops("/settings", json("PUT", { default_mode: mode }));
   },
   async setAutonomy(channelId, mode) {
     await ops(`/channels/${encodeURIComponent(channelId)}`, json("PUT", { mode }));

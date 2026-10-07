@@ -80,16 +80,17 @@ export function Chat() {
   async function send(text: string) {
     if (running) return;
     setRunning(true);
+    // Mensagem na tela antes de criar a sessão: sem piscar a tela vazia ("0 mensagens").
+    const now = Date.now();
+    setMessages((list) => [...list, { id: "u" + now, role: "user", text }, { id: "a" + now, role: "agent", steps: [], text: "", live: true }]);
     try {
       let id = sid;
       if (!id) {
         id = await chat.create();
         created.current = id;
-        navigate(`/chat/${id}`, { replace: true });
+        navigate(`/chat/${id}`, { replace: true, state: { created: true } });
       }
       setSid(id);
-      const now = Date.now();
-      setMessages((list) => [...list, { id: "u" + now, role: "user", text }, { id: "a" + now, role: "agent", steps: [], text: "", live: true }]);
       await chat.send(id, text, (e) => {
         updateLive((m) => applyEvent(m, e));
         if (e.type === "done") {
@@ -288,9 +289,9 @@ function AgentBubble({ m, onSend, onCron, onAnswer }: { m: AgentMessage; onSend:
         )}
         {m.text && <Markdown text={m.text} tail={m.live && !running && m.approval?.status !== "pending" ? <span className="au-caret" aria-hidden="true" /> : undefined} />}
         {m.blocks?.map((b, i) => <BlockView key={i} b={b} onCron={onCron} />)}
-        {m.meta && (
+        {!m.live && !!m.text && (
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>
-            <span>{m.meta}</span>
+            {m.meta && <span>{m.meta}</span>}
             <span style={{ display: "flex", gap: 4 }}>
               <button className="au-mini" title="Copiar" aria-label="Copiar" onClick={() => navigator.clipboard.writeText(m.text).then(() => toast("Copiado"), () => {})}>
                 <Icon name="copy" size={12} />

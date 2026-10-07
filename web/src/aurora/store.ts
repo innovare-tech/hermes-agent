@@ -54,6 +54,7 @@ let state: State = {
   kb: [],
   people: [],
   playbooks: [],
+  defaultMode: 1,
 };
 
 const subs = new Set<() => void>();
@@ -219,6 +220,16 @@ export async function setAutonomy(c: Channel, mode: AutonomyMode) {
   }
   setState((s) => ({ autonomy: s.autonomy.map((y) => (y.id === c.id ? { ...y, mode } : y)) }));
   toast(`${c.name} → ${MODES[mode]}`);
+}
+
+export async function setDefaultMode(mode: AutonomyMode) {
+  try {
+    await adapter.setDefaultMode(mode);
+  } catch (e) {
+    return toast(errMsg(e, "Não consegui salvar o padrão"));
+  }
+  setState({ defaultMode: mode });
+  toast(`Canais novos começam em ${MODES[mode]}`);
 }
 
 // ---- Atividade ----

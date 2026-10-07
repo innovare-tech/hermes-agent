@@ -91,7 +91,7 @@ export function Sidebar() {
         <button className="au-new" onClick={() => navigate("/chat")}>
           <Icon name="plus" size={15} color="var(--acc)" />
           Nova conversa
-          <span className="au-kbd">⌘K</span>
+          <span className="au-kbd">{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K"}</span>
         </button>
       </div>
 

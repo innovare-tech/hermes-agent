@@ -20,7 +20,8 @@ from pathlib import Path
 from typing import Any, Iterator, Optional
 
 OBSERVE, DRAFT, AUTONOMOUS = 0, 1, 2
-DEFAULT_MODE = AUTONOMOUS
+# Padrão de fábrica para canais nunca vistos: Rascunhar (nada sai sem você aprovar). Configurável.
+FACTORY_DEFAULT_MODE = DRAFT
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS businesses (
@@ -121,15 +122,29 @@ def channel_id(platform: str, chat_id: str) -> str:
     return f"{platform}:{chat_id}"
 
 
+def default_mode() -> int:
+    """Modo aplicado a canais novos (Aprovações → Autonomia). Canais já registrados não mudam."""
+    mode = get_meta("default_mode", FACTORY_DEFAULT_MODE)
+    return mode if mode in (OBSERVE, DRAFT, AUTONOMOUS) else FACTORY_DEFAULT_MODE
+
+
+def set_default_mode(mode: int) -> int:
+    if mode not in (OBSERVE, DRAFT, AUTONOMOUS):
+        raise ValueError("modo inválido")
+    set_meta("default_mode", mode)
+    return mode
+
+
 def touch_channel(platform: str, chat_id: str, name: str = "", kind: str = "dm") -> dict:
     """Registra/atualiza um canal visto pelo gateway e devolve sua política atual."""
     cid = channel_id(platform, chat_id)
+    mode = default_mode()
     with connect() as c:
         c.execute(
             "INSERT INTO channels(id, platform, chat_id, name, kind, mode, last_seen) VALUES(?,?,?,?,?,?,?) "
             "ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen, "
             "name=CASE WHEN excluded.name<>'' THEN excluded.name ELSE channels.name END, kind=excluded.kind",
-            (cid, platform, str(chat_id), name or "", kind, DEFAULT_MODE, time.time()),
+            (cid, platform, str(chat_id), name or "", kind, mode, time.time()),
         )
         return dict(c.execute("SELECT * FROM channels WHERE id=?", (cid,)).fetchone())
 
@@ -137,7 +152,7 @@ def touch_channel(platform: str, chat_id: str, name: str = "", kind: str = "dm")
 def channel_mode(platform: str, chat_id: str) -> int:
     with connect() as c:
         row = c.execute("SELECT mode FROM channels WHERE id=?", (channel_id(platform, chat_id),)).fetchone()
-    return int(row["mode"]) if row else DEFAULT_MODE
+    return int(row["mode"]) if row else default_mode()
 
 
 def list_channels() -> list[dict]:

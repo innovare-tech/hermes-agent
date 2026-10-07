@@ -6,6 +6,9 @@ import { parseCronPt } from "./cron";
 const DEST_ICON: Record<string, string> = { Telegram: "send", Email: "mail", Discord: "message-circle", WhatsApp: "phone", Slack: "hash", Conversa: "message-square" };
 import type { AgentAdapter, CronJob, Gateway, LogLine, MemoryData, Settings } from "./types";
 
+// Reserva para provedores cujo catálogo não informa a variável da chave.
+const KEY_ENV: Record<string, string> = { openrouter: "OPENROUTER_API_KEY", anthropic: "ANTHROPIC_API_KEY", gemini: "GEMINI_API_KEY", "openai-api": "OPENAI_API_KEY", fireworks: "FIREWORKS_API_KEY", novita: "NOVITA_API_KEY", huggingface: "HF_TOKEN" };
+
 const jsonInit = (method: string, body: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 /** Trecho de busca legível: sem marcadores de destaque, markdown e escapes de JSON. */
@@ -20,13 +23,13 @@ export const cleanSnippet = (t: string) =>
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 const BACKENDS = [
-  { id: "local", name: "Local", description: "Na sua máquina" },
-  { id: "docker", name: "Docker", description: "Contêiner isolado" },
-  { id: "ssh", name: "SSH", description: "Servidor remoto" },
-  { id: "singularity", name: "Singularity", description: "Clusters HPC" },
-  { id: "modal", name: "Modal", description: "Serverless, hiberna" },
-  { id: "daytona", name: "Daytona", description: "Serverless, persistente" },
-  { id: "vercel_sandbox", name: "Vercel Sandbox", description: "Efêmero" },
+  { id: "local", name: "Local", description: "Nesta máquina, onde o Hermes está instalado (recomendado)" },
+  { id: "docker", name: "Docker", description: "Num contêiner isolado nesta máquina" },
+  { id: "ssh", name: "SSH", description: "Em outro servidor, via SSH" },
+  { id: "modal", name: "Modal", description: "Nuvem da Modal (avançado)" },
+  { id: "daytona", name: "Daytona", description: "Nuvem da Daytona (avançado)" },
+  { id: "vercel_sandbox", name: "Vercel Sandbox", description: "Ambiente temporário na Vercel (avançado)" },
+  { id: "singularity", name: "Singularity", description: "Clusters de pesquisa (avançado)" },
 ];
 
 // Personalidades nativas do Hermes (hermes_cli/personality.py) com rótulo em português.
@@ -70,7 +73,7 @@ export const liveAgent: AgentAdapter = {
   async sessions(query, source) {
     // Filtro por rótulo no cliente: "Terminal" junta tui e cli, que o backend guarda separados.
     const opts = { source: null, order: "recent" as const };
-    const rows = query.trim() ? (await api.searchSessions(query, opts)).results.map((r) => ({ ...r, id: r.session_id ?? r.id, preview: r.snippet || r.preview })) : (await api.getSessions(200, 0, opts)).sessions;
+    const rows = query.trim() ? (await api.searchSessions(query, opts)).results.map((r) => ({ ...r, id: r.session_id ?? r.id, preview: r.snippet || r.preview })) : (await api.getSessions(100, 0, opts)).sessions;
     return rows
       .map((s) => ({ id: s.id, title: s.title || s.preview || "Sem título", source: sourceLabel(s.source), icon: sourceIcon(s.source), snippet: cleanSnippet(s.preview ?? ""), msgs: s.message_count ?? 0, when: shortWhen(s.started_at) }))
       .filter((r) => source === "Todas" || r.source === source);
@@ -142,6 +145,21 @@ export const liveAgent: AgentAdapter = {
     return Object.entries(all)
       .filter(([, v]) => (v.category === "provider" || v.category === "tool" || v.custom) && !v.channel_managed)
       .map(([key, v]) => ({ key, description: v.description, url: v.url, category: v.custom ? "custom" : v.category, isSet: v.is_set, preview: v.redacted_value ?? "", advanced: v.advanced }));
+  },
+  async providerCatalog(refresh) {
+    const opts = await api.getModelOptions({ refresh });
+    return opts.providers.map((p) => {
+      const raw = p as typeof p & { key_env?: string | null; auth_type?: string | null };
+      const keyEnv = raw.key_env || KEY_ENV[p.slug] || null;
+      return {
+        id: p.slug,
+        name: p.name,
+        connected: !!p.authenticated,
+        keyEnv: raw.auth_type && raw.auth_type !== "api_key" && !p.authenticated ? null : keyEnv,
+        models: p.models?.length ? p.models : (p.featured_models ?? []),
+        current: !!p.is_current,
+      };
+    });
   },
   setApiKey: async (key, value) => void (await api.setEnvVar(key, value)),
   deleteApiKey: async (key) => void (await api.deleteEnvVar(key)),

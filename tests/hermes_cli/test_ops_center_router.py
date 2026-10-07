@@ -91,3 +91,9 @@ def test_reply_sends_marks_sent_and_respects_pause(client, monkeypatch):
     monkeypatch.setattr(routes, "_send_reply", boom)
     r = client.post(f"/api/ops/inbox/{item}/reply", json={"text": "x"})
     assert r.status_code == 502 and "sem adaptador" in r.json()["detail"]
+
+
+def test_default_mode_for_new_channels(client):
+    assert client.get("/api/ops/settings").json() == {"default_mode": 1}  # Rascunhar de fábrica
+    assert client.put("/api/ops/settings", json={"default_mode": 0}).json() == {"default_mode": 0}
+    assert client.put("/api/ops/settings", json={"default_mode": 3}).status_code == 400

@@ -8,12 +8,17 @@ def _home(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
 
 
-def test_new_channel_defaults_to_autonomous_and_mode_is_configurable():
+def test_new_channel_defaults_to_draft_and_default_is_configurable():
     from ops_center import store
 
-    assert store.channel_mode("telegram", "42") == store.AUTONOMOUS  # canal nunca visto: comportamento atual
+    assert store.channel_mode("telegram", "42") == store.DRAFT  # de fábrica: nada sai sem aprovação
     ch = store.touch_channel("telegram", "42", "Família", "group")
-    assert (ch["mode"], ch["name"], ch["kind"]) == (store.AUTONOMOUS, "Família", "group")
+    assert (ch["mode"], ch["name"], ch["kind"]) == (store.DRAFT, "Família", "group")
+    store.set_default_mode(store.AUTONOMOUS)  # muda só canais novos
+    assert store.touch_channel("telegram", "43")["mode"] == store.AUTONOMOUS
+    assert store.channel_mode("telegram", "42") == store.DRAFT
+    with pytest.raises(ValueError):
+        store.set_default_mode(5)
     store.update_channel(ch["id"], mode=store.DRAFT)
     assert store.channel_mode("telegram", "42") == store.DRAFT
     # revisitar o canal não reseta a política
@@ -35,6 +40,8 @@ def test_inbound_respects_mode_and_watches():
     item = store.get_inbox(r["item_id"])
     assert (item["status"], item["priority"], item["draft"], item["chat_name"]) == ("drafted", "urgente", "Oi Ana, já vejo isso.", "Ana")
     # canal autônomo: entra como 'auto' (o agente responde sozinho)
+    store.touch_channel("telegram", "9")
+    store.update_channel("telegram:9", mode=store.AUTONOMOUS)
     auto = store.record_inbound("telegram", "9", "oi")
     assert store.get_inbox(auto["item_id"])["status"] == "auto"
 

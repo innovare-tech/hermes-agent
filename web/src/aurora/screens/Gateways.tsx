@@ -21,7 +21,7 @@ export function envChanges(fields: GatewayField[], vals: Record<string, string>)
 }
 
 /** Credenciais de um canal: só os campos preenchidos são gravados; segredo salvo nunca volta para a tela. */
-function Setup({ g, onSaved }: { g: Gateway; onSaved: (restart: boolean) => void }) {
+export function GatewaySetup({ g, onSaved }: { g: Gateway; onSaved: (restart: boolean) => void }) {
   const [vals, setVals] = useState<Record<string, string>>(() => Object.fromEntries(g.fields.map((f) => [f.key, f.secret ? "" : f.list ? f.value.split(",").filter(Boolean).join("\n") : f.value])));
   const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState("");
@@ -182,7 +182,7 @@ export function Gateways() {
           </div>
         )}
         {isOpen && (
-          <Setup
+          <GatewaySetup
             g={g}
             onSaved={(restart) => {
               toast(restart && running ? `${g.name} salvo — reinicie o gateway para aplicar` : `${g.name} salvo`);

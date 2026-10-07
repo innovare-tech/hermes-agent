@@ -75,6 +75,20 @@ async def update_channel(cid: str, body: ChannelBody):
     return await _run(_store().update_channel, cid, mode=body.mode, business_id=body.business_id, name=body.name)
 
 
+class OpsSettings(BaseModel):
+    default_mode: int
+
+
+@router.get("/settings")
+async def get_settings():
+    return {"default_mode": await _run(_store().default_mode)}
+
+
+@router.put("/settings")
+async def put_settings(body: OpsSettings):
+    return {"default_mode": await _run(_store().set_default_mode, body.default_mode)}
+
+
 # ---- caixa de entrada ----
 
 class InboxPatch(BaseModel):
