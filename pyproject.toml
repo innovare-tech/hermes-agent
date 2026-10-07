@@ -808,6 +808,8 @@ include = [
   "hermes_platform.*",
   "pm",
   "pm.*",
+  "ops_center",
+  "ops_center.*",
   "tools",
   "tools.*",
 ]

@@ -3,7 +3,7 @@ import { spot } from "../Chrome";
 import { Icon } from "../Icon";
 
 /** Ficha de uma pessoa: espera, contexto guardado pelo Hermes e pendências. */
-export function PersonCard({ p, businessName, onDraft, onHistory }: { p: Person; businessName: string; onDraft: () => void; onHistory: () => void }) {
+export function PersonCard({ p, businessName, onDraft, onHistory, onEdit, onDelete }: { p: Person; businessName: string; onDraft: () => void; onHistory: () => void; onEdit: () => void; onDelete: () => void }) {
   const wc = p.waitingHours > 24 ? "var(--err)" : "var(--acc)";
   const fields = [
     { k: "Negócio", v: businessName },
@@ -50,6 +50,12 @@ export function PersonCard({ p, businessName, onDraft, onHistory }: { p: Person;
         </button>
         <button className="au-outline" onClick={onHistory}>
           Ver histórico
+        </button>
+        <button className="au-mini" title="Editar" aria-label="Editar contato" onClick={onEdit} style={{ marginLeft: "auto", width: 36, height: 36 }}>
+          <Icon name="pencil" size={14} />
+        </button>
+        <button className="au-mini danger" title="Remover" aria-label="Remover contato" onClick={() => window.confirm(`Remover ${p.name}?`) && onDelete()} style={{ width: 36, height: 36 }}>
+          <Icon name="trash-2" size={14} />
         </button>
       </div>
     </div>

@@ -1,0 +1,316 @@
+"""``/api/ops/*``: Central de Operações do dashboard (negócios, canais e autonomia, caixa de entrada,
+atividade, palavras vigiadas, pessoas e playbooks). Estado em ``ops_center.store`` ($HERMES_HOME/ops.db),
+compartilhado com o gateway, que grava as mensagens recebidas e respeita a autonomia de cada canal.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from typing import Any, Optional
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+router = APIRouter(prefix="/api/ops")
+
+
+def _store():
+    from ops_center import store
+
+    return store
+
+
+async def _run(fn, *args, **kwargs):
+    try:
+        return await asyncio.to_thread(fn, *args, **kwargs)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=f"não encontrado: {e}") from e
+
+
+# ---- negócios ----
+
+class BusinessBody(BaseModel):
+    name: str
+    color: str = "#a395ff"
+
+
+@router.get("/businesses")
+async def list_businesses():
+    return await _run(_store().list_businesses)
+
+
+@router.post("/businesses")
+async def create_business(body: BusinessBody):
+    return await _run(_store().save_business, body.name, body.color)
+
+
+@router.put("/businesses/{bid}")
+async def update_business(bid: str, body: BusinessBody):
+    return await _run(_store().save_business, body.name, body.color, bid)
+
+
+@router.delete("/businesses/{bid}")
+async def delete_business(bid: str):
+    await _run(_store().delete_business, bid)
+    return {"ok": True}
+
+
+# ---- canais ----
+
+class ChannelBody(BaseModel):
+    mode: Optional[int] = None
+    business_id: Optional[str] = ""  # "" = não mexe; null = sem negócio
+    name: Optional[str] = None
+
+
+@router.get("/channels")
+async def list_channels():
+    return await _run(_store().list_channels)
+
+
+@router.put("/channels/{cid:path}")
+async def update_channel(cid: str, body: ChannelBody):
+    return await _run(_store().update_channel, cid, mode=body.mode, business_id=body.business_id, name=body.name)
+
+
+# ---- caixa de entrada ----
+
+class InboxPatch(BaseModel):
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    draft: Optional[str] = None
+
+
+_INBOX_STATUS = {"new", "drafted", "kept", "archived", "sent", "auto"}
+_PRIORITIES = {"urgente", "voce", "resolve", "ignorar"}
+
+
+@router.get("/inbox")
+async def list_inbox(include_done: bool = False):
+    return await _run(_store().list_inbox, include_done)
+
+
+@router.patch("/inbox/{item_id}")
+async def patch_inbox(item_id: int, body: InboxPatch):
+    if body.status is not None and body.status not in _INBOX_STATUS:
+        raise HTTPException(400, "status inválido")
+    if body.priority is not None and body.priority not in _PRIORITIES:
+        raise HTTPException(400, "prioridade inválida")
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    await _run(_store().update_inbox, item_id, **fields)
+    item = await _run(_store().get_inbox, item_id)
+    if not item:
+        raise HTTPException(404, "item não encontrado")
+    return item
+
+
+class ReplyBody(BaseModel):
+    text: str
+
+
+def _send_reply(platform: str, chat_id: str, text: str) -> None:
+    """Gateway rodando → envia pelo adaptador vivo (verbo ``ops-send``); senão, mesmo caminho do ``hermes send``."""
+    from gateway.control_socket import query_gateway_control
+    from gateway.ops_hooks import send_text
+    from hermes_constants import get_hermes_home
+
+    answer = query_gateway_control(get_hermes_home(), "ops-send", params={"platform": platform, "chat_id": chat_id, "text": text}, timeout=30.0)
+    if answer is None:
+        send_text(platform, chat_id, text)
+    elif not answer.get("sent"):
+        raise RuntimeError(answer.get("error") or "o gateway não enviou")
+
+
+@router.post("/inbox/{item_id}/reply")
+async def reply_inbox(item_id: int, body: ReplyBody):
+    from agent.estop import is_engaged
+
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "resposta vazia")
+    if is_engaged():
+        raise HTTPException(409, "Hermes está pausado — nada é enviado até retomar")
+    item = await _run(_store().get_inbox, item_id)
+    if not item:
+        raise HTTPException(404, "item não encontrado")
+    try:
+        await asyncio.to_thread(_send_reply, item["platform"], item["chat_id"], text)
+    except Exception as e:  # noqa: BLE001 — motivo vai pro toast
+        raise HTTPException(502, f"Falha ao enviar: {e}") from e
+    await _run(_store().mark_sent, item_id, text)
+    return await _run(_store().get_inbox, item_id)
+
+
+# ---- atividade ----
+
+class ActivityBody(BaseModel):
+    kind: str
+    action: str
+    why: str = ""
+    business_id: Optional[str] = None
+    reversible: bool = False
+    ref: Optional[dict[str, Any]] = None
+
+
+@router.get("/activity")
+async def list_activity(limit: int = 300):
+    return await _run(_store().list_activity, min(max(limit, 1), 1000))
+
+
+@router.post("/activity")
+async def log_activity(body: ActivityBody):
+    if body.kind not in {"msg", "cmd", "pay", "mem", "tkt"}:
+        raise HTTPException(400, "tipo inválido")
+    return await _run(_store().log_activity, body.kind, body.action, body.why,
+                      business_id=body.business_id, reversible=body.reversible, ref=body.ref)
+
+
+@router.post("/activity/{activity_id}/undo")
+async def undo_activity(activity_id: int):
+    row = await _run(_store().mark_undone, activity_id)
+    if not row:
+        raise HTTPException(404, "atividade não encontrada")
+    if not row["undone"]:
+        raise HTTPException(409, "essa ação não pode ser desfeita")
+    return row
+
+
+# ---- palavras vigiadas ----
+
+class WatchesBody(BaseModel):
+    words: list[str]
+
+
+@router.get("/watches")
+async def list_watches():
+    return await _run(_store().list_watches)
+
+
+@router.put("/watches")
+async def set_watches(body: WatchesBody):
+    return await _run(_store().set_watches, body.words)
+
+
+# ---- pessoas ----
+
+class PersonBody(BaseModel):
+    id: Optional[str] = None
+    name: str
+    role: str = ""
+    business_id: Optional[str] = None
+    tone: str = ""
+    channels: str = ""
+    notes: str = ""
+    pending: list[str] = []
+    waiting_since: Optional[float] = None
+
+
+@router.get("/people")
+async def list_people():
+    return await _run(_store().list_people)
+
+
+@router.put("/people")
+async def save_person(body: PersonBody):
+    return await _run(_store().save_person, body.model_dump())
+
+
+@router.delete("/people/{pid}")
+async def delete_person(pid: str):
+    await _run(_store().delete_person, pid)
+    return {"ok": True}
+
+
+# ---- playbooks ----
+
+class PlaybookBody(BaseModel):
+    id: Optional[str] = None
+    name: str
+    business_id: Optional[str] = None
+    trigger: str
+    nodes: list[dict[str, Any]] = []
+    enabled: bool = True
+
+
+@router.get("/playbooks")
+async def list_playbooks():
+    return await _run(_store().list_playbooks)
+
+
+@router.put("/playbooks")
+async def save_playbook(body: PlaybookBody):
+    return await _run(_store().save_playbook, body.model_dump())
+
+
+@router.delete("/playbooks/{pid}")
+async def delete_playbook(pid: str):
+    await _run(_store().delete_playbook, pid)
+    return {"ok": True}
+
+
+# ---- memória (MEMORY.md / USER.md) ----
+# Mesmo MemoryStore do agente (limites da config, varredura de conteúdo malicioso, trava de arquivo).
+
+class MemoryAdd(BaseModel):
+    target: str = "memory"
+    content: str
+
+
+class MemoryEdit(BaseModel):
+    target: str = "memory"
+    entry: str
+    content: Optional[str] = None
+
+
+def _memory_target(target: str) -> str:
+    if target not in ("memory", "user"):
+        raise HTTPException(400, "target deve ser 'memory' ou 'user'")
+    return target
+
+
+def _memory_snapshot() -> dict:
+    from tools.memory_tool import load_on_disk_store
+
+    store = load_on_disk_store()
+    return {
+        "memory": list(store.memory_entries),
+        "user": list(store.user_entries),
+        "limits": {"memory": store.memory_char_limit, "user": store.user_char_limit},
+        "enabled": {"memory": store.memory_enabled, "user": store.user_profile_enabled},
+    }
+
+
+def _memory_apply(fn) -> dict:
+    from tools.memory_tool import load_on_disk_store
+
+    result = fn(load_on_disk_store())
+    if not result.get("success", False):
+        raise ValueError(result.get("error") or result.get("message") or "a memória recusou a alteração")
+    return _memory_snapshot()
+
+
+@router.get("/memory")
+async def get_memory():
+    return await _run(_memory_snapshot)
+
+
+@router.post("/memory")
+async def add_memory(body: MemoryAdd):
+    target = _memory_target(body.target)
+    return await _run(_memory_apply, lambda s: s.add(target, body.content))
+
+
+@router.put("/memory")
+async def edit_memory(body: MemoryEdit):
+    target = _memory_target(body.target)
+    if not (body.content or "").strip():
+        raise HTTPException(400, "conteúdo vazio — use DELETE para remover")
+    return await _run(_memory_apply, lambda s: s.replace(target, body.entry, body.content, matched_entry=body.entry))
+
+
+@router.delete("/memory")
+async def remove_memory(body: MemoryEdit):
+    target = _memory_target(body.target)
+    return await _run(_memory_apply, lambda s: s.remove(target, body.entry, matched_entry=body.entry))

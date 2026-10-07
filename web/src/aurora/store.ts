@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { adapter, type Approval, type Person, type Playbook, type RadarGroup, type Ticket, type AutonomyMode, type Channel, type InboxItem, type OnBehalf, type OpsSnapshot, type Session } from "./adapter";
+import { adapter, type Approval, type AutonomyMode, type BizId, type Channel, type InboxItem, type OnBehalf, type OpsSnapshot, type Person, type Playbook, type Session, type Ticket } from "./adapter";
 import { chat } from "./chat";
 
 export type Direction = "aurora" | "ambar" | "sinal";
@@ -75,8 +75,11 @@ export function useStore<T>(select: (s: State) => T): T {
   return useSyncExternalStore(subscribe, () => select(state));
 }
 
+/** Filtro de negócio: itens sem negócio ("") aparecem em todos. */
 export const inBiz = (s: State) => (x: { business: string }) =>
-  s.biz === "all" || x.business === s.biz || x.business === "all";
+  s.biz === "all" || x.business === s.biz || x.business === "" || x.business === "all";
+
+const errMsg = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
 export async function loadOps() {
   setState(await adapter.load());
@@ -133,8 +136,8 @@ export async function actOnBehalf(a: OnBehalf): Promise<boolean> {
   try {
     const entry = await adapter.perform(a);
     setState((s) => ({ activity: [entry, ...s.activity] }));
-  } catch {
-    toast("Falhou — nada foi enviado");
+  } catch (e) {
+    toast(errMsg(e, "Falhou — nada foi enviado"));
     return false;
   }
   toast(a.done);
@@ -166,12 +169,24 @@ export async function archiveInbox(id: string) {
   toast("Arquivado");
 }
 
-export function keepInbox(id: string) {
+export async function keepInbox(id: string) {
+  try {
+    await adapter.keep(id);
+  } catch (e) {
+    return toast(errMsg(e, "Não consegui atualizar"));
+  }
   setState((s) => ({ inbox: s.inbox.map((y) => (y.id === id ? { ...y, priority: "voce" as const } : y)) }));
   toast("Ok, esse fica com você");
 }
 
 export async function approve(x: Approval) {
+  // Rascunho da caixa de entrada: aprovar = enviar a resposta.
+  if (x.inboxId) {
+    const item = state.inbox.find((i) => i.id === x.inboxId);
+    if (item) await replyInbox(item, x.preview);
+    setState((s) => ({ approvals: s.approvals.filter((y) => y.id !== x.id) }));
+    return;
+  }
   const ok = await actOnBehalf({
     business: x.business,
     kind: x.kind === "pagamento" || x.kind === "reembolso" ? "pay" : x.kind === "mensagem" ? "msg" : "cmd",
@@ -186,9 +201,9 @@ export async function approve(x: Approval) {
 
 export async function deny(x: Approval) {
   try {
-    await adapter.deny(x.id);
-  } catch {
-    toast("Não consegui negar — tente de novo");
+    await adapter.deny(x);
+  } catch (e) {
+    toast(errMsg(e, "Não consegui negar — tente de novo"));
     return;
   }
   setState((s) => ({ approvals: s.approvals.filter((y) => y.id !== x.id) }));
@@ -219,36 +234,47 @@ export async function undoActivity(id: string) {
   toast("Desfeito");
 }
 
-// ---- Radar · Suporte · Pessoas · Playbooks ----
+// ---- Negócios · canais ----
 
-/** Rascunho do usuário vai para a fila de Aprovações (não sai nada ainda). */
-async function draft(a: Omit<Approval, "id" | "createdAt">, done = "Rascunho enviado para Aprovações") {
+export async function saveBusiness(b: { id?: string; name: string; color: string }) {
   try {
-    const created = await adapter.draftApproval(a);
-    setState((s) => ({ approvals: [created, ...s.approvals] }));
-    toast(done);
-  } catch {
-    toast("Não consegui criar o rascunho");
+    const saved = await adapter.saveBusiness(b);
+    setState((s) => ({ businesses: s.businesses.some((x) => x.id === saved.id) ? s.businesses.map((x) => (x.id === saved.id ? saved : x)) : [...s.businesses, saved] }));
+    toast(b.id ? "Negócio atualizado" : `Negócio “${saved.name}” criado`);
+    return saved;
+  } catch (e) {
+    toast(errMsg(e, "Não consegui salvar o negócio"));
+    return null;
   }
 }
 
-export const draftRadarAlert = (g: RadarGroup) =>
-  draft({ business: g.business, kind: "mensagem", icon: "message-square", title: "Responder no grupo " + g.name, risk: "baixo", why: `Alerta do radar: ${g.alert}.`, preview: "Pessoal, já estamos em cima disso. Atualizo vocês aqui em até 15 minutos.", source: "radar de grupos" });
+export async function deleteBusiness(id: string) {
+  try {
+    await adapter.deleteBusiness(id);
+  } catch (e) {
+    return toast(errMsg(e, "Não consegui remover o negócio"));
+  }
+  const clear = <T extends { business: BizId }>(xs: T[]) => xs.map((x) => (x.business === id ? { ...x, business: "" } : x));
+  setState((s) => ({ businesses: s.businesses.filter((b) => b.id !== id), biz: s.biz === id ? "all" : s.biz, autonomy: clear(s.autonomy), people: clear(s.people), playbooks: clear(s.playbooks) }));
+  toast("Negócio removido");
+}
 
-export const draftRadarGroup = (g: RadarGroup) =>
-  draft(
-    { business: g.business, kind: "mensagem", icon: "message-square", title: `Responder ${g.unanswered.length} pendência(s) em ${g.name}`, risk: "baixo", why: "Perguntas sem resposta há mais de 1 hora.", preview: g.unanswered.map((u) => "→ " + u).join("\n"), source: "radar de grupos" },
-    "Rascunhos enviados para Aprovações",
-  );
+export async function setChannelBusiness(c: Channel, businessId: BizId) {
+  try {
+    await adapter.setChannelBusiness(c.id, businessId || null);
+  } catch (e) {
+    return toast(errMsg(e, "Não consegui salvar"));
+  }
+  setState((s) => ({ autonomy: s.autonomy.map((y) => (y.id === c.id ? { ...y, business: businessId } : y)) }));
+}
 
-export const draftToPerson = (p: Person) =>
-  draft({ business: p.business, kind: "mensagem", icon: "message-square", title: "Mensagem para " + p.name, risk: "baixo", why: `Pendência: ${p.pending[0] ?? p.lastTopic}.`, preview: `Oi, ${p.name.split(" ")[0]}! Sobre ${p.lastTopic.toLowerCase()}: já estou vendo e te retorno ainda hoje.`, source: "pessoas" });
+// ---- Radar · Suporte · Pessoas · Playbooks ----
 
 export async function setWatches(words: string[]) {
   try {
     await adapter.setWatches(words);
-  } catch {
-    toast("Não consegui salvar as palavras vigiadas");
+  } catch (e) {
+    toast(errMsg(e, "Não consegui salvar as palavras vigiadas"));
     return false;
   }
   setState({ watches: words });
@@ -261,14 +287,46 @@ export const ticketCard = (t: Ticket) =>
 export const ticketReply = (t: Ticket) =>
   actOnBehalf({ business: t.business, kind: "msg", action: `Respondeu ${t.client} no ticket #${t.n}`, why: "pedido seu no painel de suporte.", done: "Resposta enviada para " + t.client, blocked: "Agente pausado — retome para enviar", target: { kind: "ticket", n: t.n, op: "reply" } });
 
-export async function savePlaybook(p: Playbook, done?: string) {
+export async function savePerson(p: Omit<Person, "id" | "initials" | "waitingHours"> & { id?: string }) {
   try {
-    await adapter.savePlaybook(p);
-  } catch {
-    toast("Não consegui salvar o playbook");
-    return false;
+    const saved = await adapter.savePerson(p);
+    setState((s) => ({ people: s.people.some((x) => x.id === saved.id) ? s.people.map((x) => (x.id === saved.id ? saved : x)) : [...s.people, saved].sort((a, b) => a.name.localeCompare(b.name)) }));
+    toast(p.id ? "Contato atualizado" : `${saved.name} adicionado`);
+    return saved;
+  } catch (e) {
+    toast(errMsg(e, "Não consegui salvar o contato"));
+    return null;
   }
-  setState((s) => ({ playbooks: s.playbooks.some((x) => x.id === p.id) ? s.playbooks.map((x) => (x.id === p.id ? p : x)) : [p, ...s.playbooks] }));
-  if (done) toast(done);
-  return true;
+}
+
+export async function deletePerson(id: string) {
+  try {
+    await adapter.deletePerson(id);
+  } catch (e) {
+    return toast(errMsg(e, "Não consegui remover"));
+  }
+  setState((s) => ({ people: s.people.filter((p) => p.id !== id) }));
+  toast("Contato removido");
+}
+
+export async function savePlaybook(p: Omit<Playbook, "id" | "runs" | "lastRun"> & { id?: string }, done?: string) {
+  try {
+    const saved = await adapter.savePlaybook(p);
+    setState((s) => ({ playbooks: s.playbooks.some((x) => x.id === saved.id) ? s.playbooks.map((x) => (x.id === saved.id ? saved : x)) : [saved, ...s.playbooks] }));
+    if (done) toast(done);
+    return saved;
+  } catch (e) {
+    toast(errMsg(e, "Não consegui salvar o playbook"));
+    return null;
+  }
+}
+
+export async function deletePlaybook(id: string) {
+  try {
+    await adapter.deletePlaybook(id);
+  } catch (e) {
+    return toast(errMsg(e, "Não consegui remover"));
+  }
+  setState((s) => ({ playbooks: s.playbooks.filter((p) => p.id !== id) }));
+  toast("Playbook removido");
 }

@@ -15,10 +15,11 @@ export const CHANNEL_ICON: Record<string, string> = { WhatsApp: "phone", Telegra
 /** Ponto colorido + nome do negócio. */
 export function BizTag({ id }: { id: string }) {
   const b = useStore((s) => s.businesses.find((x) => x.id === id));
-  const name = b?.name ?? "Todos";
+  if (!b) return null;
+  const name = b.name;
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)", whiteSpace: "nowrap" }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: b?.color ?? "var(--fg3)" }} />
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: b.color }} />
       {name}
     </span>
   );
@@ -102,6 +103,33 @@ export function PauseBanner() {
       <Icon name="octagon-pause" size={15} />
       Agente pausado. Nada sai em seu nome até você retomar.
       <button onClick={togglePause}>Retomar</button>
+    </div>
+  );
+}
+
+/** Cartão para telas que ainda não têm backend no Hermes: diz o que falta e oferece os dados de exemplo. */
+export function NotConnected({ icon, what, needs, action }: { icon: string; what: string; needs: string; action?: ReactNode }) {
+  return (
+    <div className="au-card" onMouseMove={spot} style={{ padding: "36px 32px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 12, maxWidth: 640, animation: "hblurin .5s both" }}>
+      <span style={{ width: 44, height: 44, borderRadius: "var(--r2)", background: "var(--accSoft)", color: "var(--acc)", display: "grid", placeItems: "center" }}>
+        <Icon name={icon} size={20} />
+      </span>
+      <span className="au-label">Ainda não configurado</span>
+      <span style={{ fontSize: 17, fontWeight: 600, lineHeight: 1.35 }}>{what}</span>
+      <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--fg2)" }}>{needs}</p>
+      {action}
+    </div>
+  );
+}
+
+/** Página inteira de uma tela de Operação sem backend. */
+export function NotConnectedPage({ title, sub, icon, what, needs, action }: { title: string; sub: string; icon: string; what: string; needs: string; action?: ReactNode }) {
+  return (
+    <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+      <div className="au-page">
+        <PageHeader title={title} sub={sub} noPanic />
+        <NotConnected icon={icon} what={what} needs={needs} action={action} />
+      </div>
     </div>
   );
 }

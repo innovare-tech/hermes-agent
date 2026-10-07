@@ -2,7 +2,7 @@ import { PageHeader, spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { ApprovalCard } from "../ops/ApprovalCard";
 import { AutonomySegment } from "../ops/AutonomySegment";
-import { approve, deny, inBiz, setAutonomy, useStore } from "../store";
+import { approve, deny, inBiz, setAutonomy, setChannelBusiness, useStore } from "../store";
 
 export function Approvals() {
   const s = useStore((x) => x);
@@ -48,15 +48,32 @@ export function Approvals() {
               const biz = s.businesses.find((b) => b.id === c.business);
               return (
                 <div key={c.id} style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 0", borderTop: "1px solid var(--line)" }}>
-                  <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 500 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 500, minWidth: 0 }}>
                     <Icon name={c.icon} size={13} color="var(--fg2)" />
-                    {c.name}
-                    <span style={{ marginLeft: "auto", width: 6, height: 6, borderRadius: "50%", background: biz?.color ?? "var(--fg3)" }} />
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+                    {s.businesses.length > 0 ? (
+                      <select aria-label={`Negócio de ${c.name}`} className="au-select" value={c.business} onChange={(e) => setChannelBusiness(c, e.target.value)} style={{ marginLeft: "auto" }}>
+                        <option value="">sem negócio</option>
+                        {s.businesses.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span style={{ marginLeft: "auto", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>{c.platform}</span>
+                    )}
+                    {biz && <span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: biz.color }} />}
                   </span>
                   <AutonomySegment channel={c} onPick={(m) => setAutonomy(c, m)} />
                 </div>
               );
             })}
+            {s.autonomy.length === 0 && (
+              <p style={{ margin: 0, padding: "12px 0", borderTop: "1px solid var(--line)", fontSize: 12.5, lineHeight: 1.55, color: "var(--fg2)" }}>
+                Nenhum canal ainda. Cada conversa ou grupo aparece aqui na primeira mensagem que chegar pelo gateway — novos canais começam em Autônomo (o comportamento atual do Hermes).
+              </p>
+            )}
           </div>
         </div>
       </div>

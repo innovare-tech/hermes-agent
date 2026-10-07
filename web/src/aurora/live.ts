@@ -1,48 +1,238 @@
-// Adapter real: liga ao backend o que já existe e mantém os mocks no resto.
-// Hoje: kill switch (/api/estop, mesmo sentinel de `hermes pause`), saúde do gateway (/api/status)
-// e custo do mês (/api/analytics/usage). Inbox, aprovações globais, autonomia por canal, briefing,
-// custo por negócio e Atividade ainda não têm backend — seguem com os dados do protótipo.
+// Adapter da Central de Operações sobre o backend do Hermes:
+// /api/ops/* (ops_center: negócios, canais, caixa, atividade, vigias, pessoas, playbooks),
+// /api/estop (kill switch = `hermes pause`), /api/status (saúde) e /api/analytics/usage (custos).
 import { api, fetchJSON, type StatusResponse } from "@/lib/api";
-import type { Costs, Health, OpsAdapter } from "./adapter";
-import { mockAdapter } from "./mock";
+import type { Activity, Approval, AutonomyMode, Business, Channel, Costs, Health, InboxItem, OpsAdapter, Person, Playbook, Priority, RadarGroup } from "./adapter";
 
 type Estop = { paused: boolean; reason: string | null; engaged_at: string | null };
 
-const getEstop = () => fetchJSON<Estop>("/api/estop");
+// Formato cru de /api/ops (ops_center.store).
+type RawChannel = { id: string; platform: string; chat_id: string; name: string; kind: string; business_id: string | null; mode: number; last_seen: number | null };
+type RawInbox = { id: number; channel_id: string; sender_id: string | null; sender_name: string | null; text: string; received_at: number; priority: string; summary: string | null; draft: string | null; status: string; sent_at: number | null; platform: string; chat_name: string; kind: string; mode: number; business_id: string | null };
+type RawActivity = { id: number; at: number; business_id: string | null; kind: Activity["kind"]; action: string; why: string; reversible: number; undone: number };
+type RawPerson = { id: string; name: string; role: string; business_id: string | null; tone: string; channels: string; notes: string; pending: string[]; waiting_since: number | null };
+type RawPlaybook = { id: string; name: string; business_id: string | null; trigger: string; nodes: Playbook["nodes"]; enabled: boolean; runs: number; last_run: number | null };
 
-const OK = new Set(["connected", "running", "ready", "ok"]);
+const MODES = ["Observar", "Rascunhar", "Autônomo"];
+const PLATFORM_ICON: Record<string, string> = { telegram: "send", whatsapp: "phone", discord: "message-circle", email: "mail", slack: "hash", signal: "message-square", api: "plug" };
+const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
+const json = (method: string, body?: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+const ops = <T>(path: string, init?: RequestInit) => fetchJSON<T>("/api/ops" + path, init);
+
+/** Hora do dia para hoje, "ontem" ou a data curta. */
+export function whenLabel(ts: number | null | undefined): string {
+  if (!ts) return "";
+  const d = new Date(ts * 1000);
+  const days = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86400000);
+  if (days <= 0) return d.toTimeString().slice(0, 5);
+  if (days === 1) return "ontem";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("") || "?";
 
 export function healthFrom(st: StatusResponse): Health {
   const items = Object.entries(st.gateway_platforms ?? {}).map(([name, p]) => ({
     name: name[0].toUpperCase() + name.slice(1),
-    status: OK.has(p.state) ? ("ok" as const) : p.error_code ? ("err" as const) : ("warn" as const),
+    status: ["connected", "running", "ready", "ok"].includes(p.state) ? ("ok" as const) : p.error_code ? ("err" as const) : ("warn" as const),
     value: p.error_message ? "erro" : p.state === "connected" ? "conectado" : p.state,
   }));
-  return { online: st.gateway_running, uptime: st.gateway_running ? "gateway ativo" : "gateway parado", items, responseTime: "—" };
+  // O agente responde (este endpoint respondeu); o gateway de mensagens é um item à parte.
+  const gateway = { name: "Gateway de mensagens", status: st.gateway_running ? ("ok" as const) : ("warn" as const), value: st.gateway_running ? "ativo" : "parado" };
+  const version = st.version && st.version !== "unknown" ? "v" + st.version : "";
+  return { online: true, uptime: version, items: [gateway, ...items], responseTime: "—" };
 }
 
 async function costsThisMonth(): Promise<Costs> {
   const now = new Date();
   const a = await api.getAnalytics(now.getDate());
+  return { month: now.toLocaleDateString("pt-BR", { month: "long" }), total: a.totals.total_actual_cost || a.totals.total_estimated_cost, limit: null, projection: null, byBusiness: [] };
+}
+
+export const channelFrom = (c: RawChannel): Channel => ({
+  id: c.id,
+  name: c.name || `${cap(c.platform)} · ${c.chat_id}`,
+  icon: c.kind === "group" ? "users" : (PLATFORM_ICON[c.platform] ?? "message-square"),
+  platform: cap(c.platform),
+  kind: c.kind,
+  business: c.business_id ?? "",
+  mode: (c.mode as AutonomyMode) ?? 2,
+  lastSeen: whenLabel(c.last_seen),
+});
+
+export function inboxFrom(i: RawInbox): InboxItem {
+  const from = i.sender_name || i.chat_name || i.channel_id;
+  const done = i.status === "sent" || i.status === "auto";
   return {
-    month: now.toLocaleDateString("pt-BR", { month: "long" }),
-    total: a.totals.total_actual_cost || a.totals.total_estimated_cost,
-    limit: null,
-    projection: null,
-    byBusiness: [],
+    id: String(i.id),
+    business: i.business_id ?? "",
+    channel: cap(i.platform),
+    channelId: i.channel_id,
+    from: i.kind === "group" && i.chat_name && i.sender_name ? `${i.chat_name} · ${i.sender_name}` : from,
+    initials: initials(i.sender_name || i.chat_name || "?"),
+    receivedAt: whenLabel(i.received_at),
+    priority: (i.status === "auto" ? "resolve" : i.priority) as Priority,
+    autonomyMode: MODES[i.mode] ?? "Autônomo",
+    summary: i.summary || (i.text.length > 90 ? i.text.slice(0, 88) + "…" : i.text),
+    message: i.text,
+    suggestedReply: i.draft ?? "",
+    sentAt: done ? (i.sent_at ? `Enviado sozinho às ${whenLabel(i.sent_at)}` : "Respondido pelo Hermes") : undefined,
+    context: [],
   };
 }
 
+/** Rascunhos do modo Rascunhar viram aprovações (aprovar = enviar). */
+const approvalFrom = (i: InboxItem): Approval => ({
+  id: "draft-" + i.id,
+  inboxId: i.id,
+  business: i.business,
+  kind: "mensagem",
+  icon: "message-square",
+  title: `Responder ${i.from}`,
+  risk: "baixo",
+  createdAt: i.receivedAt,
+  why: `Canal em modo Rascunhar. Mensagem: “${i.summary}”`,
+  preview: i.suggestedReply,
+  source: `${i.channel} · rascunho do Hermes`,
+});
+
+export const activityFrom = (a: RawActivity): Activity => ({ id: String(a.id), at: whenLabel(a.at), business: a.business_id ?? "", kind: a.kind, action: a.action, why: a.why, reversible: !!a.reversible, undone: !!a.undone });
+
+const personFrom = (p: RawPerson): Person => ({
+  id: p.id,
+  name: p.name,
+  initials: initials(p.name),
+  role: p.role,
+  business: p.business_id ?? "",
+  waitingHours: p.waiting_since ? Math.floor((Date.now() / 1000 - p.waiting_since) / 3600) : 0,
+  lastTopic: p.notes,
+  tone: p.tone,
+  channels: p.channels,
+  pending: p.pending,
+});
+
+const playbookFrom = (p: RawPlaybook): Playbook => ({ id: p.id, name: p.name, business: p.business_id ?? "", trigger: p.trigger, runs: p.runs, enabled: p.enabled, lastRun: p.last_run ? whenLabel(p.last_run) : "nunca", nodes: p.nodes });
+
+/** Grupos para o Radar: canais de grupo + volume de hoje vindo da caixa de entrada. */
+function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
+  const today = new Date().setHours(0, 0, 0, 0) / 1000;
+  return channels
+    .filter((c) => c.kind === "group")
+    .map((c) => {
+      const msgs = inbox.filter((i) => i.channel_id === c.id && i.received_at >= today);
+      const urgent = msgs.filter((m) => m.priority === "urgente").length;
+      return {
+        id: c.id,
+        business: c.business,
+        channel: c.platform,
+        name: c.name,
+        members: new Set(msgs.map((m) => m.sender_id)).size,
+        msgsToday: msgs.length,
+        sentiment: [],
+        alert: urgent ? `${urgent} ${urgent === 1 ? "mensagem" : "mensagens"} com palavras vigiadas hoje` : undefined,
+        decisions: [],
+        mentions: [],
+        unanswered: [],
+      };
+    });
+}
+
 export const liveAdapter: OpsAdapter = {
-  ...mockAdapter,
   async load() {
-    const [snap, estop, status, costs] = await Promise.all([mockAdapter.load(), getEstop(), api.getStatus(), costsThisMonth()]);
-    return { ...snap, paused: estop.paused, health: healthFrom(status), costs };
+    const [estop, status, costs, businesses, channels, inboxRaw, activity, watches, people, playbooks] = await Promise.all([
+      fetchJSON<Estop>("/api/estop"),
+      api.getStatus(),
+      costsThisMonth(),
+      ops<Business[]>("/businesses"),
+      ops<RawChannel[]>("/channels"),
+      ops<RawInbox[]>("/inbox"),
+      ops<RawActivity[]>("/activity"),
+      ops<string[]>("/watches"),
+      ops<RawPerson[]>("/people"),
+      ops<RawPlaybook[]>("/playbooks"),
+    ]);
+    const inbox = inboxRaw.map(inboxFrom);
+    const autonomy = channels.map(channelFrom);
+    const today = new Date().setHours(0, 0, 0, 0) / 1000;
+    const version = status.version && status.version !== "unknown" ? "v" + status.version : "";
+    return {
+      account: { plan: "Hermes", credits: "seu agente", home: "~/.hermes", version },
+      businesses,
+      inbox,
+      approvals: inboxRaw.filter((i) => i.status === "drafted" && i.draft).map((i) => approvalFrom(inboxFrom(i))),
+      radar: radarFrom(autonomy, inboxRaw),
+      tickets: [],
+      activity: activity.map(activityFrom),
+      autonomy,
+      briefing: [],
+      last24h: { saved: "", autoReplies: inboxRaw.filter((i) => (i.status === "auto" || i.status === "sent") && i.received_at >= today).length },
+      health: healthFrom(status),
+      costs,
+      watches,
+      support: { firstResponse: "", resolvedByHermes: "", csat: "", kbUsage: "" },
+      kb: [],
+      people: people.map(personFrom),
+      playbooks: playbooks.map(playbookFrom),
+      paused: estop.paused,
+    };
   },
-  async getPaused() {
-    return (await getEstop()).paused;
-  },
+
+  getPaused: async () => (await fetchJSON<Estop>("/api/estop")).paused,
   async setPaused(paused) {
-    await fetchJSON<Estop>("/api/estop", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paused }) });
+    await fetchJSON<Estop>("/api/estop", json("PUT", { paused }));
+  },
+
+  async perform(a) {
+    if (a.target.kind === "reply") await ops(`/inbox/${a.target.id}/reply`, json("POST", { text: a.target.text }));
+    if (a.target.kind === "ticket") throw new Error("Suporte ainda não conectado a um sistema de tickets");
+    // approval: a resposta já foi dada ao gateway pela Conversa; aqui só registra.
+    const raw = await ops<RawActivity>("/activity", json("POST", { kind: a.kind, action: a.action, why: a.why, business_id: a.business || null, reversible: false }));
+    return activityFrom(raw);
+  },
+  async deny(approval) {
+    if (approval.inboxId) await ops(`/inbox/${approval.inboxId}`, json("PATCH", { status: "kept" }));
+  },
+  async archive(id) {
+    await ops(`/inbox/${id}`, json("PATCH", { status: "archived" }));
+  },
+  async keep(id) {
+    await ops(`/inbox/${id}`, json("PATCH", { status: "kept", priority: "voce" }));
+  },
+  async undo(id) {
+    await ops(`/activity/${id}/undo`, json("POST"));
+  },
+  async setAutonomy(channelId, mode) {
+    await ops(`/channels/${encodeURIComponent(channelId)}`, json("PUT", { mode }));
+  },
+  async setChannelBusiness(channelId, businessId) {
+    await ops(`/channels/${encodeURIComponent(channelId)}`, json("PUT", { business_id: businessId }));
+  },
+  saveBusiness: (b) => (b.id ? ops<Business>(`/businesses/${b.id}`, json("PUT", { name: b.name, color: b.color })) : ops<Business>("/businesses", json("POST", { name: b.name, color: b.color }))),
+  async deleteBusiness(id) {
+    await ops(`/businesses/${id}`, json("DELETE"));
+  },
+  async setWatches(words) {
+    await ops("/watches", json("PUT", { words }));
+  },
+  async savePerson(p) {
+    const raw = await ops<RawPerson>("/people", json("PUT", { id: p.id, name: p.name, role: p.role, business_id: p.business || null, tone: p.tone, channels: p.channels, notes: p.lastTopic, pending: p.pending }));
+    return personFrom(raw);
+  },
+  async deletePerson(id) {
+    await ops(`/people/${id}`, json("DELETE"));
+  },
+  async savePlaybook(p) {
+    const raw = await ops<RawPlaybook>("/playbooks", json("PUT", { id: p.id, name: p.name, business_id: p.business || null, trigger: p.trigger, nodes: p.nodes, enabled: p.enabled }));
+    return playbookFrom(raw);
+  },
+  async deletePlaybook(id) {
+    await ops(`/playbooks/${id}`, json("DELETE"));
   },
 };

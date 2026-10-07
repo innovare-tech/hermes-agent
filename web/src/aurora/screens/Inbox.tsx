@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import type { Priority } from "../adapter";
-import { BizTag, CHANNEL_ICON } from "../Chrome";
+import { BizTag, CHANNEL_ICON, NotConnectedPage } from "../Chrome";
 import { Icon } from "../Icon";
 import { INBOX_TABS, InboxList, PRIORITY } from "../ops/InboxList";
 import { archiveInbox, inBiz, keepInbox, replyInbox, useStore } from "../store";
 
 export function Inbox() {
   const s = useStore((x) => x);
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Priority | null>(null);
   // "Precisa de você" do Painel abre direto no item (?sel=id).
   const [params] = useSearchParams();
@@ -43,6 +44,21 @@ export function Inbox() {
   const p = sel ? PRIORITY[sel.priority] : null;
   const actionable = !!sel && !sel.sentAt && !!sel.suggestedReply;
 
+  if (s.inbox.length === 0)
+    return (
+      <NotConnectedPage
+        title="Caixa de entrada"
+        sub="Uma caixa só para WhatsApp, Telegram, Discord, e-mail e grupos."
+        icon="inbox"
+        what="Nenhuma mensagem ainda."
+        needs="Tudo que chegar pelos gateways de mensagem aparece aqui, com a autonomia de cada canal: Observar, Rascunhar (a resposta espera você em Aprovações) ou Autônomo. Ligue e conecte as plataformas em Gateways."
+        action={
+          <button className="au-outline" onClick={() => navigate("/gateways")} style={{ marginTop: 6 }}>
+            Abrir Gateways
+          </button>
+        }
+      />
+    );
   return (
     <div style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(260px,340px) minmax(0,1fr)", minHeight: 0, animation: "hblurin .6s both" }}>
       <div style={{ display: "flex", flexDirection: "column", minHeight: 0, borderRight: "1px solid var(--line)" }}>

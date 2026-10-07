@@ -3,8 +3,9 @@
 
 export type SessionRow = { id: string; title: string; source: string; icon: string; snippet: string; msgs: number; when: string };
 
-export type MemoryEntry = { id: string; text: string; kind: string; source: string; pinned: boolean };
-export type MemoryData = { entries: MemoryEntry[]; profile: { k: string; v: string }[]; note: string };
+export type MemoryTarget = "memory" | "user";
+/** MEMORY.md (notas do agente) e USER.md (perfil de você), entrada por entrada. */
+export type MemoryData = { memory: string[]; user: string[]; limits: Record<MemoryTarget, number>; enabled: Record<MemoryTarget, boolean> };
 
 export type Skill = { name: string; origin: "aprendida" | "hub" | "sua"; description: string; uses: number; version: string; updated: string };
 
@@ -35,7 +36,9 @@ export type Settings = {
 export interface AgentAdapter {
   sessions(query: string, source: string): Promise<SessionRow[]>;
   memory(): Promise<MemoryData>;
-  setMemory(entries: MemoryEntry[]): Promise<void>;
+  addMemory(target: MemoryTarget, content: string): Promise<MemoryData>;
+  editMemory(target: MemoryTarget, entry: string, content: string): Promise<MemoryData>;
+  removeMemory(target: MemoryTarget, entry: string): Promise<MemoryData>;
   skills(): Promise<Skill[]>;
   crons(): Promise<CronJob[]>;
   toggleCron(job: CronJob): Promise<void>;

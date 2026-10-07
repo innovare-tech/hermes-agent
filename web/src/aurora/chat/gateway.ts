@@ -201,6 +201,26 @@ export const gatewayChat: ChatAdapter = {
     if (id) await call("session.interrupt", { session_id: id });
   },
 
+  async setModel(sessionId, provider, model) {
+    const id = sessionId ? live.get(sessionId) : undefined;
+    if (!id) {
+      // Conversa nova: troca o padrão do agente (mesma rota das Configurações).
+      const body = { scope: "main" as const, provider, model };
+      const r = (await api.setModelAssignment(body)) as { confirm_required?: boolean; message?: string };
+      if (r.confirm_required) {
+        if (!window.confirm(r.message ?? "Este modelo é caro. Usar mesmo assim?")) throw new Error("Troca de modelo cancelada");
+        await api.setModelAssignment({ ...body, confirm_expensive_model: true });
+      }
+      return;
+    }
+    const value = `${model} --provider ${provider}`;
+    const r = (await call("config.set", { session_id: id, key: "model", value })) as { confirm_required?: boolean; confirm_message?: string };
+    if (r.confirm_required) {
+      if (!window.confirm(r.confirm_message ?? "Este modelo é caro. Usar mesmo assim?")) throw new Error("Troca de modelo cancelada");
+      await call("config.set", { session_id: id, key: "model", value, confirm_expensive_model: true });
+    }
+  },
+
   async slashCommands() {
     const r = await call("commands.catalog", {});
     return (r.pairs ?? []).map(([cmd, desc]) => ({ cmd: cmd.startsWith("/") ? cmd : "/" + cmd, desc: desc ?? "" }));

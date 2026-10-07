@@ -2,6 +2,7 @@ import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
 import type { Settings as S } from "../agent/types";
 import { setPrefs, setState, toast, useStore, type Direction } from "../store";
+import { BusinessesEditor } from "../ops/BusinessesEditor";
 import { AgentHeader } from "./Sessions";
 
 export const DIRECTIONS: { id: Direction; name: string; d: string; c: [string, string, string] }[] = [
@@ -51,6 +52,10 @@ export function Settings() {
             Assistente de setup
           </button>
         </AgentHeader>
+
+        <Section title="Negócios" sub="Separe canais, contatos, playbooks e custos por negócio. O seletor da barra lateral filtra todas as telas.">
+          <BusinessesEditor />
+        </Section>
 
         <Section title="Provedor de modelo" sub="Troque quando quiser — nada de lock-in.">
           <div role="radiogroup" aria-label="Provedor" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 10 }}>

@@ -60,7 +60,7 @@ export function Home() {
           sub={
             s.paused
               ? "O agente está pausado. Ele continua lendo tudo, mas não envia nada nem executa ações até você retomar."
-              : `Enquanto você estava fora, o Hermes respondeu ${s.last24h.autoReplies} mensagens, resolveu 11 tickets e separou ${needs.length + approvals} decisões para você.`
+              : `Hoje o Hermes respondeu ${s.last24h.autoReplies} ${s.last24h.autoReplies === 1 ? "mensagem" : "mensagens"} sozinho e separou ${needs.length + approvals} ${needs.length + approvals === 1 ? "decisão" : "decisões"} para você${s.health.items.some((x) => x.name === "Gateway de mensagens" && x.status !== "ok") ? ". O gateway de mensagens está parado — ligue em Gateways" : ""}.`
           }
         />
 
@@ -87,6 +87,7 @@ export function Home() {
                 </button>
               )}
             </div>
+            {brief.length === 0 && <p style={{ margin: 0, paddingTop: 14, borderTop: "1px solid var(--line)", fontSize: 13.5, lineHeight: 1.6, color: "var(--fg2)" }}>Para receber um briefing toda manhã, crie um agendamento — por exemplo “dias úteis às 7h30, resuma minhas mensagens e pendências e mande no Telegram”.</p>}
             {brief.map((b, i) => (
               <div key={b.business} style={{ display: "grid", gridTemplateColumns: "92px minmax(0,1fr)", gap: 14, paddingTop: 14, borderTop: "1px solid var(--line)", animation: "hblurin .6s both", animationDelay: 150 + i * 120 + "ms" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, alignSelf: "start", paddingTop: 2 }}>
@@ -101,7 +102,7 @@ export function Home() {
           <div className="au-card" onMouseMove={spot} style={{ padding: 22, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "22px 16px", alignContent: "start" }}>
             <span className="au-label" style={{ gridColumn: "1/-1" }}>Últimas 24 horas</span>
             {[
-              { v: s.last24h.saved, l: "de trabalho poupado", c: "var(--acc)" },
+              { v: String(s.activity.filter((a) => /^\d\d:\d\d$/.test(a.at)).length), l: "ações registradas hoje", c: "var(--acc)" },
               { v: String(s.last24h.autoReplies), l: "respostas enviadas sozinho", c: "var(--fg)" },
               { v: String(needs.length + approvals), l: "decisões esperando você", c: "var(--fg)" },
               { v: String(alerts), l: "alertas nos grupos", c: "var(--err)" },

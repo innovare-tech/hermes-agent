@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { chat } from "../chat";
@@ -11,19 +11,20 @@ import type { AgentMessage, ApprovalChoice, Block, ChatMessage, SessionInfo, Sla
 import { ApprovalCard } from "../ops/ApprovalCard";
 import { actOnBehalf, loadSessions, toast, useStore } from "../store";
 
-const BLANK: SessionInfo = { model: "", backend: "local", persona: "padrão", ctxUsed: 0, ctxMax: 128000, cost: 0 };
+const BLANK: SessionInfo = { model: "", backend: "local", persona: "padrão", ctxUsed: 0, ctxMax: 0, cost: 0 };
 
 const SUGGESTIONS = [
-  { icon: "git-pull-request", t: "Revisar PRs abertos", d: "Usa /github-pr-review em paralelo" },
-  { icon: "calendar-clock", t: "Criar um agendamento", d: "“Toda sexta às 18h, resuma meus commits”" },
-  { icon: "search", t: "O que conversamos sobre o Modal?", d: "Busca em 248 sessões anteriores" },
-  { icon: "file-spreadsheet", t: "Fechar a planilha de outubro", d: "Mesmo processo de setembro" },
+  { icon: "brain", t: "O que você sabe sobre mim?", d: "Mostra a memória e o perfil que o Hermes guardou" },
+  { icon: "calendar-clock", t: "Toda sexta às 18h, resuma minha semana", d: "Cria um agendamento recorrente" },
+  { icon: "search", t: "Do que conversamos na última semana?", d: "Busca no histórico de sessões" },
+  { icon: "sparkles", t: "Quais skills você tem?", d: "Lista o que o Hermes sabe fazer" },
 ];
 
 const wide = () => window.innerWidth >= 1280;
 
 export function Chat() {
   const { sid: param } = useParams();
+  const [search] = useSearchParams();
   const navigate = useNavigate();
   const sessions = useStore((s) => s.sessions);
   const [sid, setSid] = useState<string | null>(param ?? null);
@@ -115,6 +116,17 @@ export function Chat() {
     if (choice === "deny") toast("Negado — o Hermes não vai fazer isso");
   }
 
+  async function pickModel(provider: string, model: string) {
+    if (model === info.model) return;
+    try {
+      await chat.setModel(sid, provider, model);
+    } catch (e) {
+      return toast(e instanceof Error ? e.message : "Não consegui trocar o modelo");
+    }
+    setInfo((i) => ({ ...i, model }));
+    toast(sid ? "Modelo desta conversa: " + model : "Modelo padrão: " + model);
+  }
+
   async function stop() {
     if (sid) await chat.interrupt(sid).catch(() => {});
     updateLive(interrupted);
@@ -156,7 +168,7 @@ export function Chat() {
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <Orbit />
                 <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)", letterSpacing: ".08em", textTransform: "uppercase", animation: "hblurin .7s .1s both" }}>
-                  3 agendamentos hoje · 3 subagentes rodando
+                  {info.model ? `modelo ${info.model}` : "seu agente"}{sessions.length ? ` · ${sessions.length} conversas recentes` : ""}
                 </span>
                 <h1 className="au-display" style={{ margin: 0, fontSize: "calc(var(--h1) * 1.3)", lineHeight: 1.04, display: "flex", flexWrap: "wrap", columnGap: ".24em" }}>
                   {greet.map((w, i) => {
@@ -169,7 +181,7 @@ export function Chat() {
                   })}
                 </h1>
                 <p style={{ margin: 0, color: "var(--fg2)", fontSize: 15, lineHeight: 1.55, animation: "hblurin .8s .75s both" }}>
-                  Lembro de 128 coisas sobre você e de 9 skills que aprendemos juntos. Por onde começamos?
+                  Peça algo, mande executar uma tarefa ou digite / para ver os comandos. Por onde começamos?
                 </p>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 10 }}>
@@ -199,7 +211,7 @@ export function Chat() {
           </div>
         </div>
 
-        <Composer running={running} model={info.model || "sem modelo"} commands={commands} onSend={send} onStop={stop} onModel={() => navigate("/settings")} />
+        <Composer running={running} model={info.model || "sem modelo"} commands={commands} onSend={send} onStop={stop} onPickModel={pickModel} initialDraft={search.get("q") ?? ""} />
       </div>
       {insp && <ContextPanel info={info} onCompress={() => send("/compress")} />}
     </div>

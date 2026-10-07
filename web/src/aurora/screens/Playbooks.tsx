@@ -3,20 +3,23 @@ import { BizTag, PageHeader, spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { parsePlaybook } from "../ops/playbook";
 import { PlaybookFlow } from "../ops/PlaybookFlow";
-import { inBiz, savePlaybook, useStore } from "../store";
+import { deletePlaybook, inBiz, savePlaybook, useStore } from "../store";
 
 export function Playbooks() {
   const s = useStore((x) => x);
   const [draft, setDraft] = useState("");
-  const [selId, setSelId] = useState("b1");
+  const [selId, setSelId] = useState<string | null>(null);
   const list = s.playbooks.filter(inBiz(s));
   const sel = list.find((p) => p.id === selId) ?? list[0] ?? s.playbooks[0];
 
   const create = async () => {
-    const p = parsePlaybook(draft, s.biz === "all" ? (s.businesses[0]?.id ?? "all") : s.biz);
-    if (p && (await savePlaybook(p, "Fluxo criado · ativo"))) {
+    const p = parsePlaybook(draft, s.biz === "all" ? "" : s.biz);
+    if (!p) return;
+    const { id: _local, runs: _r, lastRun: _l, ...data } = p;
+    const saved = await savePlaybook(data, "Fluxo salvo");
+    if (saved) {
       setDraft("");
-      setSelId(p.id);
+      setSelId(saved.id);
     }
   };
 
@@ -77,8 +80,25 @@ export function Playbooks() {
                 </div>
               );
             })}
+            {list.length === 0 && (
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: "var(--fg2)" }}>
+                Nenhum playbook ainda. Descreva acima “quando X, faça Y” e o Hermes monta o fluxo.
+              </p>
+            )}
+            {list.length > 0 && (
+              <p style={{ margin: "6px 0 0", fontSize: 12, lineHeight: 1.55, color: "var(--fg3)" }}>
+                Os fluxos ficam salvos; a execução automática pelos gateways chega numa próxima etapa.
+              </p>
+            )}
           </div>
-          {sel && <PlaybookFlow key={sel.id} p={sel} />}
+          {sel && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+              <PlaybookFlow key={sel.id} p={sel} />
+              <button className="au-outline danger" onClick={() => window.confirm(`Remover o playbook “${sel.name}”?`) && deletePlaybook(sel.id)} style={{ alignSelf: "flex-end" }}>
+                Remover playbook
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

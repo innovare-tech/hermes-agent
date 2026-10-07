@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BizTag, PageHeader, spot } from "../Chrome";
+import { BizTag, NotConnectedPage, PageHeader, spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { TICKET_STATUS, TicketDetail } from "../ops/TicketDetail";
 import { inBiz, ticketCard, ticketReply, useStore } from "../store";
@@ -15,6 +15,16 @@ export function Support() {
     { v: s.support.resolvedByHermes, l: "resolvidos pelo Hermes", c: "var(--ok)" },
     { v: s.support.csat, l: "satisfação (CSAT)", c: "var(--acc)" },
   ];
+  if (tickets.length === 0)
+    return (
+      <NotConnectedPage
+        title="Suporte"
+        sub="Tickets de todos os seus sistemas, cruzados com os logs."
+        icon="life-buoy"
+        what="Conecte o seu sistema de tickets."
+        needs="O Suporte lista tickets, cruza com os logs do agente e propõe correções a partir de um conector (Linear, Zendesk…). A integração com conectores ainda não existe no Hermes — enquanto isso, peça ao agente na Conversa para investigar um erro ou ler um ticket."
+      />
+    );
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page">
