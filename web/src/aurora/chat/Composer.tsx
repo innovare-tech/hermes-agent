@@ -58,7 +58,8 @@ export function Composer({ running, model, commands, onSend, onStop, onPickModel
           <div
             role="listbox"
             aria-label="Comandos"
-            style={{ position: "absolute", left: 0, right: 0, bottom: "calc(100% + 10px)", border: "1px solid var(--line2)", borderRadius: "var(--r)", background: "var(--panel)", backdropFilter: "var(--blur)", WebkitBackdropFilter: "var(--blur)", boxShadow: "var(--shadow)", padding: 6, display: "flex", flexDirection: "column", gap: 1, maxHeight: "min(360px, 50vh)", overflow: "auto", animation: "hin .2s ease both", zIndex: 5 }}
+            className="au-float"
+            style={{ position: "absolute", left: 0, right: 0, bottom: "calc(100% + 10px)", border: "1px solid var(--line2)", borderRadius: "var(--r)", boxShadow: "var(--shadow)", padding: 6, display: "flex", flexDirection: "column", gap: 1, maxHeight: "min(360px, 50vh)", overflow: "auto", animation: "hin .2s ease both", zIndex: 5 }}
           >
             {slash.map((c, i) => (
               <button key={c.cmd} role="option" aria-selected={i === sel} className="au-slash" ref={i === sel ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined} onClick={() => setDraft(c.cmd + " ")}>

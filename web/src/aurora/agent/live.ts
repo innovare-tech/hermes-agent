@@ -142,7 +142,10 @@ export const liveAgent: AgentAdapter = {
     let modelError = "";
     const [opts, cfg, toolsets] = await Promise.all([
       api.getModelOptions({}).catch((e: unknown) => {
-        modelError = e instanceof Error ? e.message : "indisponível";
+        const msg = e instanceof Error ? e.message : "";
+        modelError = /restart required/i.test(msg)
+          ? "O Hermes foi atualizado nesta máquina e o painel ainda roda a versão anterior. Reinicie o painel (hermes dashboard) para carregar a nova."
+          : msg || "indisponível";
         return { providers: [], provider: "", model: "" } as unknown as Awaited<ReturnType<typeof api.getModelOptions>>;
       }),
       api.getConfig(),

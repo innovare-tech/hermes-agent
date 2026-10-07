@@ -184,7 +184,10 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-ob-next{padding:12px 20px;font-size:14px;transition:transform .15s}
 .au-ob-next:hover{transform:translateY(-1px)}.au-ob-next:active{transform:scale(.97)}
 
-.au-picker{position:absolute;left:0;bottom:calc(100% + 10px);width:min(420px,100%);border:1px solid var(--line2);border-radius:var(--r);background:var(--panel);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);box-shadow:var(--shadow);padding:4px;display:flex;flex-direction:column;animation:hin .2s ease both;z-index:6}
+/* Flutuantes dentro do Composer: o pai já tem backdrop-filter, então o vidro não desfoca a página —
+   pinta o painel sobre o fundo sólido do tema para o texto atrás não vazar. */
+.au-float{background:linear-gradient(var(--panel),var(--panel)),var(--bg)}
+.au-picker{position:absolute;left:0;bottom:calc(100% + 10px);width:min(420px,100%);border:1px solid var(--line2);border-radius:var(--r);background:linear-gradient(var(--panel),var(--panel)),var(--bg);box-shadow:var(--shadow);padding:4px;display:flex;flex-direction:column;animation:hin .2s ease both;z-index:6}
 .au-select{font:inherit;font-family:var(--fm);font-size:11px;color:var(--fg2);background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 8px;cursor:pointer;max-width:140px}
 .au-select:focus-visible{outline:2px solid var(--acc)}
 .au-field{display:flex;flex-direction:column;gap:6px;min-width:0}
