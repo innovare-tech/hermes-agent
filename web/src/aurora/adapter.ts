@@ -14,7 +14,7 @@ export type Session = {
   source: string;
   icon: string;
   when: string;
-  group: "Hoje" | "Ontem" | "Esta semana";
+  group: "Hoje" | "Ontem" | "Esta semana" | "Mais antigas";
   msgs: number;
   snippet: string;
 };

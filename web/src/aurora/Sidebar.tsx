@@ -65,7 +65,7 @@ function NavRow({ item, index, count, hot }: { item: NavItem; index: number; cou
   );
 }
 
-const GROUPS = ["Hoje", "Ontem", "Esta semana"] as const;
+const GROUPS = ["Hoje", "Ontem", "Esta semana", "Mais antigas"] as const;
 
 export function Sidebar() {
   const navigate = useNavigate();

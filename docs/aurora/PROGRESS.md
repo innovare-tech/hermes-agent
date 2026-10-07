@@ -8,7 +8,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 
 | Spec | Estado | PR | Última validação |
 |---|---|---|---|
-| 01 Conversa e Sessões | 🔧 | — | — |
+| 01 Conversa e Sessões | 🧪 | — | — |
 | 02 Primeiro uso | ⬜ | — | — |
 | 03 Português e clareza | ⬜ | — | — |
 | 04 Verdade | ⬜ | — | — |
@@ -23,21 +23,21 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 ## 01 · Conversa e Sessões
 | Critério | Estado | Nota |
 |---|---|---|
-| C1.1 URL `/chat/<id>` após 1ª mensagem | ⬜ | |
-| C1.2 F5 reabre a conversa | ⬜ | |
-| C1.3 Lista de conversas na barra lateral da Conversa | ⬜ | |
-| C1.4 Nova conversa mantém a anterior na lista | ⬜ | |
-| C1.5 Origem Web | ⬜ | |
-| C1.6 Filtros de origem corretos em Sessões | ⬜ | |
-| C1.7 Contagem de mensagens e plural | ⬜ | |
-| C1.8 Tokens/custo coerentes | ⬜ | |
-| C1.9 Cabeçalho sem jargão | ⬜ | |
-| C1.10 Menu "/" fecha (Esc, fora, enviar) | ⬜ | |
-| C1.11 Menu "/" só comandos web, em PT | ⬜ | |
-| C1.12 Modelo ativo único | ⬜ | |
-| C1.13 Botões da resposta em PT | ⬜ | |
-| C1.14 Saída real do passo | ⬜ | |
-| C1.15 Passo em PT | ⬜ | |
+| C1.1 URL `/chat/<id>` após 1ª mensagem | 🧪 | |
+| C1.2 F5 reabre a conversa | 🧪 | |
+| C1.3 Lista de conversas na barra lateral da Conversa | 🧪 | |
+| C1.4 Nova conversa mantém a anterior na lista | 🧪 | |
+| C1.5 Origem Web | 🧪 | |
+| C1.6 Filtros de origem corretos em Sessões | 🧪 | |
+| C1.7 Contagem de mensagens e plural | 🧪 | |
+| C1.8 Tokens/custo coerentes | 🧪 | |
+| C1.9 Cabeçalho sem jargão | 🧪 | |
+| C1.10 Menu "/" fecha (Esc, fora, enviar) | 🧪 | |
+| C1.11 Menu "/" só comandos web, em PT | 🧪 | |
+| C1.12 Modelo ativo único | 🧪 | |
+| C1.13 Botões da resposta em PT | 🧪 | |
+| C1.14 Saída real do passo | 🧪 | |
+| C1.15 Passo em PT | 🧪 | |
 | C1.16 Markdown | ✅ | validado 07/10 (sessão "Exemplo com formatações diversas") |
 
 ## 02 · Primeiro uso
@@ -116,6 +116,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | E5.15 Subagentes: vazio útil | ⬜ | |
 | E5.16 Sessões: renomear/apagar | ⬜ | |
 | E5.17 Memória: filtro vazio | ⬜ | |
+| E5.18 Anexar/Voz funcionam ou somem | ⬜ | achado na revisão do código |
 
 ## 06 · Acabamento
 | Critério | Estado | Nota |

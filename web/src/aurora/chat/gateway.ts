@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { GatewayClient } from "@/lib/gatewayClient";
 import type { Session } from "../adapter";
 import type { SessionLiveInfo } from "@hermes/shared";
+import { shortWhen, sourceIcon, sourceLabel } from "./sources";
 import type { AgentMessage, ApprovalChoice, ChatAdapter, ChatEvent, ChatMessage, SessionInfo, ToolStep } from "./types";
 
 let gw: GatewayClient | null = null;
@@ -49,9 +50,28 @@ const fmtDur = (s?: number | null) => (s == null ? "" : s.toFixed(1).replace("."
 const text = (v: unknown) => (typeof v === "string" ? v : v == null ? "" : JSON.stringify(v, null, 2));
 const argsPreview = (args?: Record<string, unknown> | null) => (args ? Object.values(args).map(text).join(" ").slice(0, 200) : "");
 
+/** Prévia do passo em português ("echo a + 2 commands" → "echo a + 2 comandos"). */
+export const ptPreview = (t: string) => t.replace(/\+ ?(\d+) commands?\b/g, (_m, n: string) => `+ ${n} ${n === "1" ? "comando" : "comandos"}`);
+
+/** Saída de ferramenta legível: JSON {output, exit_code, error} vira o texto + o erro, se houver. */
+export function toolOutput(raw: unknown): string {
+  const s = text(raw);
+  try {
+    const j = JSON.parse(s) as Record<string, unknown>;
+    if (j && typeof j === "object" && typeof j.output === "string") {
+      const extra = [j.error ? `erro: ${text(j.error)}` : "", j.exit_code != null && j.exit_code !== 0 ? `código de saída ${j.exit_code}` : ""].filter(Boolean);
+      return [j.output, ...extra].filter(Boolean).join(String.fromCharCode(10));
+    }
+    return JSON.stringify(j, null, 2);
+  } catch {
+    return s;
+  }
+}
+
 export function usageMeta(u: Usage | undefined, secs: number) {
   if (!u) return undefined;
-  const parts = [u.model, u.total != null ? (u.total / 1000).toFixed(1).replace(".", ",") + "k tokens" : null, u.cost_usd != null ? "$" + u.cost_usd.toFixed(2).replace(".", ",") : null, secs.toFixed(1).replace(".", ",") + "s"];
+  // Sem soma de tokens: o total do turno junta várias chamadas e não bate com o contexto do painel.
+  const parts = [u.model, u.cost_usd != null ? money(u.cost_usd) : null, secs.toFixed(1).replace(".", ",") + "s"];
   return parts.filter(Boolean).join(" · ");
 }
 
@@ -73,7 +93,7 @@ export function fromTranscript(rows: TranscriptMessage[]): ChatMessage[] {
     }
     if (r.role === "tool") {
       const name = r.name ?? "tool";
-      agent.steps.push({ id: r.tool_call_id ?? id, kind: toolKind(name), name, target: r.context ?? argsPreview(r.args), dur: "", status: "ok", output: r.text ?? text(r.content) });
+      agent.steps.push({ id: r.tool_call_id ?? id, kind: toolKind(name), name, target: ptPreview(r.context ?? argsPreview(r.args)), dur: "", status: "ok", output: toolOutput(r.text ?? r.content ?? "") });
     } else if (r.text) {
       agent.text = agent.text ? agent.text + "\n\n" + r.text : r.text;
     }
@@ -82,38 +102,67 @@ export function fromTranscript(rows: TranscriptMessage[]): ChatMessage[] {
 }
 
 const fromUsage = (u?: Usage | null): Partial<SessionInfo> =>
-  u ? { ctxUsed: u.context_used ?? 0, ctxMax: u.context_max ?? 0, cost: u.cost_usd ?? 0, ...(u.model ? { model: u.model } : {}) } : {};
+  u ? { ctxUsed: u.context_used ?? null, ...(u.context_max ? { ctxMax: u.context_max } : {}), cost: u.cost_usd ?? null, ...(u.model ? { model: u.model } : {}) } : {};
+
+/** "US$ 0,16". */
+export const money = (usd: number) => "US$ " + usd.toFixed(2).replace(".", ",");
 
 export const fromLiveInfo = (i?: SessionLiveInfo | null): SessionInfo => ({
   model: i?.model ?? "",
   backend: i?.terminal_backend ?? "local",
   persona: i?.personality ?? "padrão",
-  ctxUsed: 0,
+  ctxUsed: null,
   ctxMax: 0,
-  cost: 0,
+  cost: null,
   ...fromUsage(i?.usage),
 });
 
 function group(startedAt?: number | null): Session["group"] {
   const days = startedAt ? (Date.now() / 1000 - startedAt) / 86400 : 99;
-  return days < 1 ? "Hoje" : days < 2 ? "Ontem" : "Esta semana";
+  return days < 1 ? "Hoje" : days < 2 ? "Ontem" : days < 7 ? "Esta semana" : "Mais antigas";
 }
 
-const SOURCE_ICON: Record<string, string> = { telegram: "send", discord: "message-circle", whatsapp: "phone", cron: "calendar-clock", cli: "square-terminal", tui: "square-terminal" };
+/** Comandos que fazem sentido no painel web, com descrição em português. Os de terminal (/redraw,
+ *  /mouse, /quit, /prompt…) e os de conta/instalação ficam de fora; as skills entram depois. */
+export const WEB_COMMANDS: [string, string][] = [
+  ["/retry", "Gera a última resposta de novo"],
+  ["/undo", "Volta uma pergunta: apaga a última troca"],
+  ["/title", "Dá um título a esta conversa — /title Nome"],
+  ["/compress", "Resume o começo da conversa para liberar contexto"],
+  ["/btw", "Pergunta paralela, sem interromper a tarefa em andamento"],
+  ["/steer", "Corrige o rumo da tarefa em andamento, sem parar"],
+  ["/queue", "Deixa um pedido na fila para o próximo turno"],
+  ["/goal", "Define um objetivo que o Hermes persegue até cumprir"],
+  ["/plan", "Escreve um plano de implementação sem executar nada"],
+  ["/review", "Um subagente revisa o trabalho que acabou de ser feito"],
+  ["/learn", "Ensina uma skill nova a partir do que você descrever"],
+  ["/memory", "Revisa o que o Hermes quer guardar na memória"],
+  ["/model", "Troca o modelo desta conversa — /model nome"],
+  ["/personality", "Troca a personalidade das respostas"],
+  ["/reasoning", "Ajusta quanto o modelo pensa antes de responder"],
+  ["/fast", "Modo rápido do provedor (quando disponível)"],
+  ["/status", "Mostra modelo, tokens e contexto desta conversa"],
+  ["/context", "Mostra em detalhe o que ocupa o contexto"],
+  ["/usage", "Mostra consumo de tokens e limites"],
+  ["/insights", "Resumo e estatísticas do seu uso"],
+  ["/stop", "Encerra processos que o agente deixou rodando em segundo plano"],
+  ["/help", "Lista os comandos"],
+  ["/version", "Versão do Hermes"],
+];
 
 export const gatewayChat: ChatAdapter = {
   async sessions() {
     const { sessions } = await call("session.list", { limit: 30 });
     return sessions.map((s) => {
-      const src = (s.source ?? "web").toLowerCase();
       const when = s.started_at ? new Date(s.started_at * 1000) : null;
+      const recent = group(s.started_at);
       return {
         id: s.id,
         title: s.title || s.preview || "Sem título",
-        source: src[0].toUpperCase() + src.slice(1),
-        icon: SOURCE_ICON[src] ?? "globe",
-        when: when ? when.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "",
-        group: group(s.started_at),
+        source: sourceLabel(s.source),
+        icon: sourceIcon(s.source),
+        when: !when ? "" : recent === "Hoje" || recent === "Ontem" ? when.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : shortWhen(s.started_at),
+        group: recent,
         msgs: s.message_count ?? 0,
         snippet: s.preview ?? "",
       };
@@ -121,7 +170,7 @@ export const gatewayChat: ChatAdapter = {
   },
 
   async create() {
-    const r = await call("session.create", {});
+    const r = await call("session.create", { source: "web" });
     live.set(r.stored_session_id, r.session_id);
     return r.stored_session_id;
   },
@@ -131,9 +180,18 @@ export const gatewayChat: ChatAdapter = {
       const m = await api.getModelInfo();
       return { messages: [], info: { ...fromLiveInfo(null), model: m.model, ctxMax: m.effective_context_length } };
     }
-    const r = await call("session.resume", { session_id: sessionId });
+    // O resume omite a saída das ferramentas; o histórico REST tem, ligada pelo tool_call_id.
+    const [r, m, full] = await Promise.all([
+      call("session.resume", { session_id: sessionId }),
+      api.getModelInfo().catch(() => null),
+      api.getSessionMessages(sessionId).catch(() => null),
+    ]);
     live.set(sessionId, r.session_id);
-    return { messages: fromTranscript(r.messages ?? []), info: fromLiveInfo(r.info) };
+    const outputs = new Map<string, unknown>();
+    for (const x of (full?.messages ?? []) as { role?: string; tool_call_id?: string | null; content?: unknown }[]) if (x.role === "tool" && x.tool_call_id) outputs.set(x.tool_call_id, x.content);
+    const rows = (r.messages ?? []).map((x) => (x.role === "tool" && x.tool_call_id && outputs.has(x.tool_call_id) && x.content == null ? { ...x, content: outputs.get(x.tool_call_id) } : x));
+    const info = fromLiveInfo(r.info);
+    return { messages: fromTranscript(rows), info: { ...info, ctxMax: info.ctxMax || m?.effective_context_length || 0 } };
   },
 
   async send(sessionId, prompt, on) {
@@ -170,7 +228,7 @@ export const gatewayChat: ChatAdapter = {
         c.on("tool.start", (e) => {
           if (e.session_id !== sid || !e.payload) return;
           const p = e.payload;
-          const step: ToolStep = { id: p.tool_id, kind: toolKind(p.name), name: p.name, target: p.preview ?? p.context ?? p.args_text ?? argsPreview(p.args), dur: "", status: "run", output: "" };
+          const step: ToolStep = { id: p.tool_id, kind: toolKind(p.name), name: p.name, target: ptPreview(p.preview ?? p.context ?? p.args_text ?? argsPreview(p.args)), dur: "", status: "run", output: "" };
           started.set(p.tool_id, step);
           on({ type: "step", step });
         }),
@@ -178,7 +236,7 @@ export const gatewayChat: ChatAdapter = {
           if (e.session_id !== sid || !e.payload) return;
           const p = e.payload;
           const base = started.get(p.tool_id) ?? { id: p.tool_id, kind: toolKind(p.name), name: p.name, target: argsPreview(p.args), dur: "", status: "run" as const, output: "" };
-          on({ type: "step", step: { ...base, status: "ok", dur: fmtDur(p.duration_s), output: p.result_text ?? p.summary ?? text(p.result) } });
+          on({ type: "step", step: { ...base, status: "ok", dur: fmtDur(p.duration_s), output: toolOutput(p.result_text ?? p.summary ?? p.result ?? "") } });
         }),
         c.on("message.delta", (e) => {
           if (e.session_id === sid && e.payload?.text) on({ type: "delta", text: e.payload.text });
@@ -236,7 +294,10 @@ export const gatewayChat: ChatAdapter = {
 
   async slashCommands() {
     const r = await call("commands.catalog", {});
-    return (r.pairs ?? []).map(([cmd, desc]) => ({ cmd: cmd.startsWith("/") ? cmd : "/" + cmd, desc: desc ?? "" }));
+    const norm = (c: string) => (c.startsWith("/") ? c : "/" + c);
+    const skillKeys = new Set(Object.keys(r.skills ?? {}).map(norm));
+    const skills = (r.pairs ?? []).filter(([cmd]) => skillKeys.has(norm(cmd))).map(([cmd, desc]) => ({ cmd: norm(cmd), desc: desc ?? "", skill: true }));
+    return [...WEB_COMMANDS.map(([cmd, desc]) => ({ cmd, desc })), ...skills];
   },
 };
 

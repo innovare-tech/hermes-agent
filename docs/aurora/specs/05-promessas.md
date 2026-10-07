@@ -32,3 +32,7 @@
 ### Sessões / Memória
 - **E5.16** Sessões: renomear e apagar (com confirmação).
 - **E5.17** Memória: filtro sem resultado mostra "Nada com esse termo" nas duas colunas.
+
+### Conversa
+- **E5.18** Botões "Anexar" e "Voz" do campo de mensagem funcionam (anexo de arquivo/imagem; ditado) ou
+  não aparecem. Hoje são só visuais.

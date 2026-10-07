@@ -1,12 +1,13 @@
 import { useNavigate } from "react-router";
 import { Icon } from "../Icon";
+import { money } from "./gateway";
 import type { SessionInfo } from "./types";
 
 const k = (n: number) => (n / 1000).toFixed(1).replace(".", ",") + "k";
 
 export function ContextPanel({ info, onCompress }: { info: SessionInfo; onCompress: () => void }) {
   const navigate = useNavigate();
-  const pct = info.ctxMax ? Math.min(95, (info.ctxUsed / info.ctxMax) * 100) : 0;
+  const pct = info.ctxMax && info.ctxUsed ? Math.min(95, (info.ctxUsed / info.ctxMax) * 100) : 0;
   return (
     <aside
       aria-label="Contexto da sessão"
@@ -15,16 +16,16 @@ export function ContextPanel({ info, onCompress }: { info: SessionInfo; onCompre
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <span className="au-label">Contexto</span>
         <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-          <span className="au-display" style={{ fontSize: 30, lineHeight: 1 }}>{k(info.ctxUsed)}</span>
+          <span className="au-display" style={{ fontSize: 30, lineHeight: 1 }}>{info.ctxUsed == null ? "—" : k(info.ctxUsed)}</span>
           <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)" }}>/ {info.ctxMax ? Math.round(info.ctxMax / 1000) + "k" : "—"} tokens</span>
         </div>
         <div style={{ height: 6, borderRadius: 6, background: "var(--panel2)", overflow: "hidden" }}>
           <div style={{ height: "100%", width: pct + "%", background: "var(--acc)", borderRadius: 6, transition: "width .8s cubic-bezier(.2,.7,.2,1)" }} />
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>
-          <span>custo da sessão ${info.cost.toFixed(2).replace(".", ",")}</span>
-          <button onClick={onCompress} style={{ padding: 0, border: 0, background: "transparent", color: "var(--acc)", cursor: "pointer", font: "inherit" }}>
-            /compress
+          <span title={info.cost == null ? "O provedor deste modelo não informa o custo" : undefined}>{info.cost == null ? "custo não informado" : "custo da conversa " + money(info.cost)}</span>
+          <button onClick={onCompress} title="Resume o começo da conversa para liberar espaço no contexto" style={{ padding: 0, border: 0, background: "transparent", color: "var(--acc)", cursor: "pointer", font: "inherit" }}>
+            Compactar
           </button>
         </div>
       </div>

@@ -1,15 +1,23 @@
 // Telas do agente ligadas ao backend real (mesmas rotas do dashboard antigo).
 import { api, fetchJSON, type CronJob as ApiCron } from "@/lib/api";
 import { classifyLine } from "@/lib/log-classify";
+import { shortWhen, sourceIcon, sourceLabel } from "../chat/sources";
 import { parseCronPt } from "./cron";
 const DEST_ICON: Record<string, string> = { Telegram: "send", Email: "mail", Discord: "message-circle", WhatsApp: "phone", Slack: "hash", Conversa: "message-square" };
 import type { AgentAdapter, CronJob, Gateway, LogLine, MemoryData, Settings } from "./types";
 
 const jsonInit = (method: string, body: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
-const SOURCE_ICON: Record<string, string> = { telegram: "send", discord: "message-circle", whatsapp: "phone", cron: "calendar-clock", cli: "square-terminal", tui: "square-terminal", web: "globe" };
+/** Trecho de busca legível: sem marcadores de destaque, markdown e escapes de JSON. */
+export const cleanSnippet = (t: string) =>
+  t
+    .replace(/>>>|<<</g, "")
+    .replace(/\\+(["/])/g, "$1") // \" e \/ de JSON
+    .replace(/\\{2,}/g, "\\") // \\\\ → \
+    .replace(/\*\*|__|`+|^#+\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
-const when = (ts?: number | null) => (ts ? new Date(ts * 1000).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
 
 const BACKENDS = [
   { id: "local", name: "Local", description: "Na sua máquina" },
@@ -60,9 +68,12 @@ export function logFrom(raw: string, i: number): LogLine {
 
 export const liveAgent: AgentAdapter = {
   async sessions(query, source) {
-    const opts = { source: source === "Todas" ? null : source.toLowerCase(), order: "recent" as const };
-    const rows = query.trim() ? (await api.searchSessions(query, opts)).results.map((r) => ({ ...r, id: r.session_id ?? r.id, preview: r.snippet || r.preview })) : (await api.getSessions(50, 0, opts)).sessions;
-    return rows.map((s) => ({ id: s.id, title: s.title || s.preview || "Sem título", source: cap(s.source ?? "web"), icon: SOURCE_ICON[s.source ?? ""] ?? "globe", snippet: (s.preview ?? "").replace(/>>>|<<</g, ""), msgs: s.message_count ?? 0, when: when(s.started_at) }));
+    // Filtro por rótulo no cliente: "Terminal" junta tui e cli, que o backend guarda separados.
+    const opts = { source: null, order: "recent" as const };
+    const rows = query.trim() ? (await api.searchSessions(query, opts)).results.map((r) => ({ ...r, id: r.session_id ?? r.id, preview: r.snippet || r.preview })) : (await api.getSessions(200, 0, opts)).sessions;
+    return rows
+      .map((s) => ({ id: s.id, title: s.title || s.preview || "Sem título", source: sourceLabel(s.source), icon: sourceIcon(s.source), snippet: cleanSnippet(s.preview ?? ""), msgs: s.message_count ?? 0, when: shortWhen(s.started_at) }))
+      .filter((r) => source === "Todas" || r.source === source);
   },
 
   memory: () => fetchJSON<MemoryData>("/api/ops/memory"),

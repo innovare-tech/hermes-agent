@@ -24,3 +24,12 @@ describe("healthFrom", () => {
     expect(healthFrom({ gateway_running: false, gateway_platforms: {} } as unknown as StatusResponse).items).toEqual([{ name: "Gateway de mensagens", status: "warn", value: "parado" }]);
   });
 });
+
+describe("cleanSnippet", async () => {
+  const { cleanSnippet } = await import("./agent/live");
+  it("tira marcadores, markdown e escapes de JSON", () => {
+    // Trecho como vem da busca: barras dobradas e aspas escapadas do JSON.
+    const raw = String.raw`>>>spike<<< em **negrito** \\hermes-agent\\web\", \"pattern`;
+    expect(cleanSnippet(raw)).toBe(String.raw`spike em negrito \hermes-agent\web", "pattern`);
+  });
+});

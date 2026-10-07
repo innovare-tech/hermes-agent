@@ -2,8 +2,8 @@ import { useDeferredValue, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
+import { plural } from "../chat/sources";
 
-const SOURCES = ["Todas", "Web", "CLI", "Telegram", "Discord", "WhatsApp", "Cron"];
 
 /** Título + subtítulo das telas do agente (sem "Pausar tudo"). */
 export function AgentHeader({ title, sub, children }: { title: string; sub: string; children?: React.ReactNode }) {
@@ -24,18 +24,20 @@ export function Sessions() {
   const [q, setQ] = useState(params.get("q") ?? "");
   const [source, setSource] = useState("Todas");
   const query = useDeferredValue(q);
-  const [rows] = useAgentData(() => agent.sessions(query, source), [query, source]);
+  const [all] = useAgentData(() => agent.sessions(query, "Todas"), [query]);
+  // Filtros só das origens que existem nos dados (nunca um filtro que sempre dá vazio).
+  const sources = ["Todas", ...Array.from(new Set((all ?? []).map((r) => r.source)))];
+  const rows = all?.filter((r) => source === "Todas" || r.source === source);
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page au-page-agent">
         <AgentHeader title="Sessões" sub="Todas as conversas, de todos os lugares. Uma memória só." />
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: "var(--r)", border: "1px solid var(--line2)", background: "var(--panel)", backdropFilter: "var(--blur)" }}>
           <Icon name="search" size={16} color="var(--fg3)" />
-          <input aria-label="Buscar sessões" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar em todo o histórico — texto completo + resumo por IA" style={{ flex: 1, border: 0, outline: 0, background: "transparent", color: "var(--fg)", fontSize: 14.5 }} />
-          <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>FTS5</span>
+          <input aria-label="Buscar sessões" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar em todas as conversas" style={{ flex: 1, border: 0, outline: 0, background: "transparent", color: "var(--fg)", fontSize: 14.5 }} />
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {SOURCES.map((s) => (
+          {sources.map((s) => (
             <button key={s} className="au-pill au-pill-agent" aria-pressed={source === s} onClick={() => setSource(s)}>
               {s}
             </button>
@@ -43,7 +45,7 @@ export function Sessions() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", border: "1px solid var(--line)", borderRadius: "var(--r)", background: "var(--panel)", backdropFilter: "var(--blur)", overflow: "hidden" }}>
           {rows?.map((r, i) => (
-            <button key={r.id} className="au-listrow" onClick={() => navigate(`/chat/${r.id}`)} style={{ display: "grid", gridTemplateColumns: "36px minmax(0,1fr) 110px 70px", gap: 16, alignItems: "center", padding: "15px 18px", animation: "hup .4s cubic-bezier(.2,.7,.2,1) both", animationDelay: i * 45 + "ms" }}>
+            <button key={r.id} className="au-listrow" onClick={() => navigate(`/chat/${r.id}`)} style={{ display: "grid", gridTemplateColumns: "36px minmax(0,1fr) 150px 110px", gap: 16, alignItems: "center", padding: "15px 18px", animation: "hup .4s cubic-bezier(.2,.7,.2,1) both", animationDelay: i * 45 + "ms" }}>
               <span style={{ width: 34, height: 34, borderRadius: "var(--r2)", background: "var(--panel2)", display: "grid", placeItems: "center", color: "var(--fg2)" }}>
                 <Icon name={r.icon} size={15} />
               </span>
@@ -52,12 +54,12 @@ export function Sessions() {
                 <span style={{ fontSize: 12.5, color: "var(--fg2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.snippet}</span>
               </span>
               <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg2)" }}>
-                {r.source} · {r.msgs} msgs
+                {r.source} · {plural(r.msgs, "mensagem", "mensagens")}
               </span>
-              <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)", textAlign: "right" }}>{r.when}</span>
+              <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)", textAlign: "right", whiteSpace: "nowrap" }}>{r.when}</span>
             </button>
           ))}
-          {rows?.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--fg3)", fontSize: 13.5 }}>Nada encontrado. Tente outro termo.</div>}
+          {rows?.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "var(--fg3)", fontSize: 13.5 }}>{query.trim() ? "Nenhuma conversa com esse termo." : "Nenhuma conversa ainda — comece uma na Conversa."}</div>}
         </div>
       </div>
     </div>
