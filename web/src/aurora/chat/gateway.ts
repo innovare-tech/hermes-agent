@@ -7,9 +7,15 @@ import type { SessionLiveInfo } from "@hermes/shared";
 import type { AgentMessage, ApprovalChoice, ChatAdapter, ChatEvent, ChatMessage, SessionInfo, ToolStep } from "./types";
 
 let gw: GatewayClient | null = null;
+let connecting: Promise<void> | null = null;
+/** Chamadas simultâneas esperam a MESMA conexão: ``connect()`` volta na hora se já está "conectando",
+ *  e a segunda chamada saía antes do socket abrir ("gateway not connected"). */
 async function client() {
   gw ??= new GatewayClient();
-  await gw.connect();
+  if (gw.connectionState !== "open") {
+    connecting ??= gw.connect().finally(() => (connecting = null));
+    await connecting;
+  }
   return gw;
 }
 

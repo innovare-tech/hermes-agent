@@ -1,11 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
 // Cliente falso: guarda o handler de estado para simular a queda da conexão.
-const fake = vi.hoisted(() => ({ state: null as null | ((s: string) => void) }));
+const fake = vi.hoisted(() => ({ state: null as null | ((s: string) => void), connects: 0 }));
 vi.mock("@/lib/gatewayClient", () => ({
   GatewayClient: class {
-    connect = async () => {};
-    request = async (method: string) => (method === "session.resume" ? { session_id: "live1" } : {});
+    connectionState = "idle";
+    connect = async () => {
+      fake.connects++;
+      await new Promise((r) => setTimeout(r, 10));
+      this.connectionState = "open";
+    };
+    request = async (method: string) => {
+      if (this.connectionState !== "open") throw new Error("gateway not connected");
+      return method === "session.resume" ? { session_id: "live1" } : method === "session.list" ? { sessions: [] } : {};
+    };
     on = () => () => {};
     onRequest = () => () => {};
     onState = (h: (s: string) => void) => {
@@ -17,6 +25,13 @@ vi.mock("@/lib/gatewayClient", () => ({
 vi.mock("@/lib/api", () => ({ api: {} }));
 
 const { gatewayChat } = await import("./gateway");
+
+describe("conexão", () => {
+  it("chamadas simultâneas esperam a mesma conexão", async () => {
+    await expect(Promise.all([gatewayChat.sessions(), gatewayChat.sessions()])).resolves.toEqual([[], []]);
+    expect(fake.connects).toBe(1);
+  });
+});
 
 describe("send", () => {
   it("conexão caiu no meio do turno → erro e a promessa termina", async () => {
