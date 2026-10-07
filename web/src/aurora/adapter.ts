@@ -93,7 +93,6 @@ export type Account = { plan: string; credits: string; home: string; version: st
 export type OpsSnapshot = {
   account: Account;
   businesses: Business[];
-  sessions: Session[];
   inbox: InboxItem[];
   approvals: Approval[];
   radar: RadarGroup[];

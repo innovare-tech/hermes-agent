@@ -110,7 +110,7 @@ export function Sidebar() {
         </nav>
 
         <div style={{ padding: "0 8px 80px", borderTop: "1px solid var(--line)" }}>
-          {GROUPS.map((g) => (
+          {GROUPS.filter((g) => s.sessions.some((x) => x.group === g)).map((g) => (
             <div key={g}>
               <div className="au-label" style={{ padding: "14px 11px 6px" }}>{g}</div>
               {s.sessions
