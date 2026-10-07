@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from "react-router";
 import { Icon } from "./Icon";
+import { served } from "./served";
 import { inBiz, setPrefs, setState, useStore, type State } from "./store";
 
 type NavItem = { to: string; label: string; icon: string; count?: string };
@@ -15,7 +16,7 @@ export const OPS: NavItem[] = [
   { to: "/activity", label: "Atividade", icon: "activity" },
 ];
 
-// ponytail: contadores do agente são mock fixos até as telas da Fase 6 lerem as APIs.
+// ponytail: contadores do agente são do protótipo; no modo real ficam ocultos até virem das APIs.
 export const AGENT: NavItem[] = [
   { to: "/chat", label: "Conversa", icon: "message-square" },
   { to: "/sessions", label: "Sessões", icon: "history", count: "248" },
@@ -105,7 +106,7 @@ export function Sidebar() {
           ))}
           <div className="au-label" style={{ padding: "12px 11px 6px" }}>Agente</div>
           {AGENT.map((n, i) => (
-            <NavRow key={n.to} item={n} index={i + 8} hot={false} count={n.count ?? ""} />
+            <NavRow key={n.to} item={n} index={i + 8} hot={false} count={served ? "" : (n.count ?? "")} />
           ))}
         </nav>
 

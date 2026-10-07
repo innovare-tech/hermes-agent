@@ -149,3 +149,26 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-switch{margin-left:auto;width:34px;height:20px;border-radius:999px;border:0;padding:3px;background:var(--line2);cursor:pointer;display:flex;flex:none;transition:background .25s}
 .au-switch>span{width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .3s cubic-bezier(.3,1.5,.5,1)}
 .au-switch[aria-checked="true"]{background:var(--acc)}.au-switch[aria-checked="true"]>span{transform:translateX(14px)}
+
+/* ---- telas do agente ---- */
+.au-page-agent{max-width:1080px;padding:44px 36px 64px;gap:24px}
+.au-pill-agent{padding:6px 13px}
+.au-ml-auto{margin-left:auto}
+.au-mem{display:flex;flex-direction:column;gap:10px;padding:15px 17px;transition:border-color .2s,transform .2s;animation:hup .4s cubic-bezier(.2,.7,.2,1) both}
+.au-mem:hover{border-color:var(--line2)}
+.au-mini.danger:hover{color:var(--err)}
+.au-skill{display:flex;flex-direction:column;gap:12px;padding:18px;cursor:pointer;transition:transform .25s cubic-bezier(.2,.7,.2,1),border-color .2s;animation:hup .45s cubic-bezier(.2,.7,.2,1) both}
+.au-skill:hover{transform:translateY(-3px);border-color:var(--line2)}
+.au-gw{display:flex;flex-direction:column;gap:16px;padding:18px;transition:border-color .25s,transform .25s;animation:hup .45s cubic-bezier(.2,.7,.2,1) both}
+.au-gw:hover{border-color:var(--line2);transform:translateY(-2px)}
+.au-switch.lg{width:38px;height:22px}.au-switch.lg>span{width:16px;height:16px;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.au-switch.lg[aria-checked="true"]>span{transform:translateX(16px)}
+.au-logrow{display:grid;grid-template-columns:76px 52px 92px minmax(0,1fr);gap:12px;padding:0 14px;border-radius:4px;animation:hup .35s ease both}
+.au-logrow:hover{background:var(--panel)}
+.au-choice{display:flex;flex-direction:column;gap:6px;padding:14px 15px;border-radius:var(--r);border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer;text-align:left;transition:all .2s}
+.au-choice[aria-checked="true"]{border-color:var(--acc);background:var(--accSoft);box-shadow:0 0 0 3px var(--accSoft)}
+.au-seg-lg{flex:none;padding:8px 14px;font-size:13px;color:var(--fg2)}
+.au-seg-lg[aria-checked="true"]{color:var(--fg)}
+.au-step-label{font-family:var(--fm);font-size:11px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase}
+.au-ob-next{padding:12px 20px;font-size:14px;transition:transform .15s}
+.au-ob-next:hover{transform:translateY(-1px)}.au-ob-next:active{transform:scale(.97)}

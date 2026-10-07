@@ -1,7 +1,16 @@
 import { useEffect, type MouseEvent } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router";
 import { Background, PauseBanner, Toast } from "./Chrome";
+import { Onboarding } from "./Onboarding";
 import { Activity } from "./screens/Activity";
+import { Agents } from "./screens/Agents";
+import { Cron } from "./screens/Cron";
+import { Gateways } from "./screens/Gateways";
+import { Logs } from "./screens/Logs";
+import { Memory } from "./screens/Memory";
+import { Sessions } from "./screens/Sessions";
+import { Settings } from "./screens/Settings";
+import { Skills } from "./screens/Skills";
 import { Approvals } from "./screens/Approvals";
 import { Chat } from "./screens/Chat";
 import { Home } from "./screens/Home";
@@ -10,7 +19,7 @@ import { People } from "./screens/People";
 import { Playbooks } from "./screens/Playbooks";
 import { Radar } from "./screens/Radar";
 import { Support } from "./screens/Support";
-import { AGENT, OPS, Sidebar } from "./Sidebar";
+import { Sidebar } from "./Sidebar";
 import { loadOps, loadSessions, refreshPaused, toast, useStore } from "./store";
 
 // Spotlight que segue o cursor: escreve direto no style, sem re-render.
@@ -24,16 +33,14 @@ function ChatRoute() {
   return <Chat key={useLocation().key} />;
 }
 
-function Placeholder() {
-  const { pathname } = useLocation();
-  const item = [...OPS, ...AGENT].find((n) => n.to !== "/" && pathname.startsWith(n.to));
+function NotFound() {
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page">
-        <span className="au-label">Em construção</span>
-        <h1 className="au-h1">{item?.label ?? "Página não encontrada"}</h1>
+        <span className="au-label">404</span>
+        <h1 className="au-h1">Página não encontrada</h1>
         <p style={{ margin: 0, color: "var(--fg2)", fontSize: 14.5, lineHeight: 1.55 }}>
-          Esta tela chega numa próxima fase. Enquanto isso, ela está na <a href="?ui=legacy">interface antiga</a>.
+          Esse endereço não existe. A interface antiga continua em <a href="?ui=legacy">?ui=legacy</a>.
         </p>
       </div>
     </div>
@@ -86,12 +93,21 @@ export function AuroraApp() {
               <Route path="/support" element={<Support />} />
               <Route path="/people" element={<People />} />
               <Route path="/playbooks" element={<Playbooks />} />
+              <Route path="/sessions" element={<Sessions />} />
+              <Route path="/memory" element={<Memory />} />
+              <Route path="/skills" element={<Skills />} />
+              <Route path="/cron" element={<Cron />} />
+              <Route path="/agents" element={<Agents />} />
+              <Route path="/gateways" element={<Gateways />} />
+              <Route path="/logs" element={<Logs />} />
+              <Route path="/settings" element={<Settings />} />
               <Route path="/chat/:sid?" element={<ChatRoute />} />
-              <Route path="*" element={<Placeholder />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </main>
         </div>
       </div>
+      <Onboarding />
       <Toast />
     </div>
   );

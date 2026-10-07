@@ -206,7 +206,7 @@ export function Chat() {
   );
 }
 
-function Orbit() {
+export function Orbit() {
   return (
     <div aria-hidden="true" style={{ position: "relative", width: 92, height: 92, marginBottom: 8, animation: "hpop .9s cubic-bezier(.3,1.4,.5,1) both" }}>
       <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "1px solid var(--line2)" }} />
