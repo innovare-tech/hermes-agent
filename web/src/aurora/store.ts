@@ -14,6 +14,8 @@ export type State = Omit<OpsSnapshot, "account"> & {
   /** "all" ou o id do negócio — filtra todas as telas. */
   biz: string;
   toast: { text: string; id: number } | null;
+  /** Passo do assistente de setup (-1 = fechado). */
+  onboarding: number;
 };
 
 const PREFS_KEY = "hermes.aurora";
@@ -32,6 +34,7 @@ let state: State = {
   ...readPrefs(),
   biz: "all",
   toast: null,
+  onboarding: -1,
   paused: false,
   account: null,
   businesses: [],
