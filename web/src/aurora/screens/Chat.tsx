@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { chat } from "../chat";
 import { Composer } from "../chat/Composer";
 import { ContextPanel } from "../chat/ContextPanel";
 import { ToolTimeline } from "../chat/ToolTimeline";
-import { applyEvent, interrupted } from "../chat/turn";
-import type { AgentMessage, Block, ChatMessage, SessionInfo, SlashCommand } from "../chat/types";
-import { loadSessions, toast, useStore } from "../store";
+import { answered, applyEvent, interrupted } from "../chat/turn";
+import type { AgentMessage, ApprovalChoice, Block, ChatMessage, SessionInfo, SlashCommand } from "../chat/types";
+import { ApprovalCard } from "../ops/ApprovalCard";
+import { actOnBehalf, loadSessions, toast, useStore } from "../store";
 
 const BLANK: SessionInfo = { model: "", backend: "local", persona: "padrão", ctxUsed: 0, ctxMax: 128000, cost: 0 };
 
@@ -17,12 +19,6 @@ const SUGGESTIONS = [
   { icon: "search", t: "O que conversamos sobre o Modal?", d: "Busca em 248 sessões anteriores" },
   { icon: "file-spreadsheet", t: "Fechar a planilha de outubro", d: "Mesmo processo de setembro" },
 ];
-
-export const spot = (e: MouseEvent<HTMLElement>) => {
-  const r = e.currentTarget.getBoundingClientRect();
-  e.currentTarget.style.setProperty("--mx", e.clientX - r.left + "px");
-  e.currentTarget.style.setProperty("--my", e.clientY - r.top + "px");
-};
 
 const wide = () => window.innerWidth >= 1280;
 
@@ -94,6 +90,29 @@ export function Chat() {
     } finally {
       setRunning(false);
     }
+  }
+
+  // Aprovar um comando pedido no meio do turno é agir em seu nome: passa pelo kill switch e vira Atividade.
+  const answeredIds = useRef(new Set<string>());
+  async function answer(m: AgentMessage, choice: ApprovalChoice) {
+    const a = m.approval;
+    if (!a || a.status !== "pending" || answeredIds.current.has(a.id)) return;
+    if (choice !== "deny") {
+      const ok = await actOnBehalf({
+        business: "all",
+        kind: "cmd",
+        action: "Executou na Conversa: " + a.command,
+        why: "aprovado por você" + (a.description ? " — " + a.description : "") + ".",
+        reversible: false,
+        done: "Aprovado · executando",
+        target: { kind: "approval", id: a.id },
+      });
+      if (!ok) return;
+    }
+    answeredIds.current.add(a.id);
+    a.respond(choice);
+    setMessages((list) => list.map((x) => (x.role === "agent" && x.id === m.id ? answered(x, choice) : x)));
+    if (choice === "deny") toast("Negado — o Hermes não vai fazer isso");
   }
 
   async function stop() {
@@ -174,7 +193,7 @@ export function Chat() {
                   <div style={{ maxWidth: "80%", padding: "12px 16px", borderRadius: "var(--r) var(--r) 4px var(--r)", background: "var(--panel2)", fontSize: 14.5, lineHeight: 1.55, textWrap: "pretty", whiteSpace: "pre-wrap" }}>{m.text}</div>
                 </div>
               ) : (
-                <AgentBubble key={m.id} m={m} onSend={send} onCron={() => navigate("/cron")} />
+                <AgentBubble key={m.id} m={m} onSend={send} onCron={() => navigate("/cron")} onAnswer={(c) => answer(m, c)} />
               ),
             )}
           </div>
@@ -203,7 +222,7 @@ function Orbit() {
   );
 }
 
-function AgentBubble({ m, onSend, onCron }: { m: AgentMessage; onSend: (t: string) => void; onCron: () => void }) {
+function AgentBubble({ m, onSend, onCron, onAnswer }: { m: AgentMessage; onSend: (t: string) => void; onCron: () => void; onAnswer: (c: ApprovalChoice) => void }) {
   const running = m.steps.some((s) => s.status === "run");
   const paras = m.text ? m.text.split(/\n{2,}/) : [];
   return (
@@ -211,7 +230,31 @@ function AgentBubble({ m, onSend, onCron }: { m: AgentMessage; onSend: (t: strin
       <div aria-hidden="true" style={{ width: 30, height: 30, borderRadius: "var(--r2)", background: "var(--accSoft)", color: "var(--acc)", display: "grid", placeItems: "center", fontSize: 15 }}>☤</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0, paddingTop: 4 }} aria-live={m.live ? "polite" : undefined}>
         {m.steps.length > 0 && <ToolTimeline steps={m.steps} meta={m.meta} />}
-        {m.live && !running && !m.text && (
+        {m.approval?.status === "pending" && (
+          <ApprovalCard
+            icon="square-terminal"
+            title={m.approval.description || "Executar comando"}
+            meta="comando · agora"
+            preview={m.approval.command}
+            source="pedido nesta conversa"
+            onApprove={() => onAnswer("once")}
+            onDeny={() => onAnswer("deny")}
+            extra={
+              m.approval.choices.includes("session") && (
+                <button className="au-outline" onClick={() => onAnswer("session")}>
+                  Nesta sessão
+                </button>
+              )
+            }
+          />
+        )}
+        {m.approval && m.approval.status !== "pending" && (
+          <span style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--fm)", fontSize: 11.5, color: m.approval.status === "approved" ? "var(--ok)" : "var(--fg3)" }}>
+            <Icon name={m.approval.status === "approved" ? "circle-check" : "circle"} size={12} />
+            {m.approval.status === "approved" ? "aprovado por você" : m.approval.status === "denied" ? "negado por você" : "pedido expirou"} · {m.approval.command}
+          </span>
+        )}
+        {m.live && !running && !m.text && m.approval?.status !== "pending" && (
           <div role="status" aria-label="Pensando" style={{ display: "flex", gap: 5, padding: "6px 0" }}>
             {[0, 0.15, 0.3].map((d) => (
               <span key={d} style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--acc)", animation: `hwave 1s ${d}s ease-in-out infinite` }} />
@@ -222,7 +265,7 @@ function AgentBubble({ m, onSend, onCron }: { m: AgentMessage; onSend: (t: strin
         {paras.map((p, i) => (
           <p key={i} style={{ margin: 0, fontSize: 15, lineHeight: 1.7, color: "var(--fg)", textWrap: "pretty", whiteSpace: "pre-wrap" }}>{p}</p>
         ))}
-        {m.live && !running && <span style={{ width: 8, height: 17, background: "var(--acc)", borderRadius: 2, animation: "hblink 1s step-end infinite" }} />}
+        {m.live && !running && m.approval?.status !== "pending" && <span style={{ width: 8, height: 17, background: "var(--acc)", borderRadius: 2, animation: "hblink 1s step-end infinite" }} />}
         {m.blocks?.map((b, i) => <BlockView key={i} b={b} onCron={onCron} />)}
         {m.meta && (
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>

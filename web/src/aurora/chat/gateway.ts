@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import { GatewayClient } from "@/lib/gatewayClient";
 import type { Session } from "../adapter";
 import type { SessionLiveInfo } from "@hermes/shared";
-import type { AgentMessage, ChatAdapter, ChatEvent, ChatMessage, SessionInfo, ToolStep } from "./types";
+import type { AgentMessage, ApprovalChoice, ChatAdapter, ChatEvent, ChatMessage, SessionInfo, ToolStep } from "./types";
 
 let gw: GatewayClient | null = null;
 async function client() {
@@ -135,8 +135,32 @@ export const gatewayChat: ChatAdapter = {
     const c = await client();
     const t0 = Date.now();
     const started = new Map<string, ToolStep>();
+    const rpcToApproval = new Map<string, string>();
     return new Promise<void>((resolve, reject) => {
       const offs = [
+        // Comando perigoso etc.: o gateway pergunta e espera a resposta (requisição servidor→cliente).
+        c.onRequest((req) => {
+          if (req.method !== "approval" || req.params.session_id !== sid) return false;
+          const p = req.params as { request_id?: string; command?: string; description?: string; choices?: ApprovalChoice[] };
+          rpcToApproval.set(req.id, p.request_id ?? req.id);
+          on({
+            type: "approval",
+            approval: {
+              id: p.request_id ?? req.id,
+              command: p.command ?? "",
+              description: p.description ?? "",
+              choices: p.choices?.length ? p.choices : ["once", "deny"],
+              respond: (choice) => req.respond({ choice }),
+            },
+          });
+        }),
+        c.on("request.cancel", (e) => {
+          const id = e.payload?.id && rpcToApproval.get(e.payload.id);
+          if (id) on({ type: "approval.cancel", id });
+        }),
+        c.on("approval.cancelled", (e) => {
+          if (e.session_id === sid) e.payload?.request_ids?.forEach((id) => on({ type: "approval.cancel", id }));
+        }),
         c.on("tool.start", (e) => {
           if (e.session_id !== sid || !e.payload) return;
           const p = e.payload;

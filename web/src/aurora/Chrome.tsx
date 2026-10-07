@@ -1,6 +1,42 @@
-// Peças globais do shell: fundo atmosférico, Toast, PanicButton e faixa de pausa.
+// Peças globais do shell: fundo atmosférico, Toast, PanicButton, faixa de pausa e helpers de página.
+import type { MouseEvent, ReactNode } from "react";
 import { Icon } from "./Icon";
 import { togglePause, useStore } from "./store";
+
+/** Spotlight que segue o cursor dentro do cartão (`.au-card`). */
+export const spot = (e: MouseEvent<HTMLElement>) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  e.currentTarget.style.setProperty("--mx", e.clientX - r.left + "px");
+  e.currentTarget.style.setProperty("--my", e.clientY - r.top + "px");
+};
+
+export const CHANNEL_ICON: Record<string, string> = { WhatsApp: "phone", Telegram: "send", Email: "mail", Suporte: "life-buoy", Grupo: "users", Discord: "message-circle" };
+
+/** Ponto colorido + nome do negócio. */
+export function BizTag({ id }: { id: string }) {
+  const b = useStore((s) => s.businesses.find((x) => x.id === id));
+  const name = b?.name ?? "Todos";
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)", whiteSpace: "nowrap" }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: b?.color ?? "var(--fg3)" }} />
+      {name}
+    </span>
+  );
+}
+
+/** Cabeçalho padrão de página: label opcional, H1 com brilho, subtítulo e Pausar tudo. */
+export function PageHeader({ label, title, sub }: { label?: string; title: string; sub: ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 20, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+        {label && <span className="au-label">{label}</span>}
+        <h1 className="au-h1">{title}</h1>
+        <p style={{ margin: 0, color: "var(--fg2)", fontSize: 14.5, maxWidth: 600, lineHeight: 1.55 }}>{sub}</p>
+      </div>
+      <PanicButton />
+    </div>
+  );
+}
 
 const GRAIN =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";

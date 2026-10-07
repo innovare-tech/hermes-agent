@@ -49,6 +49,8 @@ import {
   Undo2,
   Users,
   Workflow,
+  Mail,
+  PartyPopper,
   type LucideIcon,
 } from "lucide-react";
 
@@ -102,6 +104,8 @@ const ICONS: Record<string, LucideIcon> = {
   "undo-2": Undo2,
   users: Users,
   workflow: Workflow,
+  "party-popper": PartyPopper,
+  mail: Mail,
 };
 
 export function Icon({ name, size = 16, color, className }: { name: string; size?: number; color?: string; className?: string }) {

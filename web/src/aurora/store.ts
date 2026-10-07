@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { adapter, type OnBehalf, type OpsSnapshot, type Session } from "./adapter";
+import { adapter, type Approval, type AutonomyMode, type Channel, type InboxItem, type OnBehalf, type OpsSnapshot, type Session } from "./adapter";
 import { chat } from "./chat";
 
 export type Direction = "aurora" | "ambar" | "sinal";
@@ -41,6 +41,7 @@ let state: State = {
   radar: [],
   tickets: [],
   activity: [],
+  autonomy: [],
 };
 
 const subs = new Set<() => void>();
@@ -90,6 +91,12 @@ export function setPrefs(p: Partial<Pick<State, "dir" | "theme">>) {
   }
 }
 
+/** Sincroniza com pausas feitas por fora (CLI `hermes pause`, outro navegador). */
+export async function refreshPaused() {
+  const paused = await adapter.getPaused();
+  if (paused !== state.paused) setState({ paused });
+}
+
 export async function togglePause() {
   const paused = !state.paused;
   try {
@@ -120,4 +127,69 @@ export async function actOnBehalf(a: OnBehalf): Promise<boolean> {
   }
   toast(a.done);
   return true;
+}
+
+// ---- Caixa de entrada · Aprovações · Autonomia ----
+
+export const MODES = ["Observar", "Rascunhar", "Autônomo"] as const;
+
+const quote = (t: string) => "“" + t.slice(0, 70) + (t.length > 70 ? "…" : "") + "”";
+
+export async function replyInbox(x: InboxItem, text: string) {
+  const ok = await actOnBehalf({
+    business: x.business,
+    kind: "msg",
+    action: `Respondeu ${x.from} via ${x.channel}: ${quote(text)}`,
+    why: "aprovado por você na caixa de entrada.",
+    done: `Enviado para ${x.from.split(" ")[0]} · ${x.channel}`,
+    blocked: "Agente pausado — retome para enviar",
+    target: { kind: "reply", id: x.id, text },
+  });
+  if (ok) setState((s) => ({ inbox: s.inbox.filter((y) => y.id !== x.id) }));
+}
+
+export async function archiveInbox(id: string) {
+  await adapter.archive(id).catch(() => {});
+  setState((s) => ({ inbox: s.inbox.filter((y) => y.id !== id) }));
+  toast("Arquivado");
+}
+
+export function keepInbox(id: string) {
+  setState((s) => ({ inbox: s.inbox.map((y) => (y.id === id ? { ...y, priority: "voce" as const } : y)) }));
+  toast("Ok, esse fica com você");
+}
+
+export async function approve(x: Approval) {
+  const ok = await actOnBehalf({
+    business: x.business,
+    kind: x.kind === "pagamento" || x.kind === "reembolso" ? "pay" : x.kind === "mensagem" ? "msg" : "cmd",
+    action: x.title,
+    why: "aprovado por você. " + x.why,
+    reversible: false,
+    done: "Aprovado · executando",
+    target: { kind: "approval", id: x.id },
+  });
+  if (ok) setState((s) => ({ approvals: s.approvals.filter((y) => y.id !== x.id) }));
+}
+
+export async function deny(x: Approval) {
+  try {
+    await adapter.deny(x.id);
+  } catch {
+    toast("Não consegui negar — tente de novo");
+    return;
+  }
+  setState((s) => ({ approvals: s.approvals.filter((y) => y.id !== x.id) }));
+  toast("Negado — o Hermes não vai fazer isso");
+}
+
+export async function setAutonomy(c: Channel, mode: AutonomyMode) {
+  try {
+    await adapter.setAutonomy(c.id, mode);
+  } catch {
+    toast("Não consegui salvar a autonomia");
+    return;
+  }
+  setState((s) => ({ autonomy: s.autonomy.map((y) => (y.id === c.id ? { ...y, mode } : y)) }));
+  toast(`${c.name} → ${MODES[mode]}`);
 }

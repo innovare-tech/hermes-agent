@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { actOnBehalf, getState, setState } from "./store";
 
-const send = { business: "inn", kind: "msg" as const, action: "Respondeu Marcos", why: "teste", done: "Enviado" };
+const send = { business: "inn", kind: "msg" as const, action: "Respondeu Marcos", why: "teste", done: "Enviado", target: { kind: "reply" as const, id: "i1", text: "oi" } };
 
 describe("actOnBehalf", () => {
   it("bloqueia quando pausado: sem Atividade, toast de bloqueio", async () => {
