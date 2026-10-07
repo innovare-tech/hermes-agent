@@ -7,7 +7,7 @@ const moodColor = (v: number) => (v < 0.4 ? "var(--err)" : v < 0.6 ? "var(--warn
 /** Um grupo: clima em 12 barras, decisões, menções e perguntas sem resposta. */
 export function RadarCard({ g, index, onDraft }: { g: RadarGroup; index: number; onDraft: () => void }) {
   const recent = g.sentiment.slice(-3);
-  const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+  const avg = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
   const secs = [
     { label: "Decidido", icon: "circle-check", color: "var(--ok)", items: g.decisions },
     { label: "Te citaram", icon: "at-sign", color: "var(--acc)", items: g.mentions },
@@ -23,10 +23,11 @@ export function RadarCard({ g, index, onDraft }: { g: RadarGroup; index: number;
           <span style={{ fontSize: 14.5, fontWeight: 600 }}>{g.name}</span>
           <span style={{ display: "flex", gap: 8, alignItems: "center", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>
             <BizTag id={g.business} />
-            {g.members} pessoas · {g.msgsToday} msgs hoje
+            {g.members} {g.members === 1 ? "pessoa" : "pessoas"} · {g.msgsToday} msgs hoje
           </span>
         </span>
       </div>
+      {g.sentiment.length > 0 && (
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div role="img" aria-label={`Clima do grupo ao longo do dia: ${avg < 0.4 ? "tenso" : avg < 0.6 ? "neutro" : "bom"}`} style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 34 }}>
           {g.sentiment.map((v, j) => (
@@ -40,6 +41,7 @@ export function RadarCard({ g, index, onDraft }: { g: RadarGroup; index: number;
           <span>06h → agora</span>
         </span>
       </div>
+      )}
       {secs.map((sec) => (
         <div key={sec.label} style={{ display: "flex", flexDirection: "column", gap: 7 }}>
           <span className="au-label">{sec.label}</span>
@@ -51,11 +53,13 @@ export function RadarCard({ g, index, onDraft }: { g: RadarGroup; index: number;
           ))}
         </div>
       ))}
-      {g.unanswered.length > 0 && (
+      {g.msgsToday > 0 ? (
         <button className="au-outline" onClick={onDraft} style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 8 }}>
-          <Icon name="pen-line" size={13} color="var(--acc)" />
-          Rascunhar respostas
+          <Icon name="sparkles" size={13} color="var(--acc)" />
+          Resumir hoje
         </button>
+      ) : (
+        <span style={{ fontSize: 12.5, color: "var(--fg3)" }}>Sem mensagens hoje.</span>
       )}
     </div>
   );

@@ -1,12 +1,23 @@
 import { useState } from "react";
-import { NotConnectedPage, PageHeader, spot, useNotConnected } from "../Chrome";
+import { useNavigate } from "react-router";
+import type { RadarGroup } from "../adapter";
+import { PageHeader, spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { RadarCard } from "../ops/RadarCard";
-import { draftRadarAlert, draftRadarGroup, inBiz, setWatches, toast, useStore } from "../store";
+import { inBiz, setWatches, toast, useStore } from "../store";
+
+/** Pedido para o agente resumir o dia do grupo, com as mensagens que chegaram pela caixa de entrada. */
+export function summaryPrompt(g: RadarGroup, lines: string[]): string {
+  return [
+    `Resuma o que aconteceu hoje no grupo “${g.name}” (${g.channel}). Separe em: decisões tomadas, quando me citaram, perguntas sem resposta e o clima da conversa. Seja curto.`,
+    "",
+    ...lines.slice(-80),
+  ].join("\n");
+}
 
 export function Radar() {
-  const nc = useNotConnected();
   const s = useStore((x) => x);
+  const navigate = useNavigate();
   const [word, setWord] = useState("");
   const groups = s.radar.filter(inBiz(s));
   const alerts = groups.filter((g) => g.alert);
@@ -20,7 +31,11 @@ export function Radar() {
     }
   };
 
-  if (nc) return <NotConnectedPage title="Radar de grupos" sub="O que está acontecendo em cada grupo, sem você precisar ler tudo." icon="radar" what="O Radar precisa de resumos periódicos dos grupos." needs="Decisões, menções, perguntas sem resposta, clima por hora e palavras vigiadas ainda não são gerados pelo Hermes." />;
+  const summarize = (g: RadarGroup) => {
+    const lines = s.inbox.filter((i) => i.channelId === g.id && /^\d\d:\d\d$/.test(i.receivedAt)).reverse().map((i) => `[${i.receivedAt}] ${i.from}: ${i.message}`);
+    navigate(`/chat?q=${encodeURIComponent(summaryPrompt(g, lines))}`);
+  };
+
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page">
@@ -58,17 +73,22 @@ export function Radar() {
                 {g.name} · {g.channel}
               </span>
             </span>
-            <button className="au-outline" onClick={() => draftRadarAlert(g)}>
-              Rascunhar resposta
+            <button className="au-outline" onClick={() => summarize(g)}>
+              Ver resumo
             </button>
           </div>
         ))}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
           {groups.map((g, i) => (
-            <RadarCard key={g.id} g={g} index={i} onDraft={() => draftRadarGroup(g)} />
+            <RadarCard key={g.id} g={g} index={i} onDraft={() => summarize(g)} />
           ))}
         </div>
+        {groups.length === 0 && (
+          <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--fg2)", maxWidth: 640 }}>
+            Nenhum grupo ainda. Os grupos aparecem aqui quando o gateway recebe a primeira mensagem de cada um (Telegram, WhatsApp, Discord…). As palavras vigiadas acima já marcam como urgente qualquer mensagem que as contenha.
+          </p>
+        )}
       </div>
     </div>
   );

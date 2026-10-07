@@ -174,3 +174,14 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-ob-next:hover{transform:translateY(-1px)}.au-ob-next:active{transform:scale(.97)}
 
 .au-picker{position:absolute;left:0;bottom:calc(100% + 10px);width:min(420px,100%);border:1px solid var(--line2);border-radius:var(--r);background:var(--panel);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);box-shadow:var(--shadow);padding:4px;display:flex;flex-direction:column;animation:hin .2s ease both;z-index:6}
+.au-select{font:inherit;font-family:var(--fm);font-size:11px;color:var(--fg2);background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 8px;cursor:pointer;max-width:140px}
+.au-select:focus-visible{outline:2px solid var(--acc)}
+.au-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.au-field input,.au-field select,.au-field textarea{font:inherit;font-size:13.5px;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:var(--r2);padding:9px 11px;outline:0;resize:vertical}
+.au-field input:focus,.au-field select:focus,.au-field textarea:focus{border-color:var(--acc)}
+.au-meminput,.au-memedit{flex:1;font:inherit;font-size:13.5px;color:var(--fg);background:var(--panel);border:1px solid var(--line2);border-radius:var(--r2);padding:9px 12px;outline:0;resize:vertical}
+.au-meminput:focus,.au-memedit:focus{border-color:var(--acc)}
+.au-colorpick{width:24px;height:24px;padding:0;border:1px solid var(--line2);border-radius:50%;background:none;cursor:pointer;overflow:hidden}
+.au-colorpick::-webkit-color-swatch-wrapper{padding:0}.au-colorpick::-webkit-color-swatch{border:0;border-radius:50%}
+.au-inline{font:inherit;font-size:13.5px;color:var(--fg);background:transparent;border:1px solid transparent;border-radius:var(--r2);padding:6px 8px;outline:0;min-width:0}
+.au-inline:hover{border-color:var(--line)}.au-inline:focus{border-color:var(--acc);background:var(--panel2)}

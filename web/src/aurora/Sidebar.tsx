@@ -1,6 +1,5 @@
 import { NavLink, useNavigate } from "react-router";
 import { Icon } from "./Icon";
-import { served } from "./served";
 import { inBiz, setPrefs, setState, useStore, type State } from "./store";
 
 type NavItem = { to: string; label: string; icon: string; count?: string };
@@ -16,15 +15,14 @@ export const OPS: NavItem[] = [
   { to: "/activity", label: "Atividade", icon: "activity" },
 ];
 
-// ponytail: contadores do agente são do protótipo; no modo real ficam ocultos até virem das APIs.
 export const AGENT: NavItem[] = [
   { to: "/chat", label: "Conversa", icon: "message-square" },
-  { to: "/sessions", label: "Sessões", icon: "history", count: "248" },
-  { to: "/memory", label: "Memória", icon: "brain", count: "128" },
-  { to: "/skills", label: "Skills", icon: "sparkles", count: "9" },
-  { to: "/cron", label: "Agendamentos", icon: "calendar-clock", count: "5" },
-  { to: "/agents", label: "Subagentes", icon: "git-fork", count: "3" },
-  { to: "/gateways", label: "Gateways", icon: "radio-tower", count: "4" },
+  { to: "/sessions", label: "Sessões", icon: "history" },
+  { to: "/memory", label: "Memória", icon: "brain" },
+  { to: "/skills", label: "Skills", icon: "sparkles" },
+  { to: "/cron", label: "Agendamentos", icon: "calendar-clock" },
+  { to: "/agents", label: "Subagentes", icon: "git-fork" },
+  { to: "/gateways", label: "Gateways", icon: "radio-tower" },
   { to: "/logs", label: "Logs", icon: "scroll-text" },
   { to: "/settings", label: "Configurações", icon: "settings-2" },
 ];
@@ -107,7 +105,7 @@ export function Sidebar() {
           ))}
           <div className="au-label" style={{ padding: "12px 11px 6px" }}>Agente</div>
           {AGENT.map((n, i) => (
-            <NavRow key={n.to} item={n} index={i + 8} hot={false} count={served ? "" : (n.count ?? "")} />
+            <NavRow key={n.to} item={n} index={i + 8} hot={false} count="" />
           ))}
         </nav>
 

@@ -1,6 +1,5 @@
 import { gatewayChat } from "./gateway";
-import { served } from "../served";
-import { mockChat } from "./mock";
 import type { ChatAdapter } from "./types";
 
-export const chat: ChatAdapter = served ? gatewayChat : mockChat;
+/** Conversa real: JSON-RPC do tui_gateway via /api/ws. */
+export const chat: ChatAdapter = gatewayChat;

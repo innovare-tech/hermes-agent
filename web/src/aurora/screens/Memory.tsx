@@ -2,30 +2,75 @@ import { useState } from "react";
 import { spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
-import type { MemoryEntry } from "../agent/types";
+import type { MemoryData, MemoryTarget } from "../agent/types";
 import { toast } from "../store";
 import { AgentHeader } from "./Sessions";
+
+const SECTIONS: { target: MemoryTarget; file: string; icon: string; hint: string; empty: string }[] = [
+  { target: "memory", file: "MEMORY.md", icon: "file-text", hint: "notas do agente", empty: "O Hermes ainda não guardou nenhuma nota." },
+  { target: "user", file: "USER.md", icon: "user-round", hint: "modelo de você", empty: "Nada sobre você ainda — conte suas preferências." },
+];
+
+function Entry({ text, onSave, onForget, delay }: { text: string; onSave: (t: string) => Promise<boolean>; onForget: () => void; delay: number }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(text);
+  return (
+    <div className="au-card au-mem" onMouseMove={spot} style={{ animationDelay: delay + "ms" }}>
+      {editing ? (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (await onSave(value)) setEditing(false);
+          }}
+          style={{ display: "flex", flexDirection: "column", gap: 8 }}
+        >
+          <textarea aria-label="Editar memória" autoFocus rows={3} value={value} onChange={(e) => setValue(e.target.value)} className="au-memedit" />
+          <div style={{ display: "flex", gap: 6 }}>
+            <button type="submit" className="au-primary" style={{ padding: "6px 12px", fontSize: 12.5 }}>
+              Salvar
+            </button>
+            <button type="button" className="au-outline" style={{ padding: "6px 12px", fontSize: 12.5 }} onClick={() => (setValue(text), setEditing(false))}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, textWrap: "pretty", whiteSpace: "pre-wrap" }}>{text}</p>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
+            <button className="au-mini" title="Editar" aria-label="Editar" onClick={() => setEditing(true)}>
+              <Icon name="pencil" size={12} />
+            </button>
+            <button className="au-mini danger" title="Esquecer" aria-label="Esquecer" onClick={onForget}>
+              <Icon name="trash-2" size={12} />
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function Memory() {
   const [data, setData] = useAgentData(() => agent.memory(), []);
   const [q, setQ] = useState("");
-  const entries = data?.entries.filter((m) => !q || m.text.toLowerCase().includes(q.toLowerCase())) ?? [];
+  const [adding, setAdding] = useState<Record<MemoryTarget, string>>({ memory: "", user: "" });
 
-  const save = async (next: MemoryEntry[], done?: string) => {
-    if (!data) return;
+  const apply = async (op: () => Promise<MemoryData>, done: string) => {
     try {
-      await agent.setMemory(next);
-    } catch {
-      return toast("Não consegui salvar a memória");
+      setData(await op());
+      toast(done);
+      return true;
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "A memória recusou a alteração");
+      return false;
     }
-    setData({ ...data, entries: next });
-    if (done) toast(done);
   };
 
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page au-page-agent" style={{ gap: 28 }}>
-        <AgentHeader title="Memória" sub="O que o Hermes sabe sobre você e seus projetos. Edite, fixe ou esqueça.">
+        <AgentHeader title="Memória" sub="O que o Hermes sabe sobre você e seus projetos. Edite ou esqueça.">
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", borderRadius: "var(--r2)", border: "1px solid var(--line2)", background: "var(--panel)", minWidth: 260 }}>
             <Icon name="search" size={14} color="var(--fg3)" />
             <input aria-label="Filtrar memórias" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrar memórias" style={{ flex: 1, border: 0, outline: 0, background: "transparent", color: "var(--fg)", fontSize: 13.5 }} />
@@ -33,60 +78,41 @@ export function Memory() {
         </AgentHeader>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 24, alignItems: "start" }}>
-          <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)" }}>
-              <Icon name="file-text" size={12} />
-              MEMORY.md<span style={{ marginLeft: "auto" }}>{entries.length} entradas</span>
-            </div>
-            {entries.map((m, i) => (
-              <div key={m.id} className="au-card au-mem" onMouseMove={spot} style={{ borderColor: m.pinned ? "var(--line2)" : undefined, animationDelay: i * 45 + "ms" }}>
-                <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, textWrap: "pretty" }}>{m.text}</p>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>
-                  <span style={{ padding: "2px 8px", borderRadius: 999, background: "var(--panel2)", color: "var(--fg2)" }}>{m.kind}</span>
-                  {m.source}
-                  <span style={{ marginLeft: "auto", display: "flex", gap: 2 }}>
-                    <button className="au-mini" title={m.pinned ? "Desafixar" : "Fixar"} aria-pressed={m.pinned} style={{ color: m.pinned ? "var(--acc)" : undefined }} onClick={() => save(data!.entries.map((x) => (x.id === m.id ? { ...x, pinned: !x.pinned } : x)), m.pinned ? undefined : "Memória fixada")}>
-                      <Icon name="pin" size={12} />
-                    </button>
-                    <button
-                      className="au-mini"
-                      title="Editar"
-                      onClick={() => {
-                        const text = window.prompt("Editar memória", m.text)?.trim();
-                        if (text && text !== m.text) save(data!.entries.map((x) => (x.id === m.id ? { ...x, text } : x)), "Memória atualizada");
-                      }}
-                    >
-                      <Icon name="pencil" size={12} />
-                    </button>
-                    <button className="au-mini danger" title="Esquecer" onClick={() => save(data!.entries.filter((x) => x.id !== m.id), "Esquecido")}>
-                      <Icon name="trash-2" size={12} />
-                    </button>
+          {SECTIONS.map((sec) => {
+            const all = data?.[sec.target] ?? [];
+            const entries = all.filter((t) => !q || t.toLowerCase().includes(q.toLowerCase()));
+            const used = all.join("\n§\n").length;
+            const limit = data?.limits[sec.target] ?? 0;
+            return (
+              <section key={sec.target} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)" }}>
+                  <Icon name={sec.icon} size={12} />
+                  {sec.file} · {sec.hint}
+                  <span style={{ marginLeft: "auto" }} title="caracteres usados / limite">
+                    {used.toLocaleString("pt-BR")}/{limit.toLocaleString("pt-BR")}
                   </span>
                 </div>
-              </div>
-            ))}
-          </section>
-
-          <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)" }}>
-              <Icon name="user-round" size={12} />
-              USER.md · modelo de você
-            </div>
-            <div style={{ padding: 20, borderRadius: "var(--r)", background: "var(--panel)", backdropFilter: "var(--blur)", border: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 16 }}>
-              {data?.profile.map((p) => (
-                <div key={p.k} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span className="au-label">{p.k}</span>
-                  <span style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{p.v}</span>
-                </div>
-              ))}
-            </div>
-            {data?.note && (
-              <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "14px 16px", borderRadius: "var(--r)", border: "1px dashed var(--line2)", color: "var(--fg2)", fontSize: 12.5, lineHeight: 1.55 }}>
-                <Icon name="sparkles" size={14} color="var(--acc)" className="au-mt2" />
-                {data.note}
-              </div>
-            )}
-          </section>
+                {data && !data.enabled[sec.target] && <p style={{ margin: 0, fontSize: 12.5, color: "var(--warn)" }}>Desligado na configuração do agente.</p>}
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const text = adding[sec.target].trim();
+                    if (text && (await apply(() => agent.addMemory(sec.target, text), "Guardado na memória"))) setAdding({ ...adding, [sec.target]: "" });
+                  }}
+                  style={{ display: "flex", gap: 8 }}
+                >
+                  <input aria-label={`Nova entrada em ${sec.file}`} className="au-meminput" value={adding[sec.target]} onChange={(e) => setAdding({ ...adding, [sec.target]: e.target.value })} placeholder={sec.target === "user" ? "Ex.: prefere respostas curtas, em português" : "Ex.: deploy só às terças, depois das 14h"} />
+                  <button type="submit" className="au-outline" style={{ opacity: adding[sec.target].trim() ? 1 : 0.5 }}>
+                    Adicionar
+                  </button>
+                </form>
+                {entries.map((t, i) => (
+                  <Entry key={t} text={t} delay={i * 45} onSave={(v) => (v.trim() === t ? Promise.resolve(true) : apply(() => agent.editMemory(sec.target, t, v), "Memória atualizada"))} onForget={() => window.confirm("Esquecer esta memória?") && apply(() => agent.removeMemory(sec.target, t), "Esquecido")} />
+                ))}
+                {data && all.length === 0 && <p style={{ margin: 0, fontSize: 13, color: "var(--fg3)" }}>{sec.empty}</p>}
+              </section>
+            );
+          })}
         </div>
       </div>
     </div>

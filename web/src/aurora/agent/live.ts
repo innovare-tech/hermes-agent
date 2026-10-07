@@ -1,9 +1,11 @@
 // Telas do agente ligadas ao backend real (mesmas rotas do dashboard antigo).
-import { api, type CronJob as ApiCron } from "@/lib/api";
+import { api, fetchJSON, type CronJob as ApiCron } from "@/lib/api";
 import { classifyLine } from "@/lib/log-classify";
 import { parseCronPt } from "./cron";
-import { DEST_ICON } from "./mock";
-import type { AgentAdapter, CronJob, Gateway, LogLine, Settings } from "./types";
+const DEST_ICON: Record<string, string> = { Telegram: "send", Email: "mail", Discord: "message-circle", WhatsApp: "phone", Slack: "hash", Conversa: "message-square" };
+import type { AgentAdapter, CronJob, Gateway, LogLine, MemoryData, Settings } from "./types";
+
+const jsonInit = (method: string, body: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 const SOURCE_ICON: Record<string, string> = { telegram: "send", discord: "message-circle", whatsapp: "phone", cron: "calendar-clock", cli: "square-terminal", tui: "square-terminal", web: "globe" };
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
@@ -63,14 +65,10 @@ export const liveAgent: AgentAdapter = {
     return rows.map((s) => ({ id: s.id, title: s.title || s.preview || "Sem título", source: cap(s.source ?? "web"), icon: SOURCE_ICON[s.source ?? ""] ?? "globe", snippet: (s.preview ?? "").replace(/>>>|<<</g, ""), msgs: s.message_count ?? 0, when: when(s.started_at) }));
   },
 
-  // ponytail: o backend só expõe o tamanho de MEMORY.md/USER.md (/api/memory), não o conteúdo.
-  async memory() {
-    const m = await api.getMemory();
-    return { entries: [], profile: [], note: `O backend ainda não expõe o conteúdo da memória (MEMORY.md ${m.builtin_files.memory} bytes · USER.md ${m.builtin_files.user} bytes). Edite pelo terminal ou pela conversa por enquanto.` };
-  },
-  setMemory: async () => {
-    throw new Error("Edição de memória ainda não disponível no backend");
-  },
+  memory: () => fetchJSON<MemoryData>("/api/ops/memory"),
+  addMemory: (target, content) => fetchJSON<MemoryData>("/api/ops/memory", jsonInit("POST", { target, content })),
+  editMemory: (target, entry, content) => fetchJSON<MemoryData>("/api/ops/memory", jsonInit("PUT", { target, entry, content })),
+  removeMemory: (target, entry) => fetchJSON<MemoryData>("/api/ops/memory", jsonInit("DELETE", { target, entry })),
 
   async skills() {
     return (await api.getSkills()).map((s) => {

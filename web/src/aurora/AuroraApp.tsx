@@ -1,6 +1,6 @@
 import { useEffect, type MouseEvent } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router";
-import { Background, DemoBanner, PauseBanner, Toast } from "./Chrome";
+import { Background, PauseBanner, Toast } from "./Chrome";
 import { Onboarding } from "./Onboarding";
 import { Activity } from "./screens/Activity";
 import { Agents } from "./screens/Agents";
@@ -84,7 +84,6 @@ export function AuroraApp() {
         <div style={{ display: "flex", minWidth: 0, minHeight: 0 }}>
           <main className="au-main">
             <PauseBanner />
-            <DemoBanner />
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/inbox" element={<Inbox />} />

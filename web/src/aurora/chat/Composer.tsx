@@ -10,10 +10,12 @@ type Props = {
   onSend: (text: string) => void;
   onStop: () => void;
   onPickModel: (provider: string, model: string) => void;
+  /** Texto inicial (ex.: pedido vindo do Radar ou de Pessoas) — o usuário revisa e envia. */
+  initialDraft?: string;
 };
 
-export function Composer({ running, model, commands, onSend, onStop, onPickModel }: Props) {
-  const [draft, setDraft] = useState("");
+export function Composer({ running, model, commands, onSend, onStop, onPickModel, initialDraft = "" }: Props) {
+  const [draft, setDraft] = useState(initialDraft);
   const [picking, setPicking] = useState(false);
   const [pick, setPick] = useState(0);
   const hasDraft = draft.trim() !== "";

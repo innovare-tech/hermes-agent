@@ -1,9 +1,6 @@
-// Contrato de dados da Central de Operações. Hoje só existe o mockAdapter
-// (mesmos dados do protótipo); o apiAdapter entra tela a tela conforme os
-// endpoints do backend nascem, sem mudar os componentes.
+// Contrato de dados da Central de Operações. Uma implementação: o backend do Hermes
+// (/api/ops/*, /api/estop, /api/status, /api/analytics) — ver live.ts.
 import { liveAdapter } from "./live";
-import { mockAdapter } from "./mock";
-import { served } from "./served";
 
 export type BizId = string;
 export type Business = { id: BizId; name: string; color: string };
@@ -24,8 +21,10 @@ export type Session = {
 
 export type InboxItem = {
   id: string;
+  /** "" = sem negócio (aparece em todos os filtros). */
   business: BizId;
   channel: string;
+  channelId: string;
   from: string;
   initials: string;
   receivedAt: string;
@@ -49,6 +48,8 @@ export type Approval = {
   why: string;
   preview: string;
   source: string;
+  /** Item da caixa de entrada que originou o rascunho (aprovar = enviar). */
+  inboxId?: string;
 };
 
 export type RadarGroup = {
@@ -90,7 +91,7 @@ export type Activity = {
   undone: boolean;
 };
 
-export type Channel = { id: string; name: string; icon: string; business: BizId; mode: AutonomyMode };
+export type Channel = { id: string; name: string; icon: string; platform: string; kind: string; business: BizId; mode: AutonomyMode; lastSeen: string };
 
 export type KbArticle = { title: string; source: string; uses: number };
 
@@ -148,8 +149,6 @@ export type OpsSnapshot = {
   people: Person[];
   playbooks: Playbook[];
   paused: boolean;
-  /** true = as telas de Operação mostram dados de exemplo (mock), não do agente. */
-  demo: boolean;
 };
 
 /** Ação que sai em nome do usuário. Só é executada via `actOnBehalf` (kill switch + Atividade). */
@@ -168,24 +167,28 @@ export type OnBehalf = {
 };
 
 export interface OpsAdapter {
-  /** `demo` = preencher as telas sem backend com os dados do protótipo. */
-  load(opts?: { demo: boolean }): Promise<OpsSnapshot>;
+  load(): Promise<OpsSnapshot>;
   /** Estado atual do kill switch (pode mudar por fora, ex.: `hermes pause` no terminal). */
   getPaused(): Promise<boolean>;
   /** Kill switch global: o gateway não envia nem executa nada enquanto `true`. */
   setPaused(paused: boolean): Promise<void>;
   /** Executa a ação e devolve a entrada que foi registrada na Atividade. */
   perform(action: OnBehalf): Promise<Activity>;
-  /** Negar não sai em nome do usuário: não passa pelo kill switch nem vira Atividade. */
-  deny(approvalId: string): Promise<void>;
+  /** Negar um rascunho: não envia, a mensagem fica com você. */
+  deny(approval: Approval): Promise<void>;
   archive(inboxId: string): Promise<void>;
+  keep(inboxId: string): Promise<void>;
   /** Reverte uma ação da Atividade quando ela é reversível. */
   undo(activityId: string): Promise<void>;
   setAutonomy(channelId: string, mode: AutonomyMode): Promise<void>;
-  /** Rascunho criado pelo usuário (Radar, Pessoas) que entra na fila de Aprovações. */
-  draftApproval(a: Omit<Approval, "id" | "createdAt">): Promise<Approval>;
+  setChannelBusiness(channelId: string, businessId: BizId | null): Promise<void>;
+  saveBusiness(b: { id?: string; name: string; color: string }): Promise<Business>;
+  deleteBusiness(id: string): Promise<void>;
   setWatches(words: string[]): Promise<void>;
-  savePlaybook(p: Playbook): Promise<void>;
+  savePerson(p: Omit<Person, "id" | "initials" | "waitingHours"> & { id?: string }): Promise<Person>;
+  deletePerson(id: string): Promise<void>;
+  savePlaybook(p: Omit<Playbook, "id" | "runs" | "lastRun"> & { id?: string }): Promise<Playbook>;
+  deletePlaybook(id: string): Promise<void>;
 }
 
-export const adapter: OpsAdapter = served ? liveAdapter : mockAdapter;
+export const adapter: OpsAdapter = liveAdapter;

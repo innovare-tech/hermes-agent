@@ -1,5 +1,5 @@
 import { useDeferredValue, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
 
@@ -20,7 +20,8 @@ export function AgentHeader({ title, sub, children }: { title: string; sub: stri
 
 export function Sessions() {
   const navigate = useNavigate();
-  const [q, setQ] = useState("");
+  const [params] = useSearchParams();
+  const [q, setQ] = useState(params.get("q") ?? "");
   const [source, setSource] = useState("Todas");
   const query = useDeferredValue(q);
   const [rows] = useAgentData(() => agent.sessions(query, source), [query, source]);
