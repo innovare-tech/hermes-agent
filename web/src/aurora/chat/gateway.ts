@@ -177,6 +177,13 @@ export const gatewayChat: ChatAdapter = {
         c.on("message.delta", (e) => {
           if (e.session_id === sid && e.payload?.text) on({ type: "delta", text: e.payload.text });
         }),
+        // Conexão caiu no meio do turno (painel reiniciou, rede): avisa e libera a conversa em vez de girar para sempre.
+        c.onState((s) => {
+          if (s !== "closed" && s !== "error") return;
+          live.clear(); // ids vivos morrem com a conexão; o próximo envio retoma a sessão salva
+          on({ type: "error", message: "A conexão com o Hermes caiu no meio da resposta. Mande de novo para continuar." });
+          done();
+        }),
         c.on("message.complete", (e) => {
           if (e.session_id !== sid) return;
           const p = e.payload ?? {};
