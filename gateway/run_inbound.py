@@ -1311,7 +1311,9 @@ class GatewayInboundMixin(GatewayPluginInjectionMixin):
         # canal decide se o Hermes responde (Autônomo), só rascunha (Rascunhar) ou fica quieto.
         if not is_internal:
             from gateway import ops_hooks
-            event._ops = await asyncio.to_thread(ops_hooks.record, event, source)
+            # Síncrono de propósito: um await aqui abre janela para turno duplicado antes da reserva
+            # da sessão. ponytail: INSERT local de ~ms no loop; mover para fila se o ops.db ficar lento.
+            event._ops = ops_hooks.record(event, source)
             if event._ops and event._ops["mode"] == ops_hooks.OBSERVE:
                 return None
         _reply = await self._hm_pending_reply_intercepts(event, source, _quick_key)
