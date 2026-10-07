@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { adapter, type Approval, type AutonomyMode, type Channel, type InboxItem, type OnBehalf, type OpsSnapshot, type Session } from "./adapter";
+import { adapter, type Approval, type Person, type Playbook, type RadarGroup, type Ticket, type AutonomyMode, type Channel, type InboxItem, type OnBehalf, type OpsSnapshot, type Session } from "./adapter";
 import { chat } from "./chat";
 
 export type Direction = "aurora" | "ambar" | "sinal";
@@ -46,6 +46,11 @@ let state: State = {
   last24h: { saved: "", autoReplies: 0 },
   health: { online: false, uptime: "", items: [], responseTime: "" },
   costs: { month: "", total: 0, limit: null, projection: null, byBusiness: [] },
+  watches: [],
+  support: { firstResponse: "", resolvedByHermes: "", csat: "", kbUsage: "" },
+  kb: [],
+  people: [],
+  playbooks: [],
 };
 
 const subs = new Set<() => void>();
@@ -209,4 +214,58 @@ export async function undoActivity(id: string) {
   }
   setState((s) => ({ activity: s.activity.map((a) => (a.id === id ? { ...a, undone: true } : a)) }));
   toast("Desfeito");
+}
+
+// ---- Radar · Suporte · Pessoas · Playbooks ----
+
+/** Rascunho do usuário vai para a fila de Aprovações (não sai nada ainda). */
+async function draft(a: Omit<Approval, "id" | "createdAt">, done = "Rascunho enviado para Aprovações") {
+  try {
+    const created = await adapter.draftApproval(a);
+    setState((s) => ({ approvals: [created, ...s.approvals] }));
+    toast(done);
+  } catch {
+    toast("Não consegui criar o rascunho");
+  }
+}
+
+export const draftRadarAlert = (g: RadarGroup) =>
+  draft({ business: g.business, kind: "mensagem", icon: "message-square", title: "Responder no grupo " + g.name, risk: "baixo", why: `Alerta do radar: ${g.alert}.`, preview: "Pessoal, já estamos em cima disso. Atualizo vocês aqui em até 15 minutos.", source: "radar de grupos" });
+
+export const draftRadarGroup = (g: RadarGroup) =>
+  draft(
+    { business: g.business, kind: "mensagem", icon: "message-square", title: `Responder ${g.unanswered.length} pendência(s) em ${g.name}`, risk: "baixo", why: "Perguntas sem resposta há mais de 1 hora.", preview: g.unanswered.map((u) => "→ " + u).join("\n"), source: "radar de grupos" },
+    "Rascunhos enviados para Aprovações",
+  );
+
+export const draftToPerson = (p: Person) =>
+  draft({ business: p.business, kind: "mensagem", icon: "message-square", title: "Mensagem para " + p.name, risk: "baixo", why: `Pendência: ${p.pending[0] ?? p.lastTopic}.`, preview: `Oi, ${p.name.split(" ")[0]}! Sobre ${p.lastTopic.toLowerCase()}: já estou vendo e te retorno ainda hoje.`, source: "pessoas" });
+
+export async function setWatches(words: string[]) {
+  try {
+    await adapter.setWatches(words);
+  } catch {
+    toast("Não consegui salvar as palavras vigiadas");
+    return false;
+  }
+  setState({ watches: words });
+  return true;
+}
+
+export const ticketCard = (t: Ticket) =>
+  actOnBehalf({ business: t.business, kind: "tkt", action: `Abriu card para o ticket #${t.n} — ${t.title}`, why: "pedido seu no painel de suporte.", done: `Card criado: “${t.title}”`, target: { kind: "ticket", n: t.n, op: "card" } });
+
+export const ticketReply = (t: Ticket) =>
+  actOnBehalf({ business: t.business, kind: "msg", action: `Respondeu ${t.client} no ticket #${t.n}`, why: "pedido seu no painel de suporte.", done: "Resposta enviada para " + t.client, blocked: "Agente pausado — retome para enviar", target: { kind: "ticket", n: t.n, op: "reply" } });
+
+export async function savePlaybook(p: Playbook, done?: string) {
+  try {
+    await adapter.savePlaybook(p);
+  } catch {
+    toast("Não consegui salvar o playbook");
+    return false;
+  }
+  setState((s) => ({ playbooks: s.playbooks.some((x) => x.id === p.id) ? s.playbooks.map((x) => (x.id === p.id ? p : x)) : [p, ...s.playbooks] }));
+  if (done) toast(done);
+  return true;
 }

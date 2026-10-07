@@ -92,6 +92,24 @@ export type Activity = {
 
 export type Channel = { id: string; name: string; icon: string; business: BizId; mode: AutonomyMode };
 
+export type KbArticle = { title: string; source: string; uses: number };
+
+export type Person = {
+  id: string;
+  name: string;
+  initials: string;
+  role: string;
+  business: BizId;
+  waitingHours: number;
+  lastTopic: string;
+  tone: string;
+  channels: string;
+  pending: string[];
+};
+
+export type PlaybookNode = { kind: "trigger" | "action" | "cond" | "end"; text: string; elseText?: string };
+export type Playbook = { id: string; name: string; business: BizId; trigger: string; runs: number; enabled: boolean; lastRun: string; nodes: PlaybookNode[] };
+
 export type Health = {
   online: boolean;
   uptime: string;
@@ -124,6 +142,11 @@ export type OpsSnapshot = {
   last24h: { saved: string; autoReplies: number };
   health: Health;
   costs: Costs;
+  watches: string[];
+  support: { firstResponse: string; resolvedByHermes: string; csat: string; kbUsage: string };
+  kb: KbArticle[];
+  people: Person[];
+  playbooks: Playbook[];
   paused: boolean;
 };
 
@@ -139,7 +162,7 @@ export type OnBehalf = {
   /** Texto do toast quando o agente está pausado. */
   blocked?: string;
   /** O que de fato executar. */
-  target: { kind: "reply"; id: string; text: string } | { kind: "approval"; id: string };
+  target: { kind: "reply"; id: string; text: string } | { kind: "approval"; id: string } | { kind: "ticket"; n: number; op: "card" | "reply" };
 };
 
 export interface OpsAdapter {
@@ -156,6 +179,10 @@ export interface OpsAdapter {
   /** Reverte uma ação da Atividade quando ela é reversível. */
   undo(activityId: string): Promise<void>;
   setAutonomy(channelId: string, mode: AutonomyMode): Promise<void>;
+  /** Rascunho criado pelo usuário (Radar, Pessoas) que entra na fila de Aprovações. */
+  draftApproval(a: Omit<Approval, "id" | "createdAt">): Promise<Approval>;
+  setWatches(words: string[]): Promise<void>;
+  savePlaybook(p: Playbook): Promise<void>;
 }
 
 export const adapter: OpsAdapter = served ? liveAdapter : mockAdapter;
