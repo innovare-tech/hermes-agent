@@ -51,6 +51,7 @@ import {
   Workflow,
   Mail,
   PartyPopper,
+  Pause,
   type LucideIcon,
 } from "lucide-react";
 
@@ -104,6 +105,7 @@ const ICONS: Record<string, LucideIcon> = {
   "undo-2": Undo2,
   users: Users,
   workflow: Workflow,
+  pause: Pause,
   "party-popper": PartyPopper,
   mail: Mail,
 };

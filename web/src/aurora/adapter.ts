@@ -92,6 +92,23 @@ export type Activity = {
 
 export type Channel = { id: string; name: string; icon: string; business: BizId; mode: AutonomyMode };
 
+export type Health = {
+  online: boolean;
+  uptime: string;
+  /** Gateways/plataformas conectados. */
+  items: { name: string; status: "ok" | "warn" | "err"; value: string }[];
+  responseTime: string;
+};
+
+export type Costs = {
+  month: string;
+  total: number;
+  /** null = sem limite configurado. */
+  limit: number | null;
+  projection: number | null;
+  byBusiness: { business: BizId; value: number }[];
+};
+
 export type Account = { plan: string; credits: string; home: string; version: string };
 
 export type OpsSnapshot = {
@@ -103,6 +120,10 @@ export type OpsSnapshot = {
   tickets: Ticket[];
   activity: Activity[];
   autonomy: Channel[];
+  briefing: { business: BizId; text: string; at: string }[];
+  last24h: { saved: string; autoReplies: number };
+  health: Health;
+  costs: Costs;
   paused: boolean;
 };
 
@@ -132,6 +153,8 @@ export interface OpsAdapter {
   /** Negar não sai em nome do usuário: não passa pelo kill switch nem vira Atividade. */
   deny(approvalId: string): Promise<void>;
   archive(inboxId: string): Promise<void>;
+  /** Reverte uma ação da Atividade quando ela é reversível. */
+  undo(activityId: string): Promise<void>;
   setAutonomy(channelId: string, mode: AutonomyMode): Promise<void>;
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, type MouseEvent } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router";
 import { Background, PauseBanner, Toast } from "./Chrome";
+import { Activity } from "./screens/Activity";
 import { Approvals } from "./screens/Approvals";
 import { Chat } from "./screens/Chat";
 import { Home } from "./screens/Home";
@@ -74,6 +75,7 @@ export function AuroraApp() {
               <Route path="/" element={<Home />} />
               <Route path="/inbox" element={<Inbox />} />
               <Route path="/approvals" element={<Approvals />} />
+              <Route path="/activity" element={<Activity />} />
               <Route path="/chat/:sid?" element={<ChatRoute />} />
               <Route path="*" element={<Placeholder />} />
             </Routes>
