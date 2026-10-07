@@ -11,7 +11,7 @@ type RawChannel = { id: string; platform: string; chat_id: string; name: string;
 type RawInbox = { id: number; channel_id: string; sender_id: string | null; sender_name: string | null; text: string; received_at: number; priority: string; summary: string | null; draft: string | null; status: string; sent_at: number | null; platform: string; chat_name: string; kind: string; mode: number; business_id: string | null };
 type RawActivity = { id: number; at: number; business_id: string | null; kind: Activity["kind"]; action: string; why: string; reversible: number; undone: number };
 type RawPerson = { id: string; name: string; role: string; business_id: string | null; tone: string; channels: string; notes: string; pending: string[]; waiting_since: number | null };
-type RawPlaybook = { id: string; name: string; business_id: string | null; trigger: string; nodes: Playbook["nodes"]; enabled: boolean; runs: number; last_run: number | null };
+type RawPlaybook = { id: string; name: string; business_id: string | null; trigger: string; nodes: Playbook["nodes"]; enabled: boolean; runs: number; last_run: number | null; schedule: string; deliver: string; next_run: number | null; last_error: string | null };
 
 const MODES = ["Observar", "Rascunhar", "Autônomo"];
 const PLATFORM_ICON: Record<string, string> = { telegram: "send", whatsapp: "phone", discord: "message-circle", email: "mail", slack: "hash", signal: "message-square", api: "plug" };
@@ -118,7 +118,20 @@ const personFrom = (p: RawPerson): Person => ({
   pending: p.pending,
 });
 
-const playbookFrom = (p: RawPlaybook): Playbook => ({ id: p.id, name: p.name, business: p.business_id ?? "", trigger: p.trigger, runs: p.runs, enabled: p.enabled, lastRun: p.last_run ? whenLabel(p.last_run) : "nunca", nodes: p.nodes });
+const playbookFrom = (p: RawPlaybook): Playbook => ({
+  id: p.id,
+  name: p.name,
+  business: p.business_id ?? "",
+  trigger: p.trigger,
+  runs: p.runs,
+  enabled: p.enabled,
+  lastRun: p.last_run ? whenLabel(p.last_run) : "nunca",
+  nodes: p.nodes,
+  schedule: p.schedule ?? "",
+  deliver: p.deliver || "local",
+  nextRun: p.next_run ? whenLabel(p.next_run) : "",
+  lastError: p.last_error ?? "",
+});
 
 /** Grupos para o Radar: canais de grupo + volume de hoje vindo da caixa de entrada. */
 function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
@@ -192,8 +205,13 @@ export const liveAdapter: OpsAdapter = {
   async perform(a) {
     if (a.target.kind === "reply") await ops(`/inbox/${a.target.id}/reply`, json("POST", { text: a.target.text }));
     if (a.target.kind === "ticket") throw new Error("Suporte ainda não conectado a um sistema de tickets");
+    let why = a.why;
+    if (a.target.kind === "playbook") {
+      const r = await ops<{ gateway_running: boolean }>(`/playbooks/${a.target.id}/run`, json("POST"));
+      if (!r.gateway_running) why += " Gateway desligado: roda quando ele subir.";
+    }
     // approval: a resposta já foi dada ao gateway pela Conversa; aqui só registra.
-    const raw = await ops<RawActivity>("/activity", json("POST", { kind: a.kind, action: a.action, why: a.why, business_id: a.business || null, reversible: false }));
+    const raw = await ops<RawActivity>("/activity", json("POST", { kind: a.kind, action: a.action, why, business_id: a.business || null, reversible: false }));
     return activityFrom(raw);
   },
   async deny(approval) {
@@ -229,7 +247,7 @@ export const liveAdapter: OpsAdapter = {
     await ops(`/people/${id}`, json("DELETE"));
   },
   async savePlaybook(p) {
-    const raw = await ops<RawPlaybook>("/playbooks", json("PUT", { id: p.id, name: p.name, business_id: p.business || null, trigger: p.trigger, nodes: p.nodes, enabled: p.enabled }));
+    const raw = await ops<RawPlaybook>("/playbooks", json("PUT", { id: p.id, name: p.name, business_id: p.business || null, trigger: p.trigger, nodes: p.nodes, enabled: p.enabled, schedule: p.schedule, deliver: p.deliver }));
     return playbookFrom(raw);
   },
   async deletePlaybook(id) {

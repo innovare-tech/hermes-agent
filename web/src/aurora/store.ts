@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { adapter, type Approval, type AutonomyMode, type BizId, type Channel, type InboxItem, type OnBehalf, type OpsSnapshot, type Person, type Playbook, type Session, type Ticket } from "./adapter";
+import { adapter, type Approval, type AutonomyMode, type BizId, type Channel, type InboxItem, type OnBehalf, type OpsSnapshot, type Person, type Playbook, type PlaybookDraft, type Session, type Ticket } from "./adapter";
 import { chat } from "./chat";
 
 export type Direction = "aurora" | "ambar" | "sinal";
@@ -309,7 +309,7 @@ export async function deletePerson(id: string) {
   toast("Contato removido");
 }
 
-export async function savePlaybook(p: Omit<Playbook, "id" | "runs" | "lastRun"> & { id?: string }, done?: string) {
+export async function savePlaybook(p: PlaybookDraft, done?: string) {
   try {
     const saved = await adapter.savePlaybook(p);
     setState((s) => ({ playbooks: s.playbooks.some((x) => x.id === saved.id) ? s.playbooks.map((x) => (x.id === saved.id ? saved : x)) : [saved, ...s.playbooks] }));
@@ -329,4 +329,18 @@ export async function deletePlaybook(id: string) {
   }
   setState((s) => ({ playbooks: s.playbooks.filter((p) => p.id !== id) }));
   toast("Playbook removido");
+}
+
+/** "Executar agora": passa pelo kill switch e vira Atividade; o gateway executa no próximo ciclo. */
+export async function runPlaybook(p: Playbook) {
+  const ok = await actOnBehalf({
+    business: p.business,
+    kind: "cmd",
+    action: `Executou o playbook “${p.name}”`,
+    why: "pedido por você em Playbooks.",
+    done: "Playbook na fila — o Hermes executa em instantes",
+    blocked: "Agente pausado — retome para executar",
+    target: { kind: "playbook", id: p.id },
+  });
+  if (ok) await loadOps().catch(() => {});
 }

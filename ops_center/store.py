@@ -318,6 +318,11 @@ def save_playbook(data: dict) -> dict:
     return next(p for p in list_playbooks() if p["id"] == pid)
 
 
+def mark_playbook_run(pid: str) -> None:
+    with connect() as c:
+        c.execute("UPDATE playbooks SET runs=runs+1, last_run=? WHERE id=?", (time.time(), pid))
+
+
 def delete_playbook(pid: str) -> None:
     with connect() as c:
         c.execute("DELETE FROM playbooks WHERE id=?", (pid,))
