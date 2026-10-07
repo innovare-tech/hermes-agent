@@ -1,10 +1,12 @@
 import { useEffect, type MouseEvent } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router";
 import { Background, PauseBanner, Toast } from "./Chrome";
+import { Approvals } from "./screens/Approvals";
 import { Chat } from "./screens/Chat";
 import { Home } from "./screens/Home";
+import { Inbox } from "./screens/Inbox";
 import { AGENT, OPS, Sidebar } from "./Sidebar";
-import { loadOps, loadSessions, toast, useStore } from "./store";
+import { loadOps, loadSessions, refreshPaused, toast, useStore } from "./store";
 
 // Spotlight que segue o cursor: escreve direto no style, sem re-render.
 const onMove = (e: MouseEvent<HTMLDivElement>) => {
@@ -53,7 +55,11 @@ export function AuroraApp() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const poll = setInterval(() => refreshPaused().catch(() => {}), 15000);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      clearInterval(poll);
+    };
   }, [navigate]);
 
   return (
@@ -66,6 +72,8 @@ export function AuroraApp() {
             <PauseBanner />
             <Routes>
               <Route path="/" element={<Home />} />
+              <Route path="/inbox" element={<Inbox />} />
+              <Route path="/approvals" element={<Approvals />} />
               <Route path="/chat/:sid?" element={<ChatRoute />} />
               <Route path="*" element={<Placeholder />} />
             </Routes>

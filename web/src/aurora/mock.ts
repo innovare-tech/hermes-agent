@@ -1,5 +1,5 @@
 // Dados mock — copiados do <script data-dc-script> do protótipo.
-import type { Activity, Approval, InboxItem, OpsAdapter, OpsSnapshot, RadarGroup, Ticket } from "./adapter";
+import type { Activity, Approval, Channel, InboxItem, OpsAdapter, OpsSnapshot, RadarGroup, Ticket } from "./adapter";
 
 const INBOX: InboxItem[] = [
   { id: "i1", business: "inn", channel: "WhatsApp", from: "Marcos Teles", initials: "MT", receivedAt: "06:52", priority: "urgente", autonomyMode: "Rascunhar", summary: "Painel da Teles Log fora do ar (erro 502) desde 06:40", message: "Bom dia! O painel da Teles Log não abre desde cedo, dá erro 502. Temos operação às 9h!", suggestedReply: "Bom dia, Marcos. Já identifiquei: o certificado do balanceador expirou às 06:38. Estou renovando agora — volta em até 10 minutos e te aviso por aqui.", context: ["Cliente desde 2023, plano Enterprise", "Prefere WhatsApp e prazos claros", "Último incidente em 14 ago, resolvido em 22 min"] },
@@ -51,6 +51,15 @@ const ACTIVITY: Activity[] = [
   act(9, "00:10", "inn", "pay", "Pagou a fatura da Vercel — US$ 20,00", "abaixo do limite de pagamento automático (US$ 50).", false),
 ];
 
+const AUTONOMY: Channel[] = [
+  { id: "c1", name: "WhatsApp · clientes Innovare", icon: "phone", business: "inn", mode: 1 },
+  { id: "c2", name: "Grupo Unic · Suporte VIP", icon: "users", business: "unic", mode: 1 },
+  { id: "c3", name: "Tickets de suporte Unic", icon: "life-buoy", business: "unic", mode: 2 },
+  { id: "c4", name: "Email · contabilidade", icon: "mail", business: "inn", mode: 2 },
+  { id: "c5", name: "Grupo Innovare · Sócios", icon: "users", business: "inn", mode: 0 },
+  { id: "c6", name: "Telegram · família", icon: "send", business: "pes", mode: 1 },
+];
+
 const SNAPSHOT: OpsSnapshot = {
   account: { plan: "Nous Portal · Plus", credits: "$14,20 de $22 em créditos", home: "~/.hermes", version: "v2.14" },
   businesses: [
@@ -63,14 +72,21 @@ const SNAPSHOT: OpsSnapshot = {
   radar: RADAR,
   tickets: TICKETS,
   activity: ACTIVITY,
+  autonomy: AUTONOMY,
   paused: false,
 };
 
 const hhmm = () => new Date().toTimeString().slice(0, 5);
 
+// Kill switch do mock: guarda o estado para a sincronização periódica não despausar sozinha.
+let paused = false;
+
 export const mockAdapter: OpsAdapter = {
   load: async () => structuredClone(SNAPSHOT),
-  setPaused: async () => {},
+  getPaused: async () => paused,
+  setPaused: async (p) => {
+    paused = p;
+  },
   perform: async (a) => ({
     id: crypto.randomUUID(),
     at: hhmm(),
@@ -81,4 +97,7 @@ export const mockAdapter: OpsAdapter = {
     reversible: a.reversible ?? true,
     undone: false,
   }),
+  deny: async () => {},
+  archive: async () => {},
+  setAutonomy: async () => {},
 };

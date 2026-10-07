@@ -12,6 +12,10 @@ export function applyEvent(m: AgentMessage, e: ChatEvent): AgentMessage {
       return { ...m, text: m.text + e.text };
     case "done":
       return { ...m, live: false, meta: e.meta, learned: e.learned };
+    case "approval":
+      return { ...m, approval: { ...e.approval, status: "pending" } };
+    case "approval.cancel":
+      return m.approval?.id === e.id && m.approval.status === "pending" ? { ...m, approval: { ...m.approval, status: "cancelled" } } : m;
     case "error":
       return { ...m, live: false, steps: settle(m), text: (m.text ? m.text + "\n\n" : "") + "⚠ " + e.message };
   }
@@ -23,3 +27,9 @@ export function interrupted(m: AgentMessage): AgentMessage {
 }
 
 const settle = (m: AgentMessage) => m.steps.map((s) => (s.status === "run" ? { ...s, status: "ok" as const } : s));
+
+/** Marca o desfecho do card de aprovação (quem chama responde ao gateway uma única vez). */
+export function answered(m: AgentMessage, choice: "once" | "session" | "always" | "deny"): AgentMessage {
+  if (!m.approval || m.approval.status !== "pending") return m;
+  return { ...m, approval: { ...m.approval, status: choice === "deny" ? "denied" : "approved" } };
+}

@@ -104,11 +104,17 @@ export const mockChat: ChatAdapter = {
   },
 
   send(sessionId, text, on) {
-    const steps: ToolStep[] = [
-      { id: "x1", kind: "memory", name: "memory.search", target: `"${text.slice(0, 42)}"`, dur: "0,2s", status: "run", output: "3 memórias relevantes · 2 sessões relacionadas (FTS)" },
-      { id: "x2", kind: "terminal", name: "terminal", target: "git -C ~/innovare/hermes-agent log --since=7.days --oneline", dur: "1,1s", status: "run", output: "a91f3c2 feat(web): timeline de ferramentas\n77be010 fix(gateway): reconexão\n3c0d9e1 chore(deps): bump playwright" },
-      { id: "x3", kind: "web", name: "web_search", target: "contexto adicional", dur: "2,4s", status: "run", output: "5 resultados · 2 lidos" },
-    ];
+    const restart = /reinici|restart/i.test(text);
+    const steps: ToolStep[] = restart
+      ? [
+          { id: "x1", kind: "memory", name: "memory.search", target: `"${text.slice(0, 42)}"`, dur: "0,2s", status: "run", output: "Reinício resolveu o mesmo problema em 2 de 2 vezes." },
+          { id: "x2", kind: "terminal", name: "terminal", target: "kubectl -n unic get pods -l app=reports-worker", dur: "0,8s", status: "run", output: "reports-worker-7f9c   1/1   Running   0   3d\n212 jobs pendentes na fila 'reports'" },
+        ]
+      : [
+          { id: "x1", kind: "memory", name: "memory.search", target: `"${text.slice(0, 42)}"`, dur: "0,2s", status: "run", output: "3 memórias relevantes · 2 sessões relacionadas (FTS)" },
+          { id: "x2", kind: "terminal", name: "terminal", target: "git -C ~/innovare/hermes-agent log --since=7.days --oneline", dur: "1,1s", status: "run", output: "a91f3c2 feat(web): timeline de ferramentas\n77be010 fix(gateway): reconexão\n3c0d9e1 chore(deps): bump playwright" },
+          { id: "x3", kind: "web", name: "web_search", target: "contexto adicional", dur: "2,4s", status: "run", output: "5 resultados · 2 lidos" },
+        ];
     return new Promise<void>((resolve) => {
       const list: ReturnType<typeof setTimeout>[] = [];
       const later = (ms: number, f: () => void) => list.push(setTimeout(f, ms));
@@ -120,15 +126,37 @@ export const mockChat: ChatAdapter = {
         later(at, () => emit({ type: "step", step: { ...st, status: "ok" } }));
         at += 150;
       });
-      const words = REPLY.split(" ");
-      words.forEach((w, i) => later(at + i * 45, () => emit({ type: "delta", text: (i ? " " : "") + w })));
-      later(at + words.length * 45 + 100, () => {
-        const n = (counts.get(sessionId) ?? 0) + 2;
-        counts.set(sessionId, n);
-        emit({ type: "done", meta: "hermes-4-405b · 6,1k tokens · $0,01 · 4,9s", learned: "+1 memória", info: info(n) });
-        timers.delete(sessionId);
-        resolve();
-      });
+      const reply = (words: string[], from: number) => {
+        words.forEach((w, i) => later(from + i * 45, () => emit({ type: "delta", text: (i ? " " : "") + w })));
+        later(from + words.length * 45 + 100, () => {
+          const n = (counts.get(sessionId) ?? 0) + 2;
+          counts.set(sessionId, n);
+          emit({ type: "done", meta: "hermes-4-405b · 6,1k tokens · $0,01 · 4,9s", learned: restart ? undefined : "+1 memória", info: info(n) });
+          timers.delete(sessionId);
+          resolve();
+        });
+      };
+      if (!restart) reply(REPLY.split(" "), at);
+      else
+        // Como o gateway real: pede aprovação e só segue quando você responde.
+        later(at, () =>
+          emit({
+            type: "approval",
+            approval: {
+              id: "ap" + Date.now(),
+              command: "kubectl -n unic rollout restart deploy/reports-worker",
+              description: "Reiniciar o worker de relatórios (produção)",
+              choices: ["once", "session", "deny"],
+              respond: (choice) => {
+                const cmd: ToolStep = { id: "x9", kind: "terminal", name: "terminal", target: "kubectl -n unic rollout restart deploy/reports-worker", dur: "2,1s", status: "run", output: "deployment.apps/reports-worker restarted\nfila 'reports': 212 → 0 em 40s" };
+                if (choice === "deny") return reply("Ok, não reiniciei. Sigo acompanhando a fila e te aviso se piorar.".split(" "), 0);
+                later(200, () => emit({ type: "step", step: cmd }));
+                later(1600, () => emit({ type: "step", step: { ...cmd, status: "ok" } }));
+                reply("Reiniciei o worker. A fila de relatórios zerou em 40 segundos e avisei o grupo VIP.".split(" "), 1800);
+              },
+            },
+          }),
+        );
       timers.set(sessionId, list);
       finish.set(sessionId, resolve);
     });

@@ -17,6 +17,18 @@ export type Block =
   | { kind: "prs"; items: { n: number; title: string; note: string; tag: string; tone: "ok" | "err" | "warn" }[] }
   | { kind: "cron"; title: string; detail: string };
 
+export type ApprovalChoice = "once" | "session" | "always" | "deny";
+
+/** Pedido de aprovação que chegou no meio do turno (comando perigoso etc.). */
+export type ChatApproval = {
+  id: string;
+  command: string;
+  description: string;
+  choices: ApprovalChoice[];
+  status: "pending" | "approved" | "denied" | "cancelled";
+  respond: (choice: ApprovalChoice) => void;
+};
+
 export type UserMessage = { id: string; role: "user"; text: string };
 export type AgentMessage = {
   id: string;
@@ -25,6 +37,7 @@ export type AgentMessage = {
   text: string;
   live: boolean;
   blocks?: Block[];
+  approval?: ChatApproval;
   meta?: string;
   learned?: string;
 };
@@ -35,7 +48,9 @@ export type ChatEvent =
   | { type: "step"; step: ToolStep }
   | { type: "delta"; text: string }
   | { type: "done"; meta?: string; learned?: string; info?: Partial<SessionInfo> }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "approval"; approval: Omit<ChatApproval, "status"> }
+  | { type: "approval.cancel"; id: string };
 
 export type SessionInfo = {
   model: string;

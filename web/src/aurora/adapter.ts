@@ -1,7 +1,9 @@
 // Contrato de dados da Central de Operações. Hoje só existe o mockAdapter
 // (mesmos dados do protótipo); o apiAdapter entra tela a tela conforme os
 // endpoints do backend nascem, sem mudar os componentes.
+import { liveAdapter } from "./live";
 import { mockAdapter } from "./mock";
+import { served } from "./served";
 
 export type BizId = string;
 export type Business = { id: BizId; name: string; color: string };
@@ -88,6 +90,8 @@ export type Activity = {
   undone: boolean;
 };
 
+export type Channel = { id: string; name: string; icon: string; business: BizId; mode: AutonomyMode };
+
 export type Account = { plan: string; credits: string; home: string; version: string };
 
 export type OpsSnapshot = {
@@ -98,6 +102,7 @@ export type OpsSnapshot = {
   radar: RadarGroup[];
   tickets: Ticket[];
   activity: Activity[];
+  autonomy: Channel[];
   paused: boolean;
 };
 
@@ -112,14 +117,22 @@ export type OnBehalf = {
   done: string;
   /** Texto do toast quando o agente está pausado. */
   blocked?: string;
+  /** O que de fato executar. */
+  target: { kind: "reply"; id: string; text: string } | { kind: "approval"; id: string };
 };
 
 export interface OpsAdapter {
   load(): Promise<OpsSnapshot>;
+  /** Estado atual do kill switch (pode mudar por fora, ex.: `hermes pause` no terminal). */
+  getPaused(): Promise<boolean>;
   /** Kill switch global: o gateway não envia nem executa nada enquanto `true`. */
   setPaused(paused: boolean): Promise<void>;
   /** Executa a ação e devolve a entrada que foi registrada na Atividade. */
   perform(action: OnBehalf): Promise<Activity>;
+  /** Negar não sai em nome do usuário: não passa pelo kill switch nem vira Atividade. */
+  deny(approvalId: string): Promise<void>;
+  archive(inboxId: string): Promise<void>;
+  setAutonomy(channelId: string, mode: AutonomyMode): Promise<void>;
 }
 
-export const adapter: OpsAdapter = mockAdapter;
+export const adapter: OpsAdapter = served ? liveAdapter : mockAdapter;
