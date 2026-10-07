@@ -1,5 +1,5 @@
 // Dados mock — copiados do <script data-dc-script> do protótipo.
-import type { Activity, Approval, Channel, InboxItem, OpsAdapter, OpsSnapshot, RadarGroup, Ticket } from "./adapter";
+import type { Activity, Approval, Channel, InboxItem, OpsAdapter, OpsSnapshot, Person, Playbook, RadarGroup, Ticket } from "./adapter";
 
 const INBOX: InboxItem[] = [
   { id: "i1", business: "inn", channel: "WhatsApp", from: "Marcos Teles", initials: "MT", receivedAt: "06:52", priority: "urgente", autonomyMode: "Rascunhar", summary: "Painel da Teles Log fora do ar (erro 502) desde 06:40", message: "Bom dia! O painel da Teles Log não abre desde cedo, dá erro 502. Temos operação às 9h!", suggestedReply: "Bom dia, Marcos. Já identifiquei: o certificado do balanceador expirou às 06:38. Estou renovando agora — volta em até 10 minutos e te aviso por aqui.", context: ["Cliente desde 2023, plano Enterprise", "Prefere WhatsApp e prazos claros", "Último incidente em 14 ago, resolvido em 22 min"] },
@@ -60,6 +60,25 @@ const AUTONOMY: Channel[] = [
   { id: "c6", name: "Telegram · família", icon: "send", business: "pes", mode: 1 },
 ];
 
+const PEOPLE: Person[] = [
+  { id: "p1", name: "Carla Mendes", initials: "CM", role: "Fornecedora · hospedagem (Innovare)", business: "inn", waitingHours: 26, lastTopic: "Reajuste de 12% no contrato", tone: "Cordial, negocia bem", channels: "WhatsApp, Email", pending: ["Responder a proposta até quinta"] },
+  { id: "p2", name: "Tiago Alves", initials: "TA", role: "Cliente VIP · Unic", business: "unic", waitingHours: 31, lastTopic: "Prazo da exportação em Excel", tone: "Direto, um pouco impaciente", channels: "Grupo VIP, Email", pending: ["Dar prazo da exportação em Excel"] },
+  { id: "p3", name: "Marcos Teles", initials: "MT", role: "Cliente · Teles Log (Innovare)", business: "inn", waitingHours: 2, lastTopic: "Painel fora do ar (502)", tone: "Direto, gosta de prazos claros", channels: "WhatsApp", pending: ["Confirmar que o painel voltou"] },
+  { id: "p4", name: "Juliana Prado", initials: "JP", role: "Cliente · Unic", business: "unic", waitingHours: 1, lastTopic: "Estorno de setembro", tone: "Formal", channels: "Email, Suporte", pending: ["Confirmar o estorno"] },
+  { id: "p5", name: "Ana", initials: "A", role: "Irmã", business: "pes", waitingHours: 1, lastTopic: "Almoço de domingo", tone: "Descontraído", channels: "Telegram, WhatsApp", pending: ["Confirmar presença no almoço"] },
+  { id: "p6", name: "Rafael Nunes", initials: "RN", role: "Contador · Innovare", business: "inn", waitingHours: 0, lastTopic: "NFs de setembro (enviadas)", tone: "Objetivo", channels: "Email", pending: [] },
+  { id: "p7", name: "Lucas Ferraz", initials: "LF", role: "Sócio · Innovare", business: "inn", waitingHours: 30, lastTopic: "Revisar contrato da Teles", tone: "Informal", channels: "Telegram", pending: ["Revisar o contrato da Teles até sexta"] },
+];
+
+const node = (kind: Playbook["nodes"][number]["kind"], text: string, elseText?: string) => (elseText ? { kind, text, elseText } : { kind, text });
+
+const PLAYBOOKS: Playbook[] = [
+  { id: "b1", name: "2ª via de boleto", business: "unic", trigger: "Mensagem no WhatsApp com “boleto” ou “2ª via”", runs: 142, enabled: true, lastRun: "há 18 min", nodes: [node("trigger", "Mensagem no WhatsApp contém “boleto” ou “2ª via”"), node("action", "Identificar o cliente pelo telefone no CRM da Unic"), node("cond", "Existe fatura em aberto?", "responder que está tudo em dia"), node("action", "Gerar a 2ª via no gateway e enviar o PDF"), node("end", "Registrar no ticket e na Atividade")] },
+  { id: "b2", name: "Incidente de cliente", business: "inn", trigger: "Cliente fala em “fora do ar”, “erro” ou “502”", runs: 9, enabled: true, lastRun: "hoje 06:44", nodes: [node("trigger", "Cliente menciona “fora do ar”, “erro” ou “502”"), node("action", "Checar monitoramento e logs do sistema do cliente"), node("cond", "Incidente confirmado?", "pedir print e mais detalhes"), node("action", "Propor correção → fila de Aprovações"), node("action", "Avisar o cliente com previsão de volta"), node("end", "Abrir ticket e acompanhar até resolver")] },
+  { id: "b3", name: "Lead no comercial", business: "unic", trigger: "Número desconhecido escreve no WhatsApp Comercial", runs: 37, enabled: true, lastRun: "ontem", nodes: [node("trigger", "Número desconhecido no WhatsApp Comercial"), node("action", "Qualificar: empresa, tamanho, necessidade"), node("cond", "Lead qualificado?", "enviar material e nutrir"), node("action", "Agendar demo na sua agenda"), node("end", "Criar oportunidade no CRM")] },
+  { id: "b4", name: "Fechamento do mês", business: "inn", trigger: "Último dia útil do mês, 17h", runs: 6, enabled: false, lastRun: "30 set", nodes: [node("trigger", "Último dia útil do mês, 17h"), node("action", "Exportar faturamento e despesas"), node("action", "Enviar planilha para o contador"), node("end", "Resumo no Telegram")] },
+];
+
 const SNAPSHOT: OpsSnapshot = {
   account: { plan: "Nous Portal · Plus", credits: "$14,20 de $22 em créditos", home: "~/.hermes", version: "v2.14" },
   businesses: [
@@ -90,6 +109,16 @@ const SNAPSHOT: OpsSnapshot = {
     ],
     responseTime: "1,2s",
   },
+  watches: ["cancelar", "concorrente", "reembolso", "urgente"],
+  support: { firstResponse: "1m 48s", resolvedByHermes: "78%", csat: "4,7", kbUsage: "64%" },
+  kb: [
+    { title: "Como exportar relatórios em Excel", source: "escrito a partir do #2033 · hoje", uses: 18 },
+    { title: "Por que meu relatório demora?", source: "escrito a partir do #2041 · hoje", uses: 3 },
+    { title: "Estorno de cobrança em duplicidade", source: "escrito a partir de 4 tickets · set", uses: 22 },
+    { title: "Trocar o e-mail de acesso", source: "escrito a partir do #2030 · ontem", uses: 7 },
+  ],
+  people: PEOPLE,
+  playbooks: PLAYBOOKS,
   costs: {
     month: "outubro",
     total: 62.4,
@@ -110,7 +139,7 @@ const hhmm = () => new Date().toTimeString().slice(0, 5);
 let paused = false;
 
 export const mockAdapter: OpsAdapter = {
-  load: async () => structuredClone(SNAPSHOT),
+  load: async () => ({ ...structuredClone(SNAPSHOT), paused }),
   getPaused: async () => paused,
   setPaused: async (p) => {
     paused = p;
@@ -128,5 +157,8 @@ export const mockAdapter: OpsAdapter = {
   deny: async () => {},
   archive: async () => {},
   undo: async () => {},
+  draftApproval: async (a) => ({ ...a, id: "ap" + Date.now(), createdAt: "agora" }),
+  setWatches: async () => {},
+  savePlaybook: async () => {},
   setAutonomy: async () => {},
 };

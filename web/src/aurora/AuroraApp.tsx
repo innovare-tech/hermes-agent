@@ -6,6 +6,10 @@ import { Approvals } from "./screens/Approvals";
 import { Chat } from "./screens/Chat";
 import { Home } from "./screens/Home";
 import { Inbox } from "./screens/Inbox";
+import { People } from "./screens/People";
+import { Playbooks } from "./screens/Playbooks";
+import { Radar } from "./screens/Radar";
+import { Support } from "./screens/Support";
 import { AGENT, OPS, Sidebar } from "./Sidebar";
 import { loadOps, loadSessions, refreshPaused, toast, useStore } from "./store";
 
@@ -46,9 +50,15 @@ export function AuroraApp() {
     document.documentElement.dataset.ht = theme;
   }, [dir, theme]);
 
+  // Carrega uma vez só: recarregar a cada navegação descartaria o que mudou na sessão (pausa, rascunhos…).
   useEffect(() => {
     loadOps().catch(() => toast("Não consegui carregar os dados do agente"));
     loadSessions().catch(() => toast("Não consegui carregar as sessões"));
+    const poll = setInterval(() => refreshPaused().catch(() => {}), 15000);
+    return () => clearInterval(poll);
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -56,11 +66,7 @@ export function AuroraApp() {
       }
     };
     window.addEventListener("keydown", onKey);
-    const poll = setInterval(() => refreshPaused().catch(() => {}), 15000);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      clearInterval(poll);
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [navigate]);
 
   return (
@@ -76,6 +82,10 @@ export function AuroraApp() {
               <Route path="/inbox" element={<Inbox />} />
               <Route path="/approvals" element={<Approvals />} />
               <Route path="/activity" element={<Activity />} />
+              <Route path="/radar" element={<Radar />} />
+              <Route path="/support" element={<Support />} />
+              <Route path="/people" element={<People />} />
+              <Route path="/playbooks" element={<Playbooks />} />
               <Route path="/chat/:sid?" element={<ChatRoute />} />
               <Route path="*" element={<Placeholder />} />
             </Routes>

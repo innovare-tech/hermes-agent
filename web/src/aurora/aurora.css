@@ -137,3 +137,15 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-need:hover{background:var(--panel2)}
 .au-undo{display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;border:1px solid var(--line2);background:transparent;color:var(--fg2);font-size:12px;cursor:pointer}
 .au-undo:hover{color:var(--fg);border-color:var(--acc)}
+
+/* ---- radar / suporte / pessoas / playbooks ---- */
+.au-mt2{margin-top:2px}
+.au-watch{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid var(--line2);background:var(--panel2);color:var(--fg);font-family:var(--fm);font-size:11.5px;cursor:pointer;animation:hpop .4s cubic-bezier(.3,1.4,.5,1) both}
+.au-watch:hover{border-color:var(--err)}
+.au-listrow{border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer;text-align:left;transition:background .2s;animation:hblurin .5s both}
+.au-listrow:hover,.au-listrow[aria-selected="true"]{background:var(--panel2)}
+.au-wait{margin-left:auto;display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;border:1px solid var(--line2);background:transparent;color:var(--fg2);font-size:12.5px;font-weight:500;cursor:pointer;transition:all .2s}
+.au-wait[aria-pressed="true"]{border-color:var(--err);background:var(--err);color:#fff}
+.au-switch{margin-left:auto;width:34px;height:20px;border-radius:999px;border:0;padding:3px;background:var(--line2);cursor:pointer;display:flex;flex:none;transition:background .25s}
+.au-switch>span{width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .3s cubic-bezier(.3,1.5,.5,1)}
+.au-switch[aria-checked="true"]{background:var(--acc)}.au-switch[aria-checked="true"]>span{transform:translateX(14px)}
