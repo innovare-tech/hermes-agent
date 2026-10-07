@@ -232,21 +232,47 @@ class PlaybookBody(BaseModel):
     trigger: str
     nodes: list[dict[str, Any]] = []
     enabled: bool = True
+    schedule: str = ""  # vazio = só manual; senão sintaxe do cron ("every day 9am", "0 9 * * *", "2h")
+    deliver: str = "local"  # "local" = só registra; ou "plataforma:chat_id"
+
+
+def _playbooks():
+    from ops_center import playbooks
+
+    return playbooks
+
+
+def _gateway_running() -> bool:
+    from gateway.control_socket import identify_gateway
+    from hermes_constants import get_hermes_home
+
+    return identify_gateway(get_hermes_home(), timeout=2.0) is not None
 
 
 @router.get("/playbooks")
 async def list_playbooks():
-    return await _run(_store().list_playbooks)
+    return await _run(_playbooks().list_all)
 
 
 @router.put("/playbooks")
 async def save_playbook(body: PlaybookBody):
-    return await _run(_store().save_playbook, body.model_dump())
+    data = body.model_dump(exclude={"schedule", "deliver"})
+    return await _run(_playbooks().save, data, body.schedule, body.deliver)
+
+
+@router.post("/playbooks/{pid}/run")
+async def run_playbook(pid: str):
+    from agent.estop import is_engaged
+
+    if is_engaged():
+        raise HTTPException(409, "Hermes está pausado — nada roda até retomar")
+    result = await _run(_playbooks().run_now, pid)
+    return {**result, "gateway_running": await asyncio.to_thread(_gateway_running)}
 
 
 @router.delete("/playbooks/{pid}")
 async def delete_playbook(pid: str):
-    await _run(_store().delete_playbook, pid)
+    await _run(_playbooks().delete, pid)
     return {"ok": True}
 
 

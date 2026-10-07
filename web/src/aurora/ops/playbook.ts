@@ -2,7 +2,7 @@ import type { BizId, Playbook } from "../adapter";
 
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
-/** "quando X, faça Y" → fluxo Gatilho → contexto → confiança (não → Aprovações) → Y → Atividade. */
+/** "quando X, faça Y" → fluxo Gatilho → contexto → Y → Atividade. */
 export function parsePlaybook(text: string, business: BizId, id = "b" + Date.now()): Playbook | null {
   const d = text.trim();
   if (!d) return null;
@@ -17,10 +17,13 @@ export function parsePlaybook(text: string, business: BizId, id = "b" + Date.now
     runs: 0,
     enabled: true,
     lastRun: "nunca",
+    schedule: "",
+    deliver: "local",
+    nextRun: "",
+    lastError: "",
     nodes: [
       { kind: "trigger", text: trigger },
       { kind: "action", text: "Entender o contexto (memória, histórico e pessoa)" },
-      { kind: "cond", text: "Tenho confiança suficiente para agir?", elseText: "mandar rascunho para Aprovações" },
       { kind: "action", text: action },
       { kind: "end", text: "Registrar na Atividade" },
     ],

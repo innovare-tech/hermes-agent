@@ -1,0 +1,144 @@
+import { useState } from "react";
+import type { Playbook, PlaybookNode } from "../adapter";
+import { spot } from "../Chrome";
+import { Icon } from "../Icon";
+import { runPlaybook, savePlaybook, useStore } from "../store";
+
+const PRESETS: { label: string; value: string }[] = [
+  { label: "Só manual", value: "" },
+  { label: "Dias úteis 9h", value: "every weekday 9am" },
+  { label: "Todo dia 18h", value: "every day 6pm" },
+  { label: "Toda segunda 9h", value: "every monday 9am" },
+  { label: "A cada hora", value: "every 1h" },
+];
+
+/** Configuração do playbook: nome, quando roda (cron do Hermes), para onde vai o resultado e os passos. */
+export function PlaybookSettings({ p }: { p: Playbook }) {
+  const channels = useStore((s) => s.autonomy);
+  const businesses = useStore((s) => s.businesses);
+  const [d, setD] = useState(p);
+  const set = (patch: Partial<Playbook>) => setD({ ...d, ...patch });
+  const setNode = (i: number, patch: Partial<PlaybookNode>) => set({ nodes: d.nodes.map((n, j) => (j === i ? { ...n, ...patch } : n)) });
+  const dirty = JSON.stringify(d) !== JSON.stringify(p);
+
+  const save = () => {
+    const { id, name, business, trigger, enabled, nodes, schedule, deliver } = d;
+    const first = nodes[0]?.kind === "trigger" ? [{ ...nodes[0], text: trigger }, ...nodes.slice(1)] : nodes;
+    return savePlaybook({ id, name: name.trim() || p.name, business, trigger, enabled, nodes: first, schedule: schedule.trim(), deliver }, "Playbook salvo");
+  };
+
+  return (
+    <form
+      className="au-card"
+      onMouseMove={spot}
+      onSubmit={(e) => {
+        e.preventDefault();
+        save();
+      }}
+      style={{ padding: 22, display: "flex", flexDirection: "column", gap: 14 }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span className="au-display" style={{ fontSize: 20 }}>
+          Configuração
+        </span>
+        <span style={{ marginLeft: "auto", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>
+          {p.schedule ? (p.enabled ? (p.nextRun ? `próxima ${p.nextRun}` : "agendado") : "desligado") : "só manual"} · {p.runs} execuções
+        </span>
+      </div>
+      {p.lastError && (
+        <p role="alert" style={{ margin: 0, fontSize: 12.5, color: "var(--err)", lineHeight: 1.5 }}>
+          Última execução falhou: {p.lastError}
+        </p>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
+        <label className="au-field">
+          <span className="au-label">Nome</span>
+          <input value={d.name} onChange={(e) => set({ name: e.target.value })} />
+        </label>
+        <label className="au-field">
+          <span className="au-label">Negócio</span>
+          <select value={d.business} onChange={(e) => set({ business: e.target.value })}>
+            <option value="">sem negócio</option>
+            {businesses.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <label className="au-field">
+        <span className="au-label">Quando rodar</span>
+        <input value={d.schedule} onChange={(e) => set({ schedule: e.target.value })} placeholder="vazio = só quando você clicar em Executar agora" spellCheck={false} />
+      </label>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: -6 }}>
+        {PRESETS.map((x) => (
+          <button key={x.label} type="button" className="au-chip" aria-pressed={d.schedule === x.value} onClick={() => set({ schedule: x.value })} style={{ cursor: "pointer", background: d.schedule === x.value ? "var(--accSoft)" : "transparent" }}>
+            {x.label}
+          </button>
+        ))}
+      </div>
+      <p style={{ margin: "-4px 0 0", fontSize: 11.5, color: "var(--fg3)", lineHeight: 1.5 }}>
+        Aceita <code>every weekday 9am</code>, <code>every 2h</code>, <code>30m</code> ou cron (<code>0 9 * * 1-5</code>). Quem executa é o gateway — ele precisa estar ligado.
+      </p>
+
+      <label className="au-field">
+        <span className="au-label">Enviar o resultado para</span>
+        <select value={d.deliver} onChange={(e) => set({ deliver: e.target.value })}>
+          <option value="local">Só registrar no Hermes</option>
+          {channels.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} · {c.platform}
+            </option>
+          ))}
+          {d.deliver !== "local" && !channels.some((c) => c.id === d.deliver) && <option value={d.deliver}>{d.deliver}</option>}
+        </select>
+      </label>
+
+      <label className="au-field">
+        <span className="au-label">Gatilho</span>
+        <input value={d.trigger} onChange={(e) => set({ trigger: e.target.value })} />
+      </label>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <span className="au-label">Passos</span>
+        {d.nodes.map((n, i) =>
+          n.kind === "trigger" ? null : (
+            <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)", width: 18 }}>{i}</span>
+              <div className="au-field" style={{ flex: 1 }}>
+                <input aria-label={`Passo ${i}`} value={n.text} onChange={(e) => setNode(i, { text: e.target.value })} />
+              </div>
+              {n.kind === "cond" && (
+                <div className="au-field" style={{ flex: 1 }}>
+                  <input aria-label={`Se não, no passo ${i}`} value={n.elseText ?? ""} onChange={(e) => setNode(i, { elseText: e.target.value })} placeholder="se não…" />
+                </div>
+              )}
+              <button type="button" className="au-mini danger" aria-label={`Remover passo ${i}`} onClick={() => set({ nodes: d.nodes.filter((_, j) => j !== i) })}>
+                <Icon name="trash-2" size={12} />
+              </button>
+            </div>
+          ),
+        )}
+        <div style={{ display: "flex", gap: 6 }}>
+          <button type="button" className="au-outline" onClick={() => set({ nodes: [...d.nodes, { kind: "action", text: "" }] })}>
+            + Ação
+          </button>
+          <button type="button" className="au-outline" onClick={() => set({ nodes: [...d.nodes, { kind: "cond", text: "", elseText: "" }] })}>
+            + Condição
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button type="submit" className="au-primary" style={{ opacity: dirty ? 1 : 0.5 }}>
+          Salvar
+        </button>
+        <button type="button" className="au-outline" onClick={() => runPlaybook(p)} title={dirty ? "Salve antes para executar a versão nova" : undefined}>
+          <Icon name="play" size={13} /> Executar agora
+        </button>
+      </div>
+    </form>
+  );
+}

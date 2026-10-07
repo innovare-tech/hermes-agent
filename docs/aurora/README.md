@@ -33,7 +33,12 @@ envios até você retomar.
 - **Configurações → Negócios**: nome e cor. O seletor da barra lateral filtra todas as telas.
 - **Aprovações → Autonomia**: modo e negócio de cada canal.
 - **Radar**: palavras vigiadas. Uma mensagem com uma delas entra como *urgente*.
-- **Pessoas** e **Playbooks**: cadastro manual.
+- **Pessoas**: cadastro manual.
+- **Playbooks**: descreva "quando X, faça Y", ajuste os passos e escolha **Quando rodar**
+  (`every weekday 9am`, `every 2h`, `0 9 * * 1-5`; vazio = só manual) e **para onde vai o
+  resultado** (só registrar ou um canal). Cada playbook com horário vira um job do `hermes cron`
+  (aparece também em *Agendamentos*); quem executa é o gateway, então ele precisa estar ligado.
+  **Executar agora** passa pelo kill switch e fica na Atividade.
 - **Memória**: o que o agente sabe (`MEMORY.md` e `USER.md`), com edição direta.
 - **Modelo**: seletor no rodapé da Conversa.
 

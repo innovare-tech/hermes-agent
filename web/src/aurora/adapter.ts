@@ -109,7 +109,24 @@ export type Person = {
 };
 
 export type PlaybookNode = { kind: "trigger" | "action" | "cond" | "end"; text: string; elseText?: string };
-export type Playbook = { id: string; name: string; business: BizId; trigger: string; runs: number; enabled: boolean; lastRun: string; nodes: PlaybookNode[] };
+export type Playbook = {
+  id: string;
+  name: string;
+  business: BizId;
+  trigger: string;
+  runs: number;
+  enabled: boolean;
+  lastRun: string;
+  nodes: PlaybookNode[];
+  /** Sintaxe do cron do Hermes ("every day 9am", "0 9 * * 1-5", "2h"); vazio = só manual. */
+  schedule: string;
+  /** "local" = só registra; ou "plataforma:chat_id". */
+  deliver: string;
+  nextRun: string;
+  lastError: string;
+};
+
+export type PlaybookDraft = Omit<Playbook, "id" | "runs" | "lastRun" | "nextRun" | "lastError"> & { id?: string };
 
 export type Health = {
   online: boolean;
@@ -163,7 +180,7 @@ export type OnBehalf = {
   /** Texto do toast quando o agente está pausado. */
   blocked?: string;
   /** O que de fato executar. */
-  target: { kind: "reply"; id: string; text: string } | { kind: "approval"; id: string } | { kind: "ticket"; n: number; op: "card" | "reply" };
+  target: { kind: "reply"; id: string; text: string } | { kind: "approval"; id: string } | { kind: "ticket"; n: number; op: "card" | "reply" } | { kind: "playbook"; id: string };
 };
 
 export interface OpsAdapter {
@@ -187,7 +204,7 @@ export interface OpsAdapter {
   setWatches(words: string[]): Promise<void>;
   savePerson(p: Omit<Person, "id" | "initials" | "waitingHours"> & { id?: string }): Promise<Person>;
   deletePerson(id: string): Promise<void>;
-  savePlaybook(p: Omit<Playbook, "id" | "runs" | "lastRun"> & { id?: string }): Promise<Playbook>;
+  savePlaybook(p: PlaybookDraft): Promise<Playbook>;
   deletePlaybook(id: string): Promise<void>;
 }
 

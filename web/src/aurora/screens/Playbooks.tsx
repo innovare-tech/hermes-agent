@@ -3,6 +3,7 @@ import { BizTag, PageHeader, spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { parsePlaybook } from "../ops/playbook";
 import { PlaybookFlow } from "../ops/PlaybookFlow";
+import { PlaybookSettings } from "../ops/PlaybookSettings";
 import { deletePlaybook, inBiz, savePlaybook, useStore } from "../store";
 
 export function Playbooks() {
@@ -73,6 +74,13 @@ export function Playbooks() {
                     </button>
                   </div>
                   <span style={{ fontSize: 12.5, color: "var(--fg2)", lineHeight: 1.45 }}>{p.trigger}</span>
+                  {p.schedule && (
+                    <span style={{ display: "flex", gap: 6, alignItems: "center", fontFamily: "var(--fm)", fontSize: 10.5, color: p.lastError ? "var(--err)" : "var(--acc)" }}>
+                      <Icon name="calendar-clock" size={11} />
+                      {p.schedule}
+                      {p.enabled && p.nextRun ? ` · próxima ${p.nextRun}` : ""}
+                    </span>
+                  )}
                   <span style={{ display: "flex", gap: 10, alignItems: "center", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>
                     <BizTag id={p.business} />
                     {p.runs} execuções
@@ -85,15 +93,11 @@ export function Playbooks() {
                 Nenhum playbook ainda. Descreva acima “quando X, faça Y” e o Hermes monta o fluxo.
               </p>
             )}
-            {list.length > 0 && (
-              <p style={{ margin: "6px 0 0", fontSize: 12, lineHeight: 1.55, color: "var(--fg3)" }}>
-                Os fluxos ficam salvos; a execução automática pelos gateways chega numa próxima etapa.
-              </p>
-            )}
           </div>
           {sel && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
               <PlaybookFlow key={sel.id} p={sel} />
+              <PlaybookSettings key={sel.id + JSON.stringify(sel)} p={sel} />
               <button className="au-outline danger" onClick={() => window.confirm(`Remover o playbook “${sel.name}”?`) && deletePlaybook(sel.id)} style={{ alignSelf: "flex-end" }}>
                 Remover playbook
               </button>
