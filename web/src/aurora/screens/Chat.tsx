@@ -268,16 +268,18 @@ function AgentBubble({ m, onSend, onCron, onAnswer }: { m: AgentMessage; onSend:
         )}
         {m.live && !running && !m.text && m.approval?.status !== "pending" && (
           <div role="status" aria-label="Pensando" style={{ display: "flex", gap: 5, padding: "6px 0" }}>
-            {[0, 0.15, 0.3].map((d) => (
-              <span key={d} style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--acc)", animation: `hwave 1s ${d}s ease-in-out infinite` }} />
+            {[0, 1, 2].map((d) => (
+              <span key={d} className="au-live-dot" />
             ))}
           </div>
         )}
         {/* ponytail: parágrafos com quebras preservadas; markdown completo quando o Markdown ganhar estilos Aurora */}
         {paras.map((p, i) => (
-          <p key={i} style={{ margin: 0, fontSize: 15, lineHeight: 1.7, color: "var(--fg)", textWrap: "pretty", whiteSpace: "pre-wrap" }}>{p}</p>
+          <p key={i} style={{ margin: 0, fontSize: 15, lineHeight: 1.7, color: "var(--fg)", textWrap: "pretty", whiteSpace: "pre-wrap" }}>
+            {p}
+            {i === paras.length - 1 && m.live && !running && m.approval?.status !== "pending" && <span className="au-caret" aria-hidden="true" />}
+          </p>
         ))}
-        {m.live && !running && m.approval?.status !== "pending" && <span style={{ width: 8, height: 17, background: "var(--acc)", borderRadius: 2, animation: "hblink 1s step-end infinite" }} />}
         {m.blocks?.map((b, i) => <BlockView key={i} b={b} onCron={onCron} />)}
         {m.meta && (
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>

@@ -43,7 +43,7 @@ export function Logs() {
           ))}
           {!paused && (
             <div aria-hidden="true" style={{ padding: "2px 14px", color: "var(--acc)" }}>
-              <span style={{ animation: "hblink 1s step-end infinite" }}>▍</span>
+              <span className="au-caret" style={{ width: 6, height: 13 }} />
             </div>
           )}
         </div>
