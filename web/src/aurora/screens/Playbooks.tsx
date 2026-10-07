@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { BizTag, PageHeader, spot } from "../Chrome";
+import { BizTag, NotConnectedPage, PageHeader, spot, useNotConnected } from "../Chrome";
 import { Icon } from "../Icon";
 import { parsePlaybook } from "../ops/playbook";
 import { PlaybookFlow } from "../ops/PlaybookFlow";
 import { inBiz, savePlaybook, useStore } from "../store";
 
 export function Playbooks() {
+  const nc = useNotConnected();
   const s = useStore((x) => x);
   const [draft, setDraft] = useState("");
   const [selId, setSelId] = useState("b1");
@@ -20,6 +21,7 @@ export function Playbooks() {
     }
   };
 
+  if (nc) return <NotConnectedPage title="Playbooks" sub="Quando acontecer X, faça Y." icon="workflow" what="Playbooks ainda não têm backend." needs="Criar e executar fluxos “quando X, faça Y” exige salvar e disparar automações (skills + agendamentos e gatilhos do gateway), o que ainda não existe." />;
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page">

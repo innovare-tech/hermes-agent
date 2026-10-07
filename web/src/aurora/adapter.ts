@@ -148,6 +148,8 @@ export type OpsSnapshot = {
   people: Person[];
   playbooks: Playbook[];
   paused: boolean;
+  /** true = as telas de Operação mostram dados de exemplo (mock), não do agente. */
+  demo: boolean;
 };
 
 /** Ação que sai em nome do usuário. Só é executada via `actOnBehalf` (kill switch + Atividade). */
@@ -166,7 +168,8 @@ export type OnBehalf = {
 };
 
 export interface OpsAdapter {
-  load(): Promise<OpsSnapshot>;
+  /** `demo` = preencher as telas sem backend com os dados do protótipo. */
+  load(opts?: { demo: boolean }): Promise<OpsSnapshot>;
   /** Estado atual do kill switch (pode mudar por fora, ex.: `hermes pause` no terminal). */
   getPaused(): Promise<boolean>;
   /** Kill switch global: o gateway não envia nem executa nada enquanto `true`. */

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import type { Priority } from "../adapter";
-import { BizTag, CHANNEL_ICON } from "../Chrome";
+import { BizTag, CHANNEL_ICON, NotConnectedPage, useNotConnected } from "../Chrome";
 import { Icon } from "../Icon";
 import { INBOX_TABS, InboxList, PRIORITY } from "../ops/InboxList";
 import { archiveInbox, inBiz, keepInbox, replyInbox, useStore } from "../store";
 
 export function Inbox() {
+  const nc = useNotConnected();
   const s = useStore((x) => x);
   const [tab, setTab] = useState<Priority | null>(null);
   // "Precisa de você" do Painel abre direto no item (?sel=id).
@@ -43,6 +44,7 @@ export function Inbox() {
   const p = sel ? PRIORITY[sel.priority] : null;
   const actionable = !!sel && !sel.sentAt && !!sel.suggestedReply;
 
+  if (nc) return <NotConnectedPage title="Caixa de entrada" sub="Uma caixa só para WhatsApp, Telegram, e-mail, grupos e suporte." icon="inbox" what="A Caixa de entrada unificada precisa de um backend de triagem." needs="O Hermes ainda não junta as mensagens recebidas nos gateways com prioridade e resposta sugerida. Por enquanto, as conversas que chegam ficam em Sessões." />;
   return (
     <div style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(260px,340px) minmax(0,1fr)", minHeight: 0, animation: "hblurin .6s both" }}>
       <div style={{ display: "flex", flexDirection: "column", minHeight: 0, borderRight: "1px solid var(--line)" }}>

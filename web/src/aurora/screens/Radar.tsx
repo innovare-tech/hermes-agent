@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { PageHeader, spot } from "../Chrome";
+import { NotConnectedPage, PageHeader, spot, useNotConnected } from "../Chrome";
 import { Icon } from "../Icon";
 import { RadarCard } from "../ops/RadarCard";
 import { draftRadarAlert, draftRadarGroup, inBiz, setWatches, toast, useStore } from "../store";
 
 export function Radar() {
+  const nc = useNotConnected();
   const s = useStore((x) => x);
   const [word, setWord] = useState("");
   const groups = s.radar.filter(inBiz(s));
@@ -19,6 +20,7 @@ export function Radar() {
     }
   };
 
+  if (nc) return <NotConnectedPage title="Radar de grupos" sub="O que está acontecendo em cada grupo, sem você precisar ler tudo." icon="radar" what="O Radar precisa de resumos periódicos dos grupos." needs="Decisões, menções, perguntas sem resposta, clima por hora e palavras vigiadas ainda não são gerados pelo Hermes." />;
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page">

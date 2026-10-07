@@ -15,11 +15,12 @@ describe("healthFrom", () => {
     expect(healthFrom(st)).toMatchObject({
       online: true,
       items: [
+        { name: "Gateway de mensagens", status: "ok", value: "ativo" },
         { name: "Telegram", status: "ok", value: "conectado" },
         { name: "Whatsapp", status: "warn", value: "pairing" },
         { name: "Discord", status: "err", value: "erro" },
       ],
     });
-    expect(healthFrom({ gateway_running: false, gateway_platforms: {} } as unknown as StatusResponse).online).toBe(false);
+    expect(healthFrom({ gateway_running: false, gateway_platforms: {} } as unknown as StatusResponse).items).toEqual([{ name: "Gateway de mensagens", status: "warn", value: "parado" }]);
   });
 });

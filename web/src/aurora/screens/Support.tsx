@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { BizTag, PageHeader, spot } from "../Chrome";
+import { BizTag, NotConnectedPage, PageHeader, spot, useNotConnected } from "../Chrome";
 import { Icon } from "../Icon";
 import { TICKET_STATUS, TicketDetail } from "../ops/TicketDetail";
 import { inBiz, ticketCard, ticketReply, useStore } from "../store";
 
 export function Support() {
+  const nc = useNotConnected();
   const s = useStore((x) => x);
   const [selN, setSelN] = useState(2041);
   const tickets = s.tickets.filter(inBiz(s));
@@ -15,6 +16,7 @@ export function Support() {
     { v: s.support.resolvedByHermes, l: "resolvidos pelo Hermes", c: "var(--ok)" },
     { v: s.support.csat, l: "satisfação (CSAT)", c: "var(--acc)" },
   ];
+  if (nc) return <NotConnectedPage title="Suporte" sub="Tickets de todos os seus sistemas, cruzados com os logs." icon="life-buoy" what="O Suporte precisa de uma integração com o seu sistema de tickets." needs="Para listar tickets, cruzar com os logs e propor correções, o Hermes precisa de um conector (Linear, Zendesk…) que ainda não existe." />;
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page">

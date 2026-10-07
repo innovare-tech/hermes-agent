@@ -18,7 +18,9 @@ export function healthFrom(st: StatusResponse): Health {
     status: OK.has(p.state) ? ("ok" as const) : p.error_code ? ("err" as const) : ("warn" as const),
     value: p.error_message ? "erro" : p.state === "connected" ? "conectado" : p.state,
   }));
-  return { online: st.gateway_running, uptime: st.gateway_running ? "gateway ativo" : "gateway parado", items, responseTime: "—" };
+  // O agente responde (este endpoint respondeu); o gateway de mensagens é um item à parte.
+  const gateway = { name: "Gateway de mensagens", status: st.gateway_running ? ("ok" as const) : ("warn" as const), value: st.gateway_running ? "ativo" : "parado" };
+  return { online: true, uptime: st.version ? "v" + st.version : "", items: [gateway, ...items], responseTime: "—" };
 }
 
 async function costsThisMonth(): Promise<Costs> {
@@ -35,9 +37,29 @@ async function costsThisMonth(): Promise<Costs> {
 
 export const liveAdapter: OpsAdapter = {
   ...mockAdapter,
-  async load() {
+  async load(opts) {
     const [snap, estop, status, costs] = await Promise.all([mockAdapter.load(), getEstop(), api.getStatus(), costsThisMonth()]);
-    return { ...snap, paused: estop.paused, health: healthFrom(status), costs };
+    const real = { paused: estop.paused, health: healthFrom(status), costs, demo: !!opts?.demo };
+    if (opts?.demo) return { ...snap, ...real };
+    // Sem backend para Operação: telas vazias de verdade (cada uma explica o que falta).
+    return {
+      ...snap,
+      ...real,
+      account: { ...snap.account, plan: "Hermes local", credits: "conectado ao seu agente", version: status.version ? "v" + status.version : snap.account.version },
+      businesses: [],
+      inbox: [],
+      approvals: [],
+      radar: [],
+      tickets: [],
+      activity: [],
+      autonomy: [],
+      briefing: [],
+      last24h: { saved: "—", autoReplies: 0 },
+      watches: [],
+      kb: [],
+      people: [],
+      playbooks: [],
+    };
   },
   async getPaused() {
     return (await getEstop()).paused;

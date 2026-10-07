@@ -20,7 +20,7 @@ export type State = Omit<OpsSnapshot, "account"> & {
 
 const PREFS_KEY = "hermes.aurora";
 
-function readPrefs(): Partial<Pick<State, "dir" | "theme">> {
+function readPrefs(): Partial<Pick<State, "dir" | "theme" | "demo">> {
   try {
     return JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}");
   } catch {
@@ -31,6 +31,7 @@ function readPrefs(): Partial<Pick<State, "dir" | "theme">> {
 let state: State = {
   dir: "aurora",
   theme: "dark",
+  demo: false,
   ...readPrefs(),
   biz: "all",
   toast: null,
@@ -79,7 +80,7 @@ export const inBiz = (s: State) => (x: { business: string }) =>
   s.biz === "all" || x.business === s.biz || x.business === "all";
 
 export async function loadOps() {
-  setState(await adapter.load());
+  setState(await adapter.load({ demo: state.demo }));
 }
 
 export async function loadSessions() {
@@ -94,10 +95,10 @@ export function toast(text: string) {
   toastTimer = setTimeout(() => setState({ toast: null }), 3200);
 }
 
-export function setPrefs(p: Partial<Pick<State, "dir" | "theme">>) {
+export function setPrefs(p: Partial<Pick<State, "dir" | "theme" | "demo">>) {
   setState(p);
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ dir: state.dir, theme: state.theme }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ dir: state.dir, theme: state.theme, demo: state.demo }));
   } catch {
     // preferência só deste navegador; sem storage segue com o padrão
   }
@@ -271,4 +272,11 @@ export async function savePlaybook(p: Playbook, done?: string) {
   setState((s) => ({ playbooks: s.playbooks.some((x) => x.id === p.id) ? s.playbooks.map((x) => (x.id === p.id ? p : x)) : [p, ...s.playbooks] }));
   if (done) toast(done);
   return true;
+}
+
+/** Liga/desliga os dados de exemplo nas telas sem backend (só faz diferença com o agente real). */
+export async function setDemo(demo: boolean) {
+  setPrefs({ demo });
+  await loadOps().catch(() => toast("Não consegui recarregar os dados"));
+  toast(demo ? "Mostrando dados de exemplo" : "Mostrando só dados reais");
 }

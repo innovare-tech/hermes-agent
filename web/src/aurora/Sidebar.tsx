@@ -43,6 +43,7 @@ export function opsCounts(s: State): Record<string, number> {
 export function BusinessSwitcher() {
   const biz = useStore((s) => s.biz);
   const businesses = useStore((s) => s.businesses);
+  if (businesses.length === 0) return null;
   const chips = [{ id: "all", name: "Todos", color: "var(--fg3)" }, ...businesses];
   return (
     <div role="radiogroup" aria-label="Negócio" style={{ display: "flex", gap: 3, margin: "0 12px 10px", padding: 3, borderRadius: 999, background: "var(--panel2)" }}>

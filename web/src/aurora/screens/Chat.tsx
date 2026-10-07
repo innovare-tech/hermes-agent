@@ -115,6 +115,17 @@ export function Chat() {
     if (choice === "deny") toast("Negado — o Hermes não vai fazer isso");
   }
 
+  async function pickModel(provider: string, model: string) {
+    if (model === info.model) return;
+    try {
+      await chat.setModel(sid, provider, model);
+    } catch (e) {
+      return toast(e instanceof Error ? e.message : "Não consegui trocar o modelo");
+    }
+    setInfo((i) => ({ ...i, model }));
+    toast(sid ? "Modelo desta conversa: " + model : "Modelo padrão: " + model);
+  }
+
   async function stop() {
     if (sid) await chat.interrupt(sid).catch(() => {});
     updateLive(interrupted);
@@ -199,7 +210,7 @@ export function Chat() {
           </div>
         </div>
 
-        <Composer running={running} model={info.model || "sem modelo"} commands={commands} onSend={send} onStop={stop} onModel={() => navigate("/settings")} />
+        <Composer running={running} model={info.model || "sem modelo"} commands={commands} onSend={send} onStop={stop} onPickModel={pickModel} />
       </div>
       {insp && <ContextPanel info={info} onCompress={() => send("/compress")} />}
     </div>

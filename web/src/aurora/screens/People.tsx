@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { PageHeader } from "../Chrome";
+import { NotConnectedPage, PageHeader, useNotConnected } from "../Chrome";
 import { Icon } from "../Icon";
 import { PersonCard } from "../ops/PersonCard";
 import { draftToPerson, inBiz, useStore } from "../store";
 
 export function People() {
+  const nc = useNotConnected();
   const s = useStore((x) => x);
   const navigate = useNavigate();
   const [waitOnly, setWaitOnly] = useState(false);
@@ -14,6 +15,7 @@ export function People() {
   const list = all.filter((p) => !waitOnly || p.waitingHours > 24);
   const sel = list.find((p) => p.id === selId) ?? list[0];
 
+  if (nc) return <NotConnectedPage title="Pessoas" sub="Todo mundo com quem você fala, com o contexto de cada um." icon="users" what="Pessoas precisa de perfis de contato." needs="O Hermes guarda memória sobre você (USER.md), mas ainda não mantém uma ficha por contato com tom, canais e pendências." />;
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page">

@@ -171,4 +171,6 @@ export const mockChat: ChatAdapter = {
   async slashCommands() {
     return SLASH;
   },
+
+  async setModel() {},
 };

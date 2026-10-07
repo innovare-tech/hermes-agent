@@ -172,3 +172,5 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-step-label{font-family:var(--fm);font-size:11px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase}
 .au-ob-next{padding:12px 20px;font-size:14px;transition:transform .15s}
 .au-ob-next:hover{transform:translateY(-1px)}.au-ob-next:active{transform:scale(.97)}
+
+.au-picker{position:absolute;left:0;bottom:calc(100% + 10px);width:min(420px,100%);border:1px solid var(--line2);border-radius:var(--r);background:var(--panel);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);box-shadow:var(--shadow);padding:4px;display:flex;flex-direction:column;animation:hin .2s ease both;z-index:6}

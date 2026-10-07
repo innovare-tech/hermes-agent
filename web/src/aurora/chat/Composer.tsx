@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
 import { Icon } from "../Icon";
+import { ModelPicker } from "./ModelPicker";
 import type { SlashCommand } from "./types";
 
 type Props = {
@@ -8,11 +9,12 @@ type Props = {
   commands: SlashCommand[];
   onSend: (text: string) => void;
   onStop: () => void;
-  onModel: () => void;
+  onPickModel: (provider: string, model: string) => void;
 };
 
-export function Composer({ running, model, commands, onSend, onStop, onModel }: Props) {
+export function Composer({ running, model, commands, onSend, onStop, onPickModel }: Props) {
   const [draft, setDraft] = useState("");
+  const [picking, setPicking] = useState(false);
   const [pick, setPick] = useState(0);
   const hasDraft = draft.trim() !== "";
   const slash = draft.startsWith("/") && !draft.includes(" ") ? commands.filter((c) => c.cmd.startsWith(draft)) : [];
@@ -40,6 +42,16 @@ export function Composer({ running, model, commands, onSend, onStop, onModel }: 
   return (
     <div style={{ padding: "0 26px 22px" }}>
       <div style={{ maxWidth: 780, margin: "0 auto", position: "relative" }}>
+        {picking && (
+          <ModelPicker
+            current={model}
+            onClose={() => setPicking(false)}
+            onPick={(p, m) => {
+              setPicking(false);
+              onPickModel(p, m);
+            }}
+          />
+        )}
         {slash.length > 0 && (
           <div
             role="listbox"
@@ -85,7 +97,7 @@ export function Composer({ running, model, commands, onSend, onStop, onModel }: 
             <button className="au-tool" title="Voz" aria-label="Voz">
               <Icon name="mic" size={15} />
             </button>
-            <button className="au-model" onClick={onModel}>
+            <button className="au-model" aria-haspopup="dialog" aria-expanded={picking} onClick={() => setPicking(!picking)}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--acc)" }} />
               {model}
               <Icon name="chevron-down" size={11} color="var(--fg3)" />

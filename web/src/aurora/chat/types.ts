@@ -77,4 +77,6 @@ export interface ChatAdapter {
   send(sessionId: string, text: string, on: (e: ChatEvent) => void): Promise<void>;
   interrupt(sessionId: string): Promise<void>;
   slashCommands(): Promise<SlashCommand[]>;
+  /** Troca o modelo da sessão viva; sem sessão (conversa nova), vale como padrão do agente. */
+  setModel(sessionId: string | null, provider: string, model: string): Promise<void>;
 }

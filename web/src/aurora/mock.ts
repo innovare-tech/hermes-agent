@@ -131,6 +131,7 @@ const SNAPSHOT: OpsSnapshot = {
     ],
   },
   paused: false,
+  demo: true,
 };
 
 const hhmm = () => new Date().toTimeString().slice(0, 5);
@@ -139,7 +140,7 @@ const hhmm = () => new Date().toTimeString().slice(0, 5);
 let paused = false;
 
 export const mockAdapter: OpsAdapter = {
-  load: async () => ({ ...structuredClone(SNAPSHOT), paused }),
+  load: async () => ({ ...structuredClone(SNAPSHOT), paused, demo: true }),
   getPaused: async () => paused,
   setPaused: async (p) => {
     paused = p;

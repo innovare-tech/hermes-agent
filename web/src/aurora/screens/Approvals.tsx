@@ -1,13 +1,15 @@
-import { PageHeader, spot } from "../Chrome";
+import { NotConnectedPage, PageHeader, spot, useNotConnected } from "../Chrome";
 import { Icon } from "../Icon";
 import { ApprovalCard } from "../ops/ApprovalCard";
 import { AutonomySegment } from "../ops/AutonomySegment";
 import { approve, deny, inBiz, setAutonomy, useStore } from "../store";
 
 export function Approvals() {
+  const nc = useNotConnected();
   const s = useStore((x) => x);
   const f = inBiz(s);
   const list = s.approvals.filter(f);
+  if (nc) return <NotConnectedPage title="Aprovações" sub="O que o Hermes quer fazer e precisa do seu ok." icon="shield-check" what="A fila global de aprovações ainda não existe no backend." needs="Cada aprovação vive dentro da sua sessão — as que o agente pede na Conversa já aparecem lá, de verdade. Falta um endpoint que liste as pendentes de todas as sessões e a autonomia por canal." />;
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page">

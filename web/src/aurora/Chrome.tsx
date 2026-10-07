@@ -1,7 +1,8 @@
 // Peças globais do shell: fundo atmosférico, Toast, PanicButton, faixa de pausa e helpers de página.
 import type { MouseEvent, ReactNode } from "react";
 import { Icon } from "./Icon";
-import { togglePause, useStore } from "./store";
+import { served } from "./served";
+import { setDemo, togglePause, useStore } from "./store";
 
 /** Spotlight que segue o cursor dentro do cartão (`.au-card`). */
 export const spot = (e: MouseEvent<HTMLElement>) => {
@@ -102,6 +103,53 @@ export function PauseBanner() {
       <Icon name="octagon-pause" size={15} />
       Agente pausado. Nada sai em seu nome até você retomar.
       <button onClick={togglePause}>Retomar</button>
+    </div>
+  );
+}
+
+/** No agente real, true quando a tela não tem backend e o modo demonstração está desligado. */
+export const useNotConnected = () => useStore((s) => served && !s.demo);
+
+/** Cartão para telas que ainda não têm backend no Hermes: diz o que falta e oferece os dados de exemplo. */
+export function NotConnected({ icon, what, needs }: { icon: string; what: string; needs: string }) {
+  return (
+    <div className="au-card" onMouseMove={spot} style={{ padding: "36px 32px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 12, maxWidth: 640, animation: "hblurin .5s both" }}>
+      <span style={{ width: 44, height: 44, borderRadius: "var(--r2)", background: "var(--accSoft)", color: "var(--acc)", display: "grid", placeItems: "center" }}>
+        <Icon name={icon} size={20} />
+      </span>
+      <span className="au-label">Ainda não conectado</span>
+      <span style={{ fontSize: 17, fontWeight: 600, lineHeight: 1.35 }}>{what}</span>
+      <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--fg2)" }}>{needs}</p>
+      <button className="au-outline" onClick={() => setDemo(true)} style={{ marginTop: 6 }}>
+        Ver com dados de exemplo
+      </button>
+    </div>
+  );
+}
+
+/** Faixa no topo quando o agente real está com o modo demonstração ligado. */
+export function DemoBanner() {
+  const demo = useStore((s) => s.demo);
+  if (!served || !demo) return null;
+  return (
+    <div role="status" style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 26px", background: "var(--accSoft)", borderBottom: "1px solid var(--line)", color: "var(--fg)", fontSize: 13 }}>
+      <Icon name="sparkles" size={14} color="var(--acc)" />
+      Modo demonstração: Caixa de entrada, Aprovações, Radar, Suporte, Pessoas, Playbooks e Atividade mostram dados de exemplo.
+      <button className="au-outline" onClick={() => setDemo(false)} style={{ marginLeft: "auto", padding: "5px 12px", fontSize: 12 }}>
+        Só dados reais
+      </button>
+    </div>
+  );
+}
+
+/** Página inteira de uma tela de Operação sem backend. */
+export function NotConnectedPage({ title, sub, icon, what, needs }: { title: string; sub: string; icon: string; what: string; needs: string }) {
+  return (
+    <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+      <div className="au-page">
+        <PageHeader title={title} sub={sub} noPanic />
+        <NotConnected icon={icon} what={what} needs={needs} />
+      </div>
     </div>
   );
 }

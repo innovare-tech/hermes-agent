@@ -1,11 +1,12 @@
 import { useState } from "react";
 import type { ActivityKind } from "../adapter";
-import { PageHeader, spot } from "../Chrome";
+import { PageHeader, spot, useNotConnected } from "../Chrome";
 import { ACTIVITY_KIND, ActivityRow } from "../ops/ActivityRow";
 import { inBiz, undoActivity, useStore } from "../store";
 
 export function Activity() {
   const s = useStore((x) => x);
+  const nc = useNotConnected();
   const [kind, setKind] = useState<ActivityKind | null>(null);
   const list = s.activity.filter((a) => (!kind || a.kind === kind) && inBiz(s)(a));
   const chips: [string, ActivityKind | null][] = [["Tudo", null], ...(Object.keys(ACTIVITY_KIND) as ActivityKind[]).map((k) => [ACTIVITY_KIND[k].label, k] as [string, ActivityKind])];
@@ -13,6 +14,11 @@ export function Activity() {
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page">
         <PageHeader title="Atividade" sub="Tudo que o Hermes fez em seu nome — com o porquê de cada decisão e o botão de desfazer." noPanic />
+        {nc && (
+          <p style={{ margin: 0, fontSize: 13, color: "var(--fg2)", lineHeight: 1.55 }}>
+            O histórico ainda não é salvo no backend: aqui aparecem as ações feitas nesta sessão do navegador (aprovações na Conversa, por exemplo).
+          </p>
+        )}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {chips.map(([label, k]) => (
             <button key={label} className="au-pill" aria-pressed={kind === k} onClick={() => setKind(k)} style={{ paddingRight: 18 }}>

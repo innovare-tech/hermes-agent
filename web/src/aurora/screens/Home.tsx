@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { PageHeader, spot } from "../Chrome";
+import { PageHeader, spot, useNotConnected } from "../Chrome";
 import { Icon } from "../Icon";
 import { PRIORITY } from "../ops/InboxList";
 import { inBiz, useStore } from "../store";
@@ -32,6 +32,7 @@ function useSpeech(text: string) {
 
 export function Home() {
   const s = useStore((x) => x);
+  const nc = useNotConnected();
   const navigate = useNavigate();
   const f = inBiz(s);
   const needs = s.inbox.filter((x) => f(x) && (x.priority === "urgente" || x.priority === "voce"));
@@ -60,7 +61,9 @@ export function Home() {
           sub={
             s.paused
               ? "O agente está pausado. Ele continua lendo tudo, mas não envia nada nem executa ações até você retomar."
-              : `Enquanto você estava fora, o Hermes respondeu ${s.last24h.autoReplies} mensagens, resolveu 11 tickets e separou ${needs.length + approvals} decisões para você.`
+              : nc
+                ? `Seu agente está pronto na Conversa${s.health.items.some((x) => x.name === "Gateway de mensagens" && x.status !== "ok") ? " (o gateway de mensagens está parado)" : ""}. As telas de Operação ainda não têm backend e cada uma explica o que falta.`
+                : `Enquanto você estava fora, o Hermes respondeu ${s.last24h.autoReplies} mensagens, resolveu 11 tickets e separou ${needs.length + approvals} decisões para você.`
           }
         />
 
@@ -87,6 +90,7 @@ export function Home() {
                 </button>
               )}
             </div>
+            {brief.length === 0 && <p style={{ margin: 0, paddingTop: 14, borderTop: "1px solid var(--line)", fontSize: 13.5, lineHeight: 1.6, color: "var(--fg2)" }}>O briefing diário por negócio ainda não é gerado pelo agente. Dá para criar um agendamento que mande um resumo toda manhã em Agendamentos.</p>}
             {brief.map((b, i) => (
               <div key={b.business} style={{ display: "grid", gridTemplateColumns: "92px minmax(0,1fr)", gap: 14, paddingTop: 14, borderTop: "1px solid var(--line)", animation: "hblurin .6s both", animationDelay: 150 + i * 120 + "ms" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, alignSelf: "start", paddingTop: 2 }}>
@@ -101,8 +105,8 @@ export function Home() {
           <div className="au-card" onMouseMove={spot} style={{ padding: 22, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "22px 16px", alignContent: "start" }}>
             <span className="au-label" style={{ gridColumn: "1/-1" }}>Últimas 24 horas</span>
             {[
-              { v: s.last24h.saved, l: "de trabalho poupado", c: "var(--acc)" },
-              { v: String(s.last24h.autoReplies), l: "respostas enviadas sozinho", c: "var(--fg)" },
+              { v: nc ? "—" : s.last24h.saved, l: "de trabalho poupado", c: "var(--acc)" },
+              { v: nc ? "—" : String(s.last24h.autoReplies), l: "respostas enviadas sozinho", c: "var(--fg)" },
               { v: String(needs.length + approvals), l: "decisões esperando você", c: "var(--fg)" },
               { v: String(alerts), l: "alertas nos grupos", c: "var(--err)" },
             ].map((r, i) => (
