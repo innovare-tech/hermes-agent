@@ -20,7 +20,8 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | 10 Permissões (1.7) | 🧪 | — | backend + testes G10.1–G10.6 ✅; tela A6 a fazer; G10.7 no Telegram real |
 | A2 Canais (1.3) | 🧪 | — | tela + diretório de clientes, testes ✅; conferir contra o protótipo no Chrome |
 | A3 Análises (1.4) | 🧪 | — | tela + /api/analyses, testes ✅; QA no Chrome |
-| A4 Avisos · A5 Modelos · A6 Permissões (tela) | 🔧 | — | em implementação |
+| A6 Permissões (tela) | 🧪 | — | matriz, conectores MCP, histórico e pendentes; testes ✅; QA no Chrome |
+| A4 Avisos · A5 Modelos | 🔧 | — | em implementação |
 
 ## Já entregue antes dos specs
 - 🏁 PRs #1–#8: telas Aurora, sem mocks, ops_center, gateway com autonomia, playbooks com horário.
