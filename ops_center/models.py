@@ -415,7 +415,8 @@ def routing(plist: Optional[list] = None) -> dict:
     stt = cfg.get("stt") if isinstance(cfg.get("stt"), dict) else {}
     sp = str(stt.get("provider") or "").strip().lower()
     sm = str((stt.get(sp) or {}).get(STT_KEY.get(sp, "model")) or "") if isinstance(stt.get(sp), dict) else ""
-    tasks["transcription"] = _pick(sp, sm) if sp in STT_KEY and sm else inherit
+    tasks["transcription"] = {**(_pick(sp, sm) if sp in STT_KEY and sm else inherit),
+                              "language": str(stt.get("language") or "").strip()}  # "" = detectar sozinho
     cron = cfg.get("cron") if isinstance(cfg.get("cron"), dict) else {}
     tasks["scheduled"] = own(cron.get("model_provider"), cron.get("model"))
     ls = store.listen_settings()
@@ -470,8 +471,15 @@ def validate_routing(body: dict, plist: list) -> dict:
             if t == "triage_jev":
                 raise ValueError("a triagem não herda o padrão: o padrão não é um modelo de decisão")
             out["tasks"][t] = {"inherit": True}
+        else:
+            out["tasks"][t] = _checked(t, v, plist)
+        if t == "transcription" and "language" in v:
+            lang = str(v.get("language") or "").strip().lower()
+            if lang and not (2 <= len(lang) <= 3 and lang.isalpha()):
+                raise ValueError("idioma da transcrição: use o código ISO (pt, en, es…) ou vazio para detectar")
+            out["tasks"][t]["language"] = lang
+        if v.get("inherit"):
             continue
-        out["tasks"][t] = _checked(t, v, plist)
         if t == "triage_jev" and v.get("minConfidence") is not None:
             try:
                 conf = float(v["minConfidence"])
@@ -574,6 +582,11 @@ def _set_aux(slot: str, v: dict) -> None:
 
 def _set_stt(cfg: dict, v: dict) -> None:
     stt = cfg.get("stt") if isinstance(cfg.get("stt"), dict) else {}
+    if "language" in v:  # sem idioma o Whisper adivinha — e em áudio curto adivinha inglês
+        if v["language"]:
+            stt["language"] = v["language"]
+        else:
+            stt.pop("language", None)
     if v.get("inherit"):
         stt.pop("provider", None)
     else:

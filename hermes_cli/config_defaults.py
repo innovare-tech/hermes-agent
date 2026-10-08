@@ -1159,8 +1159,9 @@ DEFAULT_CONFIG = {
         "echo_transcripts": True,
         # No seeded "provider" (a stored value is an explicit pick; unset = autodetect): local | groq |
         # openai | mistral | elevenlabs | deepinfra | xai. Global language hint unless a per-provider one
-        # overrides it; "en" because Whisper auto-detect misreads short clips; "" = auto; "es", ...
-        "language": "en",
+        # overrides it; fixed because Whisper auto-detect misreads short clips; "" = auto; "es", ...
+        # Innovare: "pt" — os clientes falam português; com "en" o Whisper devolvia o áudio traduzido.
+        "language": "pt",
         "streaming": False,  # live partial text while speaking (openai/xai/elevenlabs); failure = file path
         # Pre-upload ffmpeg silence trim (local whisper uses VAD); failure = raw upload.
         "cloud_trim_silence": True,

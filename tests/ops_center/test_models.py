@@ -264,7 +264,7 @@ def test_routing_maps_each_task_to_its_native_key(fake_models, _home):
     assert r["default"] == {"provider": "custom:together-ai", "model": "alpha-1"}
     assert t["vision"] == {"provider": "custom:together-ai", "model": "vision-x"}
     assert t["compaction"] == {"provider": "groq", "model": "llama-3.1-8b-instant"}
-    assert t["transcription"] == {"provider": "groq", "model": "whisper-large-v3"}
+    assert t["transcription"] == {"provider": "groq", "model": "whisper-large-v3", "language": "pt"}
     assert t["scheduled"] == {"provider": "groq", "model": "llama-3.1-8b-instant"}
     assert t["group_analysis"] == {"provider": "custom:together-ai", "model": "alpha-1"}
     assert t["main"] == {"provider": "groq", "model": "llama-3.1-8b-instant"}

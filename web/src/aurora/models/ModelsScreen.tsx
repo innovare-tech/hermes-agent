@@ -241,6 +241,8 @@ export function ModelsScreen() {
             <TaskTable provs={provs} cfg={cfg} setCfg={(fn) => setCfg((c) => (c ? fn(c) : c))} meta={data.routing.taskMeta} onFixKey={(p) => setDialog({ edit: p })} />
           </section>
 
+          <AudioLanguage initial={(data.routing.tasks.transcription as { language?: string }).language ?? ""} />
+
           <LimitsPanel spend={data.spend} lim={lim} setLim={(fn) => setLim((l) => (l ? fn(l) : l))} profileName={profile?.name ?? "este perfil"} />
         </>
       )}
@@ -265,3 +267,34 @@ export function ModelsScreen() {
   );
 }
 
+
+const AUDIO_LANGS: [string, string][] = [["pt", "Português"], ["es", "Espanhol"], ["en", "Inglês"], ["", "Detectar sozinho"]];
+
+/** Idioma dos áudios: sem ele o Whisper adivinha — e em áudio curto adivinha inglês. */
+function AudioLanguage({ initial }: { initial: string }) {
+  const [lang, setLang] = useState(initial);
+  const save = async (v: string) => {
+    const prev = lang;
+    setLang(v);
+    try {
+      await modelsApi.saveAudioLanguage(v);
+      toast(v ? `Áudios transcritos em ${AUDIO_LANGS.find(([c]) => c === v)?.[1] ?? v}` : "O idioma dos áudios será detectado sozinho");
+    } catch (e) {
+      setLang(prev);
+      toast(e instanceof Error && e.message ? e.message : "Não consegui salvar o idioma");
+    }
+  };
+  return (
+    <section style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <h2 className="mdl-h2" style={{ margin: 0 }}>Idioma dos áudios</h2>
+      <select aria-label="Idioma dos áudios" value={lang} onChange={(e) => save(e.target.value)} style={{ padding: "6px 10px", borderRadius: "var(--r2)", border: "1px solid var(--line2)", background: "var(--panel)", color: "var(--fg)" }}>
+        {AUDIO_LANGS.map(([code, label]) => (
+          <option key={code || "auto"} value={code}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <span style={{ fontSize: 12.5, color: "var(--fg2)" }}>Fixe o idioma dos clientes: na detecção automática, áudios curtos podem sair em inglês.</span>
+    </section>
+  );
+}

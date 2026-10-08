@@ -63,6 +63,7 @@ export const modelsApi = {
   testSaved: (id: string) => fetchJSON<TestResult>(`/api/providers/${pid(id)}/test`, j("POST")),
   routing: () => fetchJSON<Routing>("/api/models/routing"),
   saveRouting: (body: { default?: ModelPick; tasks: Record<string, RoutingValue> }) => fetchJSON<Routing>("/api/models/routing", j("PUT", body)),
+  saveAudioLanguage: (language: string) => fetchJSON<{ language: string }>("/api/models/transcription-language", j("PUT", { language })),
   spend: () => fetchJSON<Spend>("/api/usage/spend"),
   limits: () => fetchJSON<Limits>("/api/limits"),
   saveLimits: (l: Partial<Limits>) => fetchJSON<Limits>("/api/limits", j("PUT", l)),

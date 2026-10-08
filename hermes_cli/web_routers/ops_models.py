@@ -118,6 +118,27 @@ async def put_routing(body: RoutingBody):
     return await _run(go)
 
 
+@router.put("/api/models/transcription-language")
+async def put_transcription_language(body: dict):
+    """Idioma dos áudios (``stt.language``); vazio = o Whisper detecta (e em áudio curto erra para inglês)."""
+    def go() -> dict:
+        from hermes_cli.config import load_config, save_config
+        from hermes_cli.web_routers._common import _CONFIG_MUTATION_LOCK
+
+        lang = str(body.get("language") or "").strip().lower()
+        if lang and not (2 <= len(lang) <= 3 and lang.isalpha()):
+            raise ValueError("use o código ISO do idioma (pt, en, es…) ou vazio para detectar")
+        with _CONFIG_MUTATION_LOCK:
+            cfg = load_config()
+            stt = cfg.get("stt") if isinstance(cfg.get("stt"), dict) else {}
+            stt["language"] = lang  # "" grava "detectar" de verdade (apagar faria voltar o padrão do Hermes)
+            cfg["stt"] = stt
+            save_config(cfg)
+        return {"language": lang}
+
+    return await _run(go)
+
+
 # ---- gasto e limites ----
 
 @router.get("/api/usage/spend")

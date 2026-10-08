@@ -133,3 +133,14 @@ def test_spend_and_limits(client):
     assert client.put("/api/limits", json={"onLimit": "boom"}).status_code == 400
     assert client.put("/api/limits", json={"dailyUsd": -1}).status_code == 400
     assert client.get("/api/limits").json()["alertPct"] == 90
+
+
+def test_audio_language_is_saved_and_reported(client):
+    from hermes_cli.config import load_config
+
+    assert client.put("/api/models/transcription-language", json={"language": "pt"}).json() == {"language": "pt"}
+    assert load_config()["stt"]["language"] == "pt"
+    assert client.get("/api/models/routing").json()["tasks"]["transcription"]["language"] == "pt"
+    assert client.put("/api/models/transcription-language", json={"language": "português"}).status_code == 400
+    client.put("/api/models/transcription-language", json={"language": ""})
+    assert load_config()["stt"]["language"] == ""  # detectar sozinho, sem voltar ao padrão
