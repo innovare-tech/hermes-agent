@@ -150,6 +150,11 @@ def analyze(analysis_id: int, *, triage: Callable[[str, dict], Optional[dict]] =
         store.update_analysis(analysis_id, status="ignored", evidence={**evidence, "quotes": _quotes(items)})
         return store.get_analysis(analysis_id)
 
+    from ops_center.spend_guard import holding_non_urgent
+
+    if holding_non_urgent() and (tri or {}).get("urgency") not in ("critica", "alta"):
+        # Limite de gasto: sem modelo de texto; a equipe recebe as mensagens cruas.
+        run = _held_by_spend_limit
     try:
         res = parse_analysis(run(group, client, state, cfg))
     except Exception as e:  # noqa: BLE001 — a equipe é avisada mesmo assim
@@ -169,6 +174,10 @@ def analyze(analysis_id: int, *, triage: Callable[[str, dict], Optional[dict]] =
         store.update_analysis(analysis_id, telegram=sent)
         final["telegram"] = sent
     return final
+
+
+def _held_by_spend_limit(*_a: Any) -> str:
+    raise RuntimeError("análise adiada: o limite de gasto de hoje foi atingido (só o urgente usa o modelo)")
 
 
 def _quotes(items: list[dict]) -> list[dict]:
@@ -261,6 +270,9 @@ def start(stop: threading.Event, homes: Callable[[], Iterable[Any]]) -> threadin
                     with _profile_runtime_scope(home):
                         if is_engaged and is_engaged():
                             continue  # pausado: os itens ficam esperando; nada é analisado
+                        from ops_center import spend_guard
+
+                        spend_guard.maybe_check(str(home))  # limites de gasto (antes, para valer já neste ciclo)
                         process_due()
                         from ops_center import notify
 
