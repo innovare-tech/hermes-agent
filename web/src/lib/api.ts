@@ -128,6 +128,8 @@ const PROFILE_SCOPED_PREFIXES = [
   // Análises dos grupos e diretório de clientes da Central de Operações (ops.db do perfil).
   "/api/analyses",
   "/api/clients",
+  // Avisos da equipe (tópicos do Telegram, rotas e teste): token do bot e ops.db do perfil.
+  "/api/notify",
   "/api/logs",
   "/api/portal",
   // Pool entries live in the profile's home, and DELETE /api/credentials/pool/{provider}/{index}

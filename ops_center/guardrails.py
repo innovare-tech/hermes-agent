@@ -370,15 +370,19 @@ def _record_blocked(org: Optional[str], action: dict, rule: str) -> None:
 def _alert_hard_deny(org: Optional[str], action: dict, rule: str) -> None:
     """Sempre bloqueado também avisa a equipe (destino das aprovações)."""
     try:
+        who, _id, ctx = _requester()
+        text = (f"🛑 Bloqueado · {rule}\nOrigem: {ORIGIN_LABEL.get(org or '', 'painel')} ({ctx}) · pedido de {who}\n"
+                f"Comando: {action['command'][:1500]}")
+        from ops_center import notify
+
+        if notify.is_configured() and notify.send("infra", "critical", text):
+            return  # tópico de Alertas de infra (Avisos)
         target = settings()["approval_target"]
         if not target:
             return
         from tools.send_message_tool import send_message_tool
 
-        who, _id, ctx = _requester()
-        send_message_tool({"action": "send", "target": target, "message": (
-            f"🛑 Bloqueado · {rule}\nOrigem: {ORIGIN_LABEL.get(org or '', 'painel')} ({ctx}) · pedido de {who}\n"
-            f"Comando: {action['command'][:1500]}")})
+        send_message_tool({"action": "send", "target": target, "message": text})
     except Exception:
         logger.debug("ops_center: alerta de bloqueio não enviado", exc_info=True)
 

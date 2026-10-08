@@ -16,6 +16,7 @@ export const useCurrentProfile = (): Profile | undefined => {
 
 /** Migalha do topo: "Configurações  /  Perfis", "Caixa de entrada"… */
 export function crumbFor(pathname: string) {
+  if (pathname.startsWith("/settings/avisos")) return "Configurações  /  Avisos";
   if (pathname.startsWith("/settings/perfis")) return "Configurações  /  Perfis";
   if (pathname.startsWith("/settings/aparencia")) return "Configurações  /  Aparência";
   if (pathname.startsWith("/chat")) return "Conversa";

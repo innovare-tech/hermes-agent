@@ -27,6 +27,7 @@ export const AGENT: NavItem[] = [
   { to: "/gateways", label: "Gateways", icon: "radio-tower" },
   { to: "/logs", label: "Logs", icon: "scroll-text" },
   { to: "/settings", label: "Configurações", icon: "settings-2" },
+  { to: "/settings/avisos", label: "Avisos", icon: "bell-ring", sub: true },
   { to: "/settings/perfis", label: "Perfis", icon: "layers", sub: true },
 ];
 

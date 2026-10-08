@@ -190,7 +190,18 @@ def format_notice(a: dict) -> str:
 
 
 def send_notice(a: dict) -> Optional[dict]:
-    """Envia ao destino configurado. ``{sentAt}`` ou ``None`` (sem destino, ou falhou — fica no painel)."""
+    """Envia ao destino configurado. ``{sentAt}`` ou ``None`` (sem destino, ou falhou — fica no painel).
+
+    Com as rotas de Avisos (A4) configuradas, o destino é o tópico do nível de urgência (``notify.send``);
+    senão, o ``notify_target`` antigo."""
+    from ops_center import notify
+
+    if notify.is_configured():
+        try:
+            return notify.send("analyses", a.get("urgency") or ("alta" if a.get("status") == "failed" else "media"), format_notice(a))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("ops_center: aviso da análise A-%s não saiu: %s", a.get("id"), e)
+            return None
     target = str(store.listen_settings().get("notify_target") or "").strip()
     if not target:
         return None
@@ -226,7 +237,7 @@ def process_due(now: Optional[float] = None, **kw: Any) -> list[int]:
 
 
 def start(stop: threading.Event, homes: Callable[[], Iterable[Any]]) -> threading.Thread:
-    """Thread do gateway: a cada ``TICK_SECONDS`` roda ``process_due`` em cada perfil servido.
+    """Thread do gateway: a cada ``TICK_SECONDS`` roda ``process_due`` e ``notify.tick`` em cada perfil servido.
 
     ponytail: um lote por vez, em série — suficiente para dezenas de grupos; fila/pool se o volume crescer."""
 
@@ -245,6 +256,9 @@ def start(stop: threading.Event, homes: Callable[[], Iterable[Any]]) -> threadin
                         if is_engaged and is_engaged():
                             continue  # pausado: os itens ficam esperando; nada é analisado
                         process_due()
+                        from ops_center import notify
+
+                        notify.tick()  # Avisos: solta o que ficou no silêncio e manda o resumo diário na hora
                 except Exception:
                     logger.exception("ops_center: ciclo do Escutar falhou em %s", home)
 
