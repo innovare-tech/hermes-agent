@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { adapter, type Approval, type AutonomyMode, type BizId, type Channel, type InboxItem, type OnBehalf, type OpsSnapshot, type Person, type Playbook, type PlaybookDraft, type Session, type Ticket } from "./adapter";
 import { chat } from "./chat";
+import type { Profile, ProfileDialog } from "./profileLogic";
 
 export type Direction = "aurora" | "ambar" | "sinal";
 export type Theme = "dark" | "light";
@@ -15,12 +16,25 @@ export type State = Omit<OpsSnapshot, "account"> & {
   biz: string;
   /** Último aviso (atalho para testes e leitores de tela). */
   toast: { text: string; id: number } | null;
-  /** Avisos visíveis, empilhados no canto. */
-  toasts: { text: string; id: number }[];
+  /** Avisos visíveis, empilhados no canto. `sub` = linha de apoio (aviso de troca de perfil etc.). */
+  toasts: { text: string; sub?: string; id: number }[];
   /** Confirmação aberta (diálogo do Aurora, no lugar do window.confirm). */
   ask: AskRequest | null;
   /** Passo do assistente de setup (-1 = fechado). */
   onboarding: number;
+  /** Perfis (Hermes isolados): lista do agregado /api/ops/profiles e o perfil que o painel mostra. */
+  profiles: Profile[];
+  profilesStatus: "loading" | "ready" | "error";
+  /** Id do perfil atual ("" até a lista chegar). Tudo o que o painel lê vem dele. */
+  profileId: string;
+  /** Trocando de perfil: barra de 2px e esqueleto até os dados do novo perfil chegarem. */
+  switching: boolean;
+  /** Nomes das chaves de API do perfil atual (rodapé da barra lateral). */
+  keys: string[];
+  /** Diálogo de perfil aberto (criar/clonar, editar, apagar). */
+  profileDialog: ProfileDialog | null;
+  /** Assistente curto de configuração de um perfil novo. */
+  wizard: boolean;
 };
 
 const PREFS_KEY = "hermes.aurora";
@@ -42,6 +56,13 @@ let state: State = {
   toasts: [],
   ask: null,
   onboarding: -1,
+  profiles: [],
+  profilesStatus: "loading",
+  profileId: "",
+  switching: false,
+  keys: [],
+  profileDialog: null,
+  wizard: false,
   paused: false,
   account: null,
   businesses: [],
@@ -89,12 +110,41 @@ export const inBiz = (s: State) => (x: { business: string }) =>
 
 const errMsg = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
+/** Dados da Central de um perfil que ainda não carregou: o que a troca de perfil zera para não mostrar o anterior. */
+export const EMPTY_OPS: Partial<State> = {
+  account: null,
+  businesses: [],
+  inbox: [],
+  approvals: [],
+  radar: [],
+  tickets: [],
+  activity: [],
+  autonomy: [],
+  briefing: [],
+  last24h: { saved: "", autoReplies: 0 },
+  health: { online: false, level: "ok", problems: [], uptime: "", items: [], responseTime: "" },
+  costs: { month: "", total: 0, limit: null, projection: null, byBusiness: [] },
+  watches: [],
+  support: { firstResponse: "", resolvedByHermes: "", csat: "", kbUsage: "" },
+  kb: [],
+  people: [],
+  playbooks: [],
+  defaultMode: 1,
+  sessions: [],
+  biz: "all",
+};
+
+// Resposta de um perfil que já não é o atual (troca no meio do carregamento) é descartada: nunca mistura perfis.
 export async function loadOps() {
-  setState(await adapter.load());
+  const pid = state.profileId;
+  const snap = await adapter.load();
+  if (state.profileId === pid) setState(snap);
 }
 
 export async function loadSessions() {
-  setState({ sessions: await chat.sessions() });
+  const pid = state.profileId;
+  const sessions = await chat.sessions();
+  if (state.profileId === pid) setState({ sessions });
 }
 
 let toastSeq = 0;
@@ -114,11 +164,15 @@ export function answerAsk(ok: boolean) {
   a?.resolve(ok);
 }
 
-export function toast(text: string) {
-  const t = { text, id: ++toastSeq };
-  // Máximo 3 na tela; cada um some sozinho.
+export function dismissToast(id: number) {
+  setState((s) => ({ toasts: s.toasts.filter((x) => x.id !== id), toast: s.toast?.id === id ? null : s.toast }));
+}
+
+export function toast(text: string, sub?: string, ms = 3600) {
+  const t = { text, sub, id: ++toastSeq };
+  // Máximo 3 na tela; cada um some sozinho (ou no X).
   setState((s) => ({ toast: t, toasts: [...s.toasts.filter((x) => x.text !== text), t].slice(-3) }));
-  setTimeout(() => setState((s) => ({ toasts: s.toasts.filter((x) => x.id !== t.id), toast: s.toast?.id === t.id ? null : s.toast })), 3600);
+  setTimeout(() => dismissToast(t.id), ms);
 }
 
 export function setPrefs(p: Partial<Pick<State, "dir" | "theme">>) {

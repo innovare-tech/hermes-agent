@@ -1,9 +1,11 @@
+import { useNavigate, useParams } from "react-router";
 import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
 import type { Settings as S } from "../agent/types";
 import { setPrefs, setState, toast, useStore, type Direction } from "../store";
 import { ApiKeysEditor } from "../ops/ApiKeysEditor";
 import { BusinessesEditor } from "../ops/BusinessesEditor";
+import { ProfilesPanel } from "./Profiles";
 import { AgentHeader } from "./Sessions";
 
 export const DIRECTIONS: { id: Direction; name: string; d: string; c: [string, string, string] }[] = [
@@ -37,9 +39,41 @@ function Section({ title, sub, children }: { title: string; sub: string; childre
   );
 }
 
+const TABS = [
+  { id: "geral", label: "Geral", to: "/settings" },
+  { id: "perfis", label: "Perfis", to: "/settings/perfis" },
+  { id: "aparencia", label: "Aparência", to: "/settings/aparencia" },
+] as const;
+
+/** Geral · Perfis · Aparência. */
+function SettingsTabs({ tab }: { tab: string }) {
+  const navigate = useNavigate();
+  return (
+    <div role="tablist" aria-label="Configurações" style={{ display: "flex", gap: 4, padding: 4, borderRadius: "var(--r)", background: "var(--panel2)", alignSelf: "flex-start" }}>
+      {TABS.map((t) => (
+        <button key={t.id} role="tab" aria-selected={t.id === tab} className="au-seg au-seg-lg" onClick={() => t.id !== tab && navigate(t.to)} style={{ padding: "7px 16px" }}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Settings() {
   const [s, setS, reload] = useAgentData(() => agent.settings(), []);
   const dir = useStore((x) => x.dir);
+  const param = useParams().tab;
+  const tab = param === "perfis" || param === "aparencia" ? param : "geral";
+  if (tab === "perfis") {
+    return (
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div className="au-page au-page-agent" style={{ gap: 22, maxWidth: 1060 }}>
+          <SettingsTabs tab={tab} />
+          <ProfilesPanel />
+        </div>
+      </div>
+    );
+  }
   if (!s) return <div style={{ flex: 1 }} />;
   const prov = s.providers.find((p) => p.id === s.provider) ?? s.providers[0];
   const apply = (patch: Parameters<typeof agent.saveSettings>[0], done?: string) => applySetting(s, setS, patch, done);
@@ -47,6 +81,7 @@ export function Settings() {
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page au-page-agent" style={{ gap: 40 }}>
+        <SettingsTabs tab={tab} />
         <AgentHeader title="Configurações" sub="Modelo, chaves, ambiente e aparência do Hermes.">
           <button className="au-outline" onClick={() => setState({ onboarding: 0 })} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, background: "var(--panel)" }}>
             <Icon name="rocket" size={14} color="var(--acc)" />
@@ -54,6 +89,8 @@ export function Settings() {
           </button>
         </AgentHeader>
 
+        {tab === "geral" && (
+          <>
         <Section title="Negócios" sub="Separe canais, contatos, playbooks e custos por negócio. O seletor da barra lateral filtra todas as telas.">
           <BusinessesEditor />
         </Section>
@@ -129,7 +166,10 @@ export function Settings() {
             ))}
           </div>
         </Section>
+          </>
+        )}
 
+        {tab === "aparencia" && (
         <Section title="Aparência" sub="Três direções de design para a interface.">
           <div role="radiogroup" aria-label="Direção de design" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10 }}>
             {DIRECTIONS.map((d) => (
@@ -145,6 +185,7 @@ export function Settings() {
             ))}
           </div>
         </Section>
+        )}
       </div>
     </div>
   );

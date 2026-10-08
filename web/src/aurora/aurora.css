@@ -231,3 +231,27 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-colorpick::-webkit-color-swatch-wrapper{padding:0}.au-colorpick::-webkit-color-swatch{border:0;border-radius:50%}
 .au-inline{font:inherit;font-size:13.5px;color:var(--fg);background:transparent;border:1px solid transparent;border-radius:var(--r2);padding:6px 8px;outline:0;min-width:0}
 .au-inline:hover{border-color:var(--line)}.au-inline:focus{border-color:var(--acc);background:var(--panel2)}
+
+/* ---- perfis (design A1) ---- */
+/* A barra lateral passa por cima da área principal: o popover do seletor tem 304px e é mais largo que ela. */
+.au-side{position:relative;z-index:30}
+.au-ptrig{width:100%;display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:var(--r2);border:1px solid transparent;background:transparent;color:var(--fg);cursor:pointer;text-align:left;transition:border-color .2s,background .2s}
+.au-ptrig:hover,.au-ptrig[aria-expanded="true"]{border-color:var(--line2);background:var(--panel)}
+.au-palert{margin-top:8px;width:100%;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r2);border:1px solid color-mix(in oklab,var(--err) 40%,transparent);background:color-mix(in oklab,var(--err) 9%,transparent);color:var(--err);font-size:12px;cursor:pointer;text-align:left}
+.au-pop{position:absolute;left:10px;top:66px;width:304px;z-index:41;max-height:calc(100vh - 90px);overflow:auto;padding:8px;border:1px solid var(--line2);border-radius:var(--r2);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:1px;animation:hin .16s both}
+.au-popt{width:100%;display:flex;align-items:center;gap:10px;padding:7px 8px;border:0;border-radius:9px;background:transparent;color:var(--fg);cursor:pointer;text-align:left}
+.au-popt:hover,.au-popt[aria-selected="true"]{background:var(--panel2)}
+.au-pgrp{width:100%;display:flex;align-items:center;gap:10px;padding:8px;margin-top:4px;border:0;border-top:1px solid var(--line);background:transparent;color:var(--fg2);cursor:pointer;text-align:left}
+.au-pgrp:hover{color:var(--fg)}
+.au-pgrp-ic{margin:0 7px}
+.au-phead{position:relative;display:flex;align-items:center;gap:12px;padding:0 32px;height:58px;flex:none;border-bottom:1px solid var(--line)}
+.au-pbar{position:absolute;left:0;right:0;bottom:-1px;height:2px;overflow:hidden}
+.au-pbar>div{width:40%;height:100%;background:var(--acc);animation:hbar .8s ease-in-out infinite}
+.au-pill-prof{margin-left:auto;display:flex;align-items:center;gap:8px;padding:4px 12px 4px 4px;border-radius:999px;background:var(--accSoft);border:1px solid color-mix(in oklab,var(--acc) 35%,transparent);transition:background .4s,border-color .4s}
+.au-skel{background:linear-gradient(90deg,var(--panel),var(--panel2),var(--panel)) 0 0/200% 100%;animation:hshim 1.4s linear infinite;border:1px solid var(--line);border-radius:var(--r)}
+.au-prow{display:grid;grid-template-columns:minmax(0,1fr) 120px 128px 150px 120px 36px;gap:14px;align-items:center}
+.au-mitem{display:flex;flex-direction:column;align-items:stretch;gap:3px;padding:8px 10px;border:0;border-radius:8px;background:transparent;color:var(--fg);text-align:left;font-size:13px;cursor:pointer}
+.au-mitem:hover:not([aria-disabled="true"]){background:var(--panel2)}
+.au-mitem[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
+.au-mitem.danger{color:var(--err)}
+.au-modal{position:absolute;inset:0;z-index:60;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:grid;place-items:center;padding:24px;animation:hin .18s both}

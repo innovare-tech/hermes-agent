@@ -1,6 +1,6 @@
 // Telas do agente ligadas ao backend real (mesmas rotas do dashboard antigo).
 import { ask } from "../store";
-import { api, fetchJSON, type CronJob as ApiCron } from "@/lib/api";
+import { api, fetchJSON, getManagementProfile, type CronJob as ApiCron } from "@/lib/api";
 import { classifyLine } from "@/lib/log-classify";
 import { shortWhen, sourceIcon, sourceLabel } from "../chat/sources";
 import { CHANNEL_PT, FIELD_PT, MAIN_CHANNELS, TOOL_PT } from "./channelText";
@@ -101,7 +101,8 @@ export const liveAgent: AgentAdapter = {
   toggleSkill: async (name, enabled) => void (await api.toggleSkill(name, enabled)),
   skillContent: async (name) => (await api.getSkillContent(name)).content,
 
-  crons: async () => (await api.getCronJobs()).map(cronFrom),
+  // Só os agendamentos do perfil atual (o padrão da API, "all", misturaria os de todos os perfis).
+  crons: async () => (await api.getCronJobs(getManagementProfile() || "default")).map(cronFrom),
   toggleCron: async (c) => {
     await (c.enabled ? api.pauseCronJob(c.id, c.profile) : api.resumeCronJob(c.id, c.profile));
   },
@@ -109,7 +110,7 @@ export const liveAgent: AgentAdapter = {
   async createCron(text) {
     const p = parseCronPt(text);
     if (!p) throw new Error("Não entendi quando rodar — diga, por exemplo, “toda sexta às 18h”.");
-    const job = await api.createCronJob({ name: p.prompt.slice(0, 60), prompt: p.prompt, schedule: p.expr, deliver: p.dest === "Conversa" ? undefined : p.dest.toLowerCase() });
+    const job = await api.createCronJob({ name: p.prompt.slice(0, 60), prompt: p.prompt, schedule: p.expr, deliver: p.dest === "Conversa" ? undefined : p.dest.toLowerCase() }, getManagementProfile() || "default");
     return { ...cronFrom(job), human: job.schedule_display ?? p.human };
   },
 

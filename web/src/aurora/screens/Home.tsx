@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { PageHeader, spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { PRIORITY } from "../ops/InboxList";
+import { HomeSkeleton, ProfileNotice } from "../ProfileChrome";
 import { inBiz, useStore } from "../store";
 
 const WAVE = [40, 70, 55, 90, 35, 80, 60, 95, 45, 75, 50, 85, 40, 65];
@@ -51,6 +52,9 @@ export function Home() {
   const c = s.costs;
   const costMax = Math.max(30, ...c.byBusiness.map((x) => x.value));
 
+  // Trocando de perfil: esqueleto até os dados do perfil novo chegarem (nunca os do anterior).
+  if (s.switching) return <HomeSkeleton />;
+
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page">
@@ -63,6 +67,8 @@ export function Home() {
               : `Hoje o Hermes respondeu ${s.last24h.autoReplies} ${s.last24h.autoReplies === 1 ? "mensagem" : "mensagens"} sozinho e separou ${needs.length + approvals} ${needs.length + approvals === 1 ? "decisão" : "decisões"} para você${s.health.problems.length ? ". Atenção: " + s.health.problems[0].text.charAt(0).toLowerCase() + s.health.problems[0].text.slice(1) : ""}.`
           }
         />
+
+        <ProfileNotice />
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))", gap: 16 }}>
           <div className="au-card" onMouseMove={spot} style={{ padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>

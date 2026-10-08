@@ -1,6 +1,6 @@
 // Conversa real: JSON-RPC do tui_gateway via /api/ws (mesmo cliente do ChatSidebar).
 import type { RpcMethods, TranscriptMessage, Usage } from "@hermes/shared";
-import { api } from "@/lib/api";
+import { api, getManagementProfile } from "@/lib/api";
 import { ask } from "../store";
 import { GatewayClient } from "@/lib/gatewayClient";
 import type { Session } from "../adapter";
@@ -28,10 +28,16 @@ async function call<M extends keyof RpcMethods>(method: M, params: RpcMethods[M]
 /** id persistido (lista de sessões / URL) → id da sessão viva no gateway. */
 const live = new Map<string, string>();
 
+/** Perfil que a conversa usa (o do seletor): vai em toda chamada que cria, lista ou retoma sessões. */
+const profile = () => getManagementProfile() || undefined;
+
+/** Troca de perfil: os ids vivos eram do perfil anterior; o próximo uso retoma a sessão no perfil novo. */
+export const resetChatProfile = () => live.clear();
+
 async function liveId(storedId: string) {
   let id = live.get(storedId);
   if (!id) {
-    id = (await call("session.resume", { session_id: storedId, omit_messages: true })).session_id;
+    id = (await call("session.resume", { session_id: storedId, omit_messages: true, profile: profile() })).session_id;
     live.set(storedId, id);
   }
   return id;
@@ -153,7 +159,7 @@ export const WEB_COMMANDS: [string, string][] = [
 
 export const gatewayChat: ChatAdapter = {
   async sessions() {
-    const { sessions } = await call("session.list", { limit: 30 });
+    const { sessions } = await call("session.list", { limit: 30, profile: profile() });
     return sessions.map((s) => {
       const when = s.started_at ? new Date(s.started_at * 1000) : null;
       const recent = group(s.started_at);
@@ -171,7 +177,7 @@ export const gatewayChat: ChatAdapter = {
   },
 
   async create() {
-    const r = await call("session.create", { source: "web" });
+    const r = await call("session.create", { source: "web", profile: profile() });
     live.set(r.stored_session_id, r.session_id);
     return r.stored_session_id;
   },
@@ -183,7 +189,7 @@ export const gatewayChat: ChatAdapter = {
     }
     // O resume omite a saída das ferramentas; o histórico REST tem, ligada pelo tool_call_id.
     const [r, m, full] = await Promise.all([
-      call("session.resume", { session_id: sessionId }),
+      call("session.resume", { session_id: sessionId, profile: profile() }),
       api.getModelInfo().catch(() => null),
       api.getSessionMessages(sessionId).catch(() => null),
     ]);
@@ -294,7 +300,7 @@ export const gatewayChat: ChatAdapter = {
   },
 
   async slashCommands() {
-    const r = await call("commands.catalog", {});
+    const r = await call("commands.catalog", { profile: profile() });
     const norm = (c: string) => (c.startsWith("/") ? c : "/" + c);
     const skillKeys = new Set(Object.keys(r.skills ?? {}).map(norm));
     const skills = (r.pairs ?? []).filter(([cmd]) => skillKeys.has(norm(cmd))).map(([cmd, desc]) => ({ cmd: norm(cmd), desc: desc ?? "", skill: true }));
