@@ -8,17 +8,36 @@ como antes. Pontos de uso:
 - ``mark_replied``: canal Autônomo — registra a resposta enviada e a Atividade.
 - ``ops_send_verb``: verbo ``ops-send`` do socket de controle; o dashboard pede o envio de uma
   resposta aprovada e o gateway entrega pelo adaptador vivo.
+
+Gateway multiplexado: cada operação roda no home do perfil dono do canal (``home``), senão a
+mensagem de um perfil cairia no ``ops.db`` do perfil padrão.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable, Optional
+from contextlib import contextmanager
+from typing import Any, Callable, Iterator, Optional
 
 logger = logging.getLogger(__name__)
 
 OBSERVE, DRAFT, AUTONOMOUS = 0, 1, 2
+
+
+@contextmanager
+def _home(home: Any) -> Iterator[None]:
+    """Roda no ``HERMES_HOME`` do perfil (``runner._resolve_profile_home_for_source``). ``None`` = atual."""
+    if not home:
+        yield
+        return
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+
+    token = set_hermes_home_override(home)
+    try:
+        yield
+    finally:
+        reset_hermes_home_override(token)
 
 
 def _platform_name(source: Any) -> str:
@@ -26,43 +45,50 @@ def _platform_name(source: Any) -> str:
     return str(getattr(platform, "value", platform) or "")
 
 
-def record(event: Any, source: Any) -> Optional[dict]:
+def record(event: Any, source: Any, home: Any = None) -> Optional[dict]:
     """Grava a mensagem recebida. ``None`` = não registrado (comando, vazio ou erro)."""
     text = (getattr(event, "text", None) or "").strip()
     if not text or text.startswith("/"):
         return None
     try:
-        from ops_center import store
-
-        chat_type = str(getattr(source, "chat_type", "") or "dm")
-        result = store.record_inbound(
-            _platform_name(source),
-            str(getattr(source, "chat_id", "") or ""),
-            text,
-            chat_name=str(getattr(source, "chat_name", "") or ""),
-            kind="group" if chat_type in ("group", "channel", "thread") else "dm",
-            sender_id=str(getattr(source, "user_id", "") or ""),
-            sender_name=str(getattr(source, "user_name", "") or ""),
-            message_id=str(getattr(event, "message_id", "") or ""),
-        )
-        sender = str(getattr(source, "user_name", "") or getattr(source, "chat_name", "") or "")
-        try:
-            from ops_center import playbooks
-
-            playbooks.fire_keyword(_platform_name(source), str(getattr(source, "chat_id", "") or ""), text, sender=sender, mode=result["mode"])
-        except Exception:
-            logger.debug("ops_center: falha ao disparar playbooks por palavra-chave", exc_info=True)
-        return {**result, "sender": sender}
+        with _home(home):
+            return _record(event, source, text, home)
     except Exception:
         logger.debug("ops_center: falha ao registrar mensagem recebida", exc_info=True)
         return None
 
 
-def save_draft(item_id: int, text: str) -> None:
+def _record(event: Any, source: Any, text: str, home: Any) -> dict:
+    from ops_center import store
+
+    chat_type = str(getattr(source, "chat_type", "") or "dm")
+    chat_id = str(getattr(source, "chat_id", "") or "")
+    result = store.record_inbound(
+        _platform_name(source),
+        chat_id,
+        text,
+        chat_name=str(getattr(source, "chat_name", "") or ""),
+        kind="group" if chat_type in ("group", "channel", "thread") else "dm",
+        sender_id=str(getattr(source, "user_id", "") or ""),
+        sender_name=str(getattr(source, "user_name", "") or ""),
+        message_id=str(getattr(event, "message_id", "") or ""),
+    )
+    sender = str(getattr(source, "user_name", "") or getattr(source, "chat_name", "") or "")
+    try:
+        from ops_center import playbooks
+
+        playbooks.fire_keyword(_platform_name(source), chat_id, text, sender=sender, mode=result["mode"])
+    except Exception:
+        logger.debug("ops_center: falha ao disparar playbooks por palavra-chave", exc_info=True)
+    return {**result, "sender": sender, "home": str(home) if home else None}
+
+
+def save_draft(item_id: int, text: str, home: Any = None) -> None:
     try:
         from ops_center import store
 
-        store.set_draft(item_id, text)
+        with _home(home):
+            store.set_draft(item_id, text)
     except Exception:
         logger.debug("ops_center: falha ao salvar rascunho %s", item_id, exc_info=True)
 
@@ -70,21 +96,26 @@ def save_draft(item_id: int, text: str) -> None:
 def mark_replied(ops: dict, source: Any, reply: Optional[str]) -> None:
     """Canal Autônomo: registra que o Hermes respondeu (texto completo quando não foi streaming)."""
     try:
-        from ops_center import store
-
-        item = store.get_inbox(int(ops["item_id"]))
-        if reply:
-            store.mark_sent(int(ops["item_id"]), reply, "auto")
-        who = ops.get("sender") or "contato"
-        preview = (reply or "").strip().replace("\n", " ")
-        store.log_activity(
-            "msg",
-            f"Respondeu {who} via {_platform_name(source).capitalize()}" + (f": “{preview[:70]}{'…' if len(preview) > 70 else ''}”" if preview else ""),
-            "canal em modo Autônomo.",
-            business_id=(item or {}).get("business_id"),
-        )
+        with _home(ops.get("home")):
+            _mark_replied(ops, source, reply)
     except Exception:
         logger.debug("ops_center: falha ao registrar resposta autônoma", exc_info=True)
+
+
+def _mark_replied(ops: dict, source: Any, reply: Optional[str]) -> None:
+    from ops_center import store
+
+    item = store.get_inbox(int(ops["item_id"]))
+    if reply:
+        store.mark_sent(int(ops["item_id"]), reply, "auto")
+    who = ops.get("sender") or "contato"
+    preview = " ".join((reply or "").split())
+    store.log_activity(
+        "msg",
+        f"Respondeu {who} via {_platform_name(source).capitalize()}" + (f": “{preview[:70]}{'…' if len(preview) > 70 else ''}”" if preview else ""),
+        "canal em modo Autônomo.",
+        business_id=(item or {}).get("business_id"),
+    )
 
 
 def send_text(platform: str, chat_id: str, text: str) -> dict:
@@ -102,7 +133,8 @@ def send_text(platform: str, chat_id: str, text: str) -> dict:
 
 
 def ops_send_verb(runner: Any) -> Callable[..., dict]:
-    """``ops-send``: ``{"platform", "chat_id", "text"}`` → envia pelo adaptador vivo deste gateway."""
+    """``ops-send``: ``{"platform", "chat_id", "text", "profile"?}`` → envia pelo adaptador vivo do
+    perfil dono do canal (no multiplexado, sem ``profile`` sairia pelo bot do perfil padrão)."""
 
     def _handler(params: Optional[dict] = None) -> dict:
         params = params or {}
@@ -114,7 +146,15 @@ def ops_send_verb(runner: Any) -> Callable[..., dict]:
 
             if is_engaged():
                 return {"sent": False, "error": "Hermes está pausado — nada é enviado até retomar"}
-            result = send_text(platform, chat_id, text)
+            profile = str(params.get("profile") or "").strip()
+            if profile and profile != "default":
+                from gateway.run import _profile_runtime_scope
+                from hermes_cli.profiles import get_profile_dir
+
+                with _profile_runtime_scope(get_profile_dir(profile)):
+                    result = send_text(platform, chat_id, text)
+            else:
+                result = send_text(platform, chat_id, text)
             return {"sent": True, "message_id": result.get("message_id")}
         except Exception as e:  # noqa: BLE001 — devolve o motivo ao dashboard
             return {"sent": False, "error": str(e)[:300]}

@@ -94,5 +94,11 @@ async def activity_middleware(request: Any, call_next: Callable) -> Any:
     if 200 <= response.status_code < 300:
         action = match(method, path, body)
         if action:
-            log(action)
+            # A ação foi no perfil do ?profile= (seletor do painel): registra na Atividade DELE.
+            from hermes_cli.web_routers._common import config_scoped_to_thread
+
+            try:
+                await config_scoped_to_thread(request.query_params.get("profile"), lambda: log(action))
+            except Exception:
+                logger.debug("ops activity: perfil inválido em %s", path, exc_info=True)
     return response

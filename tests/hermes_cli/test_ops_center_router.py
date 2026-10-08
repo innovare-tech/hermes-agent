@@ -78,7 +78,7 @@ def test_reply_sends_marks_sent_and_respects_pause(client, monkeypatch):
     assert client.post(f"/api/ops/inbox/{item}/reply", json={"text": " "}).status_code == 400
     r = client.post(f"/api/ops/inbox/{item}/reply", json={"text": "Olá!"})
     assert r.status_code == 200 and r.json()["status"] == "sent" and r.json()["draft"] == "Olá!"
-    assert sent == [("telegram", "-100", "Olá!")]
+    assert sent == [("telegram", "-100", "Olá!", None)]
 
     monkeypatch.setattr("agent.estop.is_engaged", lambda: True)
     assert client.post(f"/api/ops/inbox/{item}/reply", json={"text": "de novo"}).status_code == 409
@@ -133,3 +133,38 @@ def test_human_schedule_in_activity():
     assert _human_schedule("0 18 * * 5") == "toda sexta às 18:00"
     assert _human_schedule("30 7 * * 1-5") == "dias úteis às 07:30"
     assert _human_schedule("every 2h") == "every 2h"
+
+
+def test_profile_query_scopes_ops_data(client, tmp_path):
+    """?profile=aibiz lê e grava no ops.db da Aibiz; o perfil padrão não vê nada."""
+    from hermes_cli.profiles import _get_profiles_root, create_profile
+
+    root = _get_profiles_root()
+    assert tmp_path in root.parents  # nunca tocar o ~/.hermes real
+    create_profile("aibiz", no_skills=True)
+    b = client.post("/api/ops/businesses?profile=aibiz", json={"name": "Aibiz"}).json()
+    assert client.get("/api/ops/businesses?profile=aibiz").json() == [b]
+    assert client.get("/api/ops/businesses").json() == []
+    assert (root / "aibiz" / "ops.db").exists()
+    assert client.get("/api/ops/businesses?profile=naoexiste").status_code == 404
+    acts = client.get("/api/ops/activity?profile=aibiz").json()
+    assert any("Aibiz" in a["action"] for a in acts) and client.get("/api/ops/activity").json() == []
+
+
+def test_profile_pause_is_local_and_never_lifts_global(client):
+    from agent.estop import engage, is_engaged
+    from hermes_cli.profiles import create_profile, get_profile_dir
+
+    # padrão = raiz: só pausa pelo "Pausar tudo"
+    assert client.get("/api/ops/pause").json() == {"paused": False, "can_pause": False}
+    assert client.put("/api/ops/pause", json={"paused": True}).status_code == 400
+
+    create_profile("aibiz", no_skills=True)
+    assert client.put("/api/ops/pause?profile=aibiz", json={"paused": True}).json() == {"paused": True, "can_pause": True}
+    assert (get_profile_dir("aibiz") / "ESTOP").exists()
+    assert not is_engaged()  # o padrão segue rodando
+
+    engage(reason="pausa geral")  # "Pausar tudo"
+    client.put("/api/ops/pause?profile=aibiz", json={"paused": False})
+    assert not (get_profile_dir("aibiz") / "ESTOP").exists()
+    assert is_engaged()  # retomar o perfil não levanta a pausa global

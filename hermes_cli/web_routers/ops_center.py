@@ -6,12 +6,29 @@ compartilhado com o gateway, que grava as mensagens recebidas e respeita a auton
 from __future__ import annotations
 
 import asyncio
+from contextvars import ContextVar
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/api/ops")
+# Perfil pedido pelo painel (``?profile=``, o seletor de perfil): cada rota lê e grava o ops.db,
+# a memória e o cron DAQUELE perfil — um processo de dashboard serve todos.
+_PROFILE: ContextVar[Optional[str]] = ContextVar("ops_profile", default=None)
+
+
+async def _capture_profile(profile: Optional[str] = Query(None)) -> None:
+    _PROFILE.set(profile)
+
+
+router = APIRouter(prefix="/api/ops", dependencies=[Depends(_capture_profile)])
+
+
+async def _scoped(fn, *args, **kwargs):
+    """``fn`` numa thread, dentro do escopo (home + segredos) do perfil pedido."""
+    from hermes_cli.web_routers._common import config_scoped_to_thread
+
+    return await config_scoped_to_thread(_PROFILE.get(), lambda: fn(*args, **kwargs))
 
 
 def _store():
@@ -24,7 +41,7 @@ async def _act(action: str, *, kind: str = "cfg", business_id: Optional[str] = N
     """Registra na Atividade (fail-open) — o painel não precisa lembrar de logar."""
     from hermes_cli.web_routers.ops_activity import log
 
-    await asyncio.to_thread(log, action, kind=kind, business_id=business_id)
+    await _scoped(log, action, kind=kind, business_id=business_id)
 
 
 _MODES = ("Observar", "Rascunhar", "Autônomo")
@@ -58,7 +75,7 @@ def _clip(t: str, n: int = 60) -> str:
 
 async def _run(fn, *args, **kwargs):
     try:
-        return await asyncio.to_thread(fn, *args, **kwargs)
+        return await _scoped(fn, *args, **kwargs)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except KeyError as e:
@@ -139,6 +156,52 @@ async def put_settings(body: OpsSettings):
     return {"default_mode": mode}
 
 
+# ---- pausa do perfil ----
+# Diferente do "Pausar tudo" (/api/estop, frota inteira): o ESTOP fica só na pasta DESTE perfil, e
+# retomar remove só ele — nunca levanta a pausa global. O perfil padrão É a raiz: pausá-lo sozinho
+# pausaria todos, então ele só pausa pelo "Pausar tudo".
+
+class PauseBody(BaseModel):
+    paused: bool
+
+
+def _profile_pause_state() -> dict:
+    from agent.estop import sentinel_path
+    from hermes_constants import get_process_hermes_home
+
+    path = sentinel_path()
+    try:
+        is_root = path.parent.resolve() == get_process_hermes_home().resolve()
+    except OSError:
+        is_root = False
+    return {"paused": path.exists(), "can_pause": not is_root}
+
+
+def _set_profile_pause(paused: bool) -> dict:
+    from agent.estop import engage, sentinel_path
+
+    state = _profile_pause_state()
+    if not state["can_pause"]:
+        raise ValueError("o perfil padrão só pausa pelo “Pausar tudo”")
+    if paused:
+        engage(reason="perfil pausado pelo painel")
+    else:
+        sentinel_path().unlink(missing_ok=True)
+    return _profile_pause_state()
+
+
+@router.get("/pause")
+async def get_profile_pause():
+    return await _run(_profile_pause_state)
+
+
+@router.put("/pause")
+async def put_profile_pause(body: PauseBody):
+    state = await _run(_set_profile_pause, body.paused)
+    await _act("Pausou este perfil" if body.paused else "Retomou este perfil")
+    return state
+
+
 # ---- caixa de entrada ----
 
 class InboxPatch(BaseModel):
@@ -174,13 +237,16 @@ class ReplyBody(BaseModel):
     text: str
 
 
-def _send_reply(platform: str, chat_id: str, text: str) -> None:
+def _send_reply(platform: str, chat_id: str, text: str, profile: Optional[str] = None) -> None:
     """Gateway rodando → envia pelo adaptador vivo (verbo ``ops-send``); senão, mesmo caminho do ``hermes send``."""
     from gateway.control_socket import query_gateway_control
     from gateway.ops_hooks import send_text
-    from hermes_constants import get_hermes_home
+    from hermes_constants import get_process_hermes_home
 
-    answer = query_gateway_control(get_hermes_home(), "ops-send", params={"platform": platform, "chat_id": chat_id, "text": text}, timeout=30.0)
+    # O socket de controle é do processo do gateway (home de lançamento), não do perfil; o perfil
+    # vai no pedido para o gateway escolher o bot certo.
+    params = {"platform": platform, "chat_id": chat_id, "text": text, "profile": profile or ""}
+    answer = query_gateway_control(get_process_hermes_home(), "ops-send", params=params, timeout=30.0)
     if answer is None:
         send_text(platform, chat_id, text)
     elif not answer.get("sent"):
@@ -200,7 +266,7 @@ async def reply_inbox(item_id: int, body: ReplyBody):
     if not item:
         raise HTTPException(404, "item não encontrado")
     try:
-        await asyncio.to_thread(_send_reply, item["platform"], item["chat_id"], text)
+        await _scoped(_send_reply, item["platform"], item["chat_id"], text, _PROFILE.get())
     except Exception as e:  # noqa: BLE001 — motivo vai pro toast
         raise HTTPException(502, f"Falha ao enviar: {e}") from e
     await _run(_store().mark_sent, item_id, text)
@@ -318,9 +384,9 @@ def _playbooks():
 
 def _gateway_running() -> bool:
     from gateway.control_socket import identify_gateway
-    from hermes_constants import get_hermes_home
+    from hermes_constants import get_process_hermes_home
 
-    return identify_gateway(get_hermes_home(), timeout=2.0) is not None
+    return identify_gateway(get_process_hermes_home(), timeout=2.0) is not None
 
 
 @router.get("/playbooks")
@@ -344,7 +410,7 @@ async def run_playbook(pid: str):
     if is_engaged():
         raise HTTPException(409, "Hermes está pausado — nada roda até retomar")
     result = await _run(_playbooks().run_now, pid)
-    return {**result, "gateway_running": await asyncio.to_thread(_gateway_running)}
+    return {**result, "gateway_running": await _scoped(_gateway_running)}
 
 
 @router.delete("/playbooks/{pid}")
