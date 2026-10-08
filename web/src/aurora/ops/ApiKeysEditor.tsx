@@ -18,7 +18,7 @@ const KEY_NAME: Record<string, string> = {
   NOVITA_API_KEY: "Novita", DEEPINFRA_API_KEY: "DeepInfra", MINIMAX_API_KEY: "MiniMax", KIMI_API_KEY: "Kimi (Moonshot)", ZAI_API_KEY: "Z.ai (GLM)",
   DASHSCOPE_API_KEY: "Alibaba (Qwen)", OLLAMA_API_KEY: "Ollama Cloud", MISTRAL_API_KEY: "Mistral", AZURE_FOUNDRY_API_KEY: "Azure AI Foundry",
   BRAVE_SEARCH_API_KEY: "Busca Brave", TAVILY_API_KEY: "Busca Tavily", EXA_API_KEY: "Busca Exa", PERPLEXITY_API_KEY: "Perplexity", FIRECRAWL_API_KEY: "Firecrawl (leitura de sites)",
-  BROWSERBASE_API_KEY: "Browserbase (navegador na nuvem)", BROWSER_USE_API_KEY: "Browser Use", ELEVENLABS_API_KEY: "ElevenLabs (voz)", FAL_KEY: "fal.ai (imagens)",
+  GROQ_API_KEY: "Groq (transcrição de voz)", BROWSERBASE_API_KEY: "Browserbase (navegador na nuvem)", BROWSER_USE_API_KEY: "Browser Use", ELEVENLABS_API_KEY: "ElevenLabs (voz)", FAL_KEY: "fal.ai (imagens)",
   GITHUB_TOKEN: "GitHub", MEM0_API_KEY: "Mem0 (memória)", HONCHO_API_KEY: "Honcho (memória)", SUPERMEMORY_API_KEY: "Supermemory", VOICE_TOOLS_OPENAI_KEY: "OpenAI (voz)",
 };
 /** Provedor que pode estar conectado por outro meio (login/OAuth) sem a chave no .env. */

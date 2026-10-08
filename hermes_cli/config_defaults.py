@@ -2971,6 +2971,10 @@ OPTIONAL_ENV_VARS = {
         tools=["elevenlabs_tts", "voice_transcription"]),
     "MISTRAL_API_KEY": _tool("Mistral API key for Voxtral TTS and transcription (STT)",
         "Mistral API key", "https://console.mistral.ai/"),
+    # Usada pela transcrição (tools/transcription_tools.py) mas ausente do catálogo: o painel não
+    # tinha como receber a chave do Groq Whisper.
+    "GROQ_API_KEY": _tool("Groq API key for fast Whisper transcription (STT); free tier available",
+        "Groq API key", "https://console.groq.com/keys"),
     "PORCUPINE_ACCESS_KEY": _tool(
         "Picovoice access key for the Porcupine 'Hey Hermes' wake word engine (optional; "
         "openWakeWord is the free default)", "Picovoice access key",
