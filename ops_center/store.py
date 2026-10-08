@@ -184,9 +184,12 @@ def set_default_mode(mode: int) -> int:
 
 
 def touch_channel(platform: str, chat_id: str, name: str = "", kind: str = "dm") -> dict:
-    """Registra/atualiza um canal visto pelo gateway e devolve sua política atual."""
+    """Registra/atualiza um canal visto pelo gateway e devolve sua política atual.
+
+    Grupo de WhatsApp novo nasce em Escutar (grupos de clientes: só lê e avisa a equipe); o resto
+    nasce no modo padrão. Canal já registrado mantém o modo."""
     cid = channel_id(platform, chat_id)
-    mode = default_mode()
+    mode = LISTEN if platform == "whatsapp" and kind == "group" else default_mode()
     with connect() as c:
         c.execute(
             "INSERT INTO channels(id, platform, chat_id, name, kind, mode, last_seen) VALUES(?,?,?,?,?,?,?) "
@@ -329,7 +332,8 @@ def channels_view() -> list[dict]:
                        "maxMin": mx if own else cfg["max_min"]},
             "problem": None,  # ponytail: o gateway não expõe saúde por canal ainda; preencher quando houver dado real
             "receivesAlerts": receives,
-            "requiresConfirm": ch["kind"] == "group" and not receives,
+            # Só grupo de cliente pede confirmação para o Autônomo (grupo da equipe no Telegram, não).
+            "requiresConfirm": section == "group",
         })
     return out
 
@@ -349,7 +353,8 @@ def patch_channel(cid: str, patch: dict, *, confirm: bool = False) -> dict:
                 raise ValueError("modo inválido")
             if mode == LISTEN and cid == alert_id:
                 raise ValueError("Escutar não vale para o canal que recebe os avisos da equipe")
-            if mode == AUTONOMOUS and row["mode"] != AUTONOMOUS and row["kind"] == "group" and cid != alert_id and not confirm:
+            if (mode == AUTONOMOUS and row["mode"] != AUTONOMOUS and row["kind"] == "group" and row["platform"] != "telegram"
+                    and cid != alert_id and not confirm):
                 raise ValueError("Autônomo em grupo responde sozinho para todo mundo: confirme com confirm=true")
             sets["mode"] = mode
         if patch.get("business_id", "") != "":
