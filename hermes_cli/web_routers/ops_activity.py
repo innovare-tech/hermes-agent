@@ -65,6 +65,11 @@ _RULES: list[tuple[str, re.Pattern, Callable[[re.Match, dict], Optional[str]]]] 
     ("PUT", re.compile(r"^/api/tools/toolsets/([\w-]+)$"), lambda m, b: f"{'Ligou' if b.get('enabled') else 'Desligou'} a ferramenta {_TOOLS.get(m.group(1), m.group(1))}"),
     ("POST", re.compile(r"^/api/model/set$"), lambda m, b: f"Trocou o modelo padrão para {b.get('model')} ({b.get('provider')})" if b.get("model") else None),
     ("PUT", re.compile(r"^/api/config$"), lambda m, b: "Alterou as configurações do agente"),
+    # Modelos (A5): só o nome do provedor, nunca a chave.
+    ("POST", re.compile(r"^/api/providers$"), lambda m, b: f"Adicionou o provedor “{b.get('name', '')}”" if b.get("name") else None),
+    ("DELETE", re.compile(r"^/api/providers/([^/]+)$"), lambda m, b: f"Removeu o provedor {m.group(1)}"),
+    ("PUT", re.compile(r"^/api/models/routing$"), lambda m, b: "Alterou quem faz o quê nos modelos"),
+    ("PUT", re.compile(r"^/api/limits$"), lambda m, b: "Alterou os limites de gasto com IA"),
 ]
 
 

@@ -3,6 +3,7 @@ import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
 import type { Settings as S } from "../agent/types";
 import { setPrefs, setState, toast, useStore, type Direction } from "../store";
+import { ModelsScreen } from "../models/ModelsScreen";
 import { ApiKeysEditor } from "../ops/ApiKeysEditor";
 import { BusinessesEditor } from "../ops/BusinessesEditor";
 import { ProfilesPanel } from "./Profiles";
@@ -41,11 +42,12 @@ function Section({ title, sub, children }: { title: string; sub: string; childre
 
 const TABS = [
   { id: "geral", label: "Geral", to: "/settings" },
+  { id: "modelos", label: "Modelos", to: "/settings/modelos" },
   { id: "perfis", label: "Perfis", to: "/settings/perfis" },
   { id: "aparencia", label: "Aparência", to: "/settings/aparencia" },
 ] as const;
 
-/** Geral · Perfis · Aparência. */
+/** Geral · Modelos · Perfis · Aparência. */
 function SettingsTabs({ tab }: { tab: string }) {
   const navigate = useNavigate();
   return (
@@ -63,7 +65,17 @@ export function Settings() {
   const [s, setS, reload] = useAgentData(() => agent.settings(), []);
   const dir = useStore((x) => x.dir);
   const param = useParams().tab;
-  const tab = param === "perfis" || param === "aparencia" ? param : "geral";
+  const tab = param === "perfis" || param === "aparencia" || param === "modelos" ? param : "geral";
+  if (tab === "modelos") {
+    return (
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div className="au-page au-page-agent" style={{ gap: 22, maxWidth: 1120 }}>
+          <SettingsTabs tab={tab} />
+          <ModelsScreen />
+        </div>
+      </div>
+    );
+  }
   if (tab === "perfis") {
     return (
       <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
@@ -99,7 +111,7 @@ export function Settings() {
           <ApiKeysEditor onChange={reload} />
         </Section>
 
-        <Section title="Provedor de modelo" sub="Qual serviço de IA o Hermes usa para pensar. Dá para trocar quando quiser.">
+        <Section title="Provedor de modelo" sub="Qual serviço de IA o Hermes usa para pensar. Dá para trocar quando quiser. Modelo por tarefa, provedores próprios e limites de gasto ficam na aba Modelos.">
           {s.modelError ? (
             <p role="alert" style={{ margin: 0, fontSize: 13, color: "var(--warn)", lineHeight: 1.5 }}>
               Não consegui listar os modelos: {s.modelError}
