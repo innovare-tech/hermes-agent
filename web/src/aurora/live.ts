@@ -257,8 +257,8 @@ export const liveAdapter: OpsAdapter = {
   async setDefaultMode(mode) {
     await ops("/settings", json("PUT", { default_mode: mode }));
   },
-  async setAutonomy(channelId, mode) {
-    await ops(`/channels/${encodeURIComponent(channelId)}`, json("PUT", { mode }));
+  async setAutonomy(channelId, mode, confirm) {
+    await ops(`/channels/${encodeURIComponent(channelId)}`, json("PUT", { mode, confirm: !!confirm }));
   },
   async setChannelBusiness(channelId, businessId) {
     await ops(`/channels/${encodeURIComponent(channelId)}`, json("PUT", { business_id: businessId }));

@@ -9,6 +9,7 @@ export const OPS: NavItem[] = [
   { to: "/inbox", label: "Caixa de entrada", icon: "inbox" },
   { to: "/approvals", label: "Aprovações", icon: "shield-check" },
   { to: "/radar", label: "Radar de grupos", icon: "radar" },
+  { to: "/channels", label: "Canais", icon: "messages-square" },
   { to: "/people", label: "Pessoas", icon: "users" },
   { to: "/playbooks", label: "Playbooks", icon: "workflow" },
   { to: "/activity", label: "Atividade", icon: "activity" },

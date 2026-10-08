@@ -80,6 +80,14 @@ import {
   Trash2,
   UserRound,
   Wrench,
+  ChevronRight,
+  Clock,
+  Ear,
+  Link2,
+  MessagesSquare,
+  Minus,
+  TriangleAlert,
+  Unlink,
   type LucideIcon,
 } from "lucide-react";
 
@@ -164,6 +172,14 @@ const ICONS: Record<string, LucideIcon> = {
   pause: Pause,
   "party-popper": PartyPopper,
   mail: Mail,
+  "chevron-right": ChevronRight,
+  clock: Clock,
+  ear: Ear,
+  "link-2": Link2,
+  "messages-square": MessagesSquare,
+  minus: Minus,
+  "triangle-alert": TriangleAlert,
+  unlink: Unlink,
 };
 
 export function Icon({ name, size = 16, color, className }: { name: string; size?: number; color?: string; className?: string }) {
