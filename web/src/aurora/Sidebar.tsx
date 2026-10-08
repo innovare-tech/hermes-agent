@@ -139,11 +139,13 @@ export function Sidebar() {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderTop: "1px solid var(--line)" }}>
-        <Icon name="key-round" size={15} color="var(--fg3)" />
-        <div style={{ display: "flex", flexDirection: "column", minWidth: 0, gap: 1 }}>
-          <span style={{ fontSize: 12, fontWeight: 500 }}>Chaves deste perfil</span>
-          <span title={s.keys.join(" · ")} style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.keys.length ? s.keys.join(" · ") : "Nenhuma chave ainda"}</span>
-        </div>
+        <NavLink to="/settings" title="Abrir Configurações › Chaves de API" style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1, color: "inherit", textDecoration: "none" }}>
+          <Icon name="key-round" size={15} color="var(--fg3)" />
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 0, gap: 1 }}>
+            <span style={{ fontSize: 12, fontWeight: 500 }}>Chaves deste perfil</span>
+            <span title={s.keys.join(" · ")} style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.keys.length ? s.keys.join(" · ") : "Nenhuma chave ainda"}</span>
+          </div>
+        </NavLink>
         <button className="au-theme" title="Alternar tema" aria-label="Alternar tema" onClick={() => setPrefs({ theme: s.theme === "dark" ? "light" : "dark" })}>
           <Icon name={s.theme === "dark" ? "sun" : "moon"} size={14} />
         </button>

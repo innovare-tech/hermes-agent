@@ -637,7 +637,11 @@ async def apply_whatsapp_onboarding(pairing_id: str, body: WhatsAppOnboardingApp
     with _onboarding_save_errors("WhatsApp onboarding apply failed", "Failed to save WhatsApp setup."):
         with _config_profile_scope(effective_profile):
             save_env_value("WHATSAPP_MODE", mode)
-            save_env_value("WHATSAPP_DM_POLICY", "pairing")
+            # Mantém uma política de DM já escolhida (ex.: número de suporte com DMs desligadas):
+            # forçar "pairing" faria o número mandar código de pareamento a quem escrever no privado.
+            from hermes_cli.config import get_env_value
+            if not (get_env_value("WHATSAPP_DM_POLICY") or "").strip():
+                save_env_value("WHATSAPP_DM_POLICY", "pairing")
             # Blank means "keep the existing allowlist"; explicit clearing
             # still lives in the normal config editor where the field is visible.
             if allowed_users:
