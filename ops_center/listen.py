@@ -98,7 +98,10 @@ def _run_analysis(group: str, client: str, state: str, cfg: dict) -> str:
            "prompt": ANALYSIS_PROMPT, "enabled_toolsets": list(cfg.get("toolsets") or ["no_mcp"]),
            "deliver": "local", "repeat": {"times": 1, "completed": 0}}
     ctx = f"Grupo: {group}\nCliente vinculado: {client or 'não vinculado'}\n\nMensagens:\n{state}"
-    ok, _doc, final, error = run_job(job, extra_prompt=ctx)
+    from ops_center.guardrails import as_origin
+
+    with as_origin("whatsapp_group"):  # roda pelo cron, mas o pedido vem do grupo do cliente
+        ok, _doc, final, error = run_job(job, extra_prompt=ctx)
     if not ok or not (final or "").strip():
         raise RuntimeError(error or "a análise não devolveu resposta")
     return final

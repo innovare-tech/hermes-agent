@@ -70,6 +70,13 @@ CREATE TABLE IF NOT EXISTS analyses (
   seen_by TEXT NOT NULL DEFAULT '[]', resolved TEXT, irrelevant TEXT, error TEXT
 );
 CREATE INDEX IF NOT EXISTS analyses_status ON analyses(status, created_at);
+CREATE TABLE IF NOT EXISTS approvals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, at REAL NOT NULL, origin TEXT, requested_by TEXT, requested_by_id TEXT,
+  context TEXT, action TEXT, summary TEXT, command TEXT, tool TEXT, args TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL, rule TEXT, target TEXT, message_id TEXT, expires_at REAL,
+  decided_by TEXT, decided_by_id TEXT, decided_at REAL, note TEXT, result TEXT
+);
+CREATE INDEX IF NOT EXISTS approvals_status ON approvals(status, at);
 """
 
 
@@ -524,3 +531,62 @@ def update_analysis(analysis_id: int, **fields: Any) -> None:
     vals = [json.dumps(v) if k in _ANALYSIS_JSON and v is not None else v for k, v in fields.items()]
     with connect() as c:
         c.execute(f"UPDATE analyses SET {', '.join(f'{k}=?' for k in fields)} WHERE id=?", (*vals, analysis_id))
+
+
+# ---- Permissões: pedidos de aprovação e histórico ----
+
+def add_approval(**fields: Any) -> int:
+    cols = ("origin", "requested_by", "requested_by_id", "context", "action", "summary", "command", "tool", "args",
+            "status", "rule", "target", "expires_at", "note")
+    vals = [json.dumps(fields.get(k) or {}) if k == "args" else fields.get(k) for k in cols]
+    with connect() as c:
+        cur = c.execute(f"INSERT INTO approvals(at, {', '.join(cols)}) VALUES(?, {', '.join('?' * len(cols))})",
+                        (time.time(), *vals))
+        return cur.lastrowid
+
+
+def get_approval(approval_id: int) -> Optional[dict]:
+    with connect() as c:
+        row = c.execute("SELECT * FROM approvals WHERE id=?", (approval_id,)).fetchone()
+    if not row:
+        return None
+    a = dict(row)
+    a["args"] = json.loads(a.get("args") or "{}")
+    return a
+
+
+def list_approvals(status: Optional[str] = None, limit: int = 100) -> list[dict]:
+    expire_approvals()
+    where, args = ("WHERE status=?", [status]) if status else ("", [])
+    with connect() as c:
+        rows = _rows(c.execute(f"SELECT * FROM approvals {where} ORDER BY at DESC LIMIT ?", (*args, limit)))
+    for r in rows:
+        r["args"] = json.loads(r.get("args") or "{}")
+    return rows
+
+
+def update_approval(approval_id: int, **fields: Any) -> None:
+    allowed = {"status", "decided_by", "decided_by_id", "decided_at", "note", "result", "message_id", "target"}
+    if set(fields) - allowed:
+        raise ValueError(f"campos inválidos: {sorted(set(fields) - allowed)}")
+    with connect() as c:
+        c.execute(f"UPDATE approvals SET {', '.join(f'{k}=?' for k in fields)} WHERE id=?",
+                  (*fields.values(), approval_id))
+
+
+def claim_approval(approval_id: int, approve: bool, by: str, by_id: str, note: str = "") -> Optional[dict]:
+    """Decide um pedido ainda pendente e não expirado (atômico: vale a primeira decisão)."""
+    with connect() as c:
+        cur = c.execute(
+            "UPDATE approvals SET status=?, decided_by=?, decided_by_id=?, decided_at=?, note=? "
+            "WHERE id=? AND status='pending' AND (expires_at IS NULL OR expires_at > ?)",
+            ("approved" if approve else "denied", by, by_id, time.time(), note or None, approval_id, time.time()))
+        claimed = cur.rowcount == 1
+    return get_approval(approval_id) if claimed else None
+
+
+def expire_approvals(now: Optional[float] = None) -> int:
+    """Pedido sem decisão no prazo conta como negado (``expired``)."""
+    with connect() as c:
+        return c.execute("UPDATE approvals SET status='expired', decided_at=? WHERE status='pending' "
+                         "AND expires_at IS NOT NULL AND expires_at <= ?", (now or time.time(), now or time.time())).rowcount

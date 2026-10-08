@@ -175,3 +175,26 @@ def test_listen_settings_route(client):
     out = client.put("/api/ops/listen", json={"silence_min": 10, "notify_target": "telegram:-100:7"}).json()
     assert out["silence_min"] == 10 and out["notify_target"] == "telegram:-100:7"
     assert client.put("/api/ops/listen", json={"max_min": 1000}).status_code == 400
+
+
+def test_permissions_and_approvals_routes(client, monkeypatch):
+    perms = client.get("/api/ops/permissions").json()
+    assert perms["enabled"] is False and "whatsapp_group" in perms["origins"]
+    assert any(h["label"] == "Apagar banco ou tabela" for h in perms["hardDeny"])
+    bad = client.put("/api/ops/permissions", json={"matrix": {"db.write": {"whatsapp_group": "allow"}}})
+    assert bad.status_code == 400 and "nunca alteram" in bad.json()["detail"]
+    ok = client.put("/api/ops/permissions", json={"enabled": True, "approvalTarget": "telegram:-100:3"}).json()
+    assert ok["enabled"] and ok["approvalTarget"] == "telegram:-100:3"
+
+    from ops_center import guardrails, store
+
+    aid = store.add_approval(origin="telegram_team", requested_by="Ivair", requested_by_id="11", summary="Mudar cluster",
+                             command="kubectl scale deploy/x --replicas=2", tool="terminal",
+                             args={"command": "kubectl scale deploy/x --replicas=2"}, status="pending",
+                             expires_at=10**12)
+    ran = []
+    monkeypatch.setattr(guardrails, "execute_approved", lambda i: ran.append(i) or "ok")
+    assert client.get("/api/ops/approvals", params={"status": "pending"}).json()[0]["id"] == aid
+    out = client.post(f"/api/ops/approvals/{aid}/decide", json={"approve": True}).json()
+    assert out["status"] == "approved" and out["decided_by"] == "Você (painel)"
+    assert client.post(f"/api/ops/approvals/{aid}/decide", json={"approve": False}).status_code == 409

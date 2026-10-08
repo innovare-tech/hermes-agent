@@ -170,6 +170,75 @@ async def put_listen(body: dict):
     return out
 
 
+# ---- Permissões (design A6) ----
+
+_HARD_DENY_EXAMPLES = {
+    "Apagar banco ou tabela": ["DROP TABLE", "TRUNCATE", "db.dropDatabase()"],
+    "Apagar ou alterar em massa": ["DELETE sem WHERE", "UPDATE sem WHERE", "deleteMany({})"],
+    "Apagar arquivos em massa": ["rm -rf", "find … -delete"],
+    "Apagar partes do cluster": ["kubectl delete namespace", "kubectl delete pvc", "kubectl drain"],
+    "Mexer em chaves e acessos": ["kubectl … secret", ".env", "authorized_keys", "createUser"],
+    "Mudar estas permissões pelo chat": ["ops.db", "permissões"],
+}
+
+
+def _permissions_payload() -> dict:
+    from ops_center import guardrails
+
+    cfg = guardrails.settings()
+    return {
+        "enabled": cfg["enabled"], "origins": list(guardrails.ORIGINS), "originLabels": guardrails.ORIGIN_LABEL,
+        "actions": guardrails.ACTIONS + [
+            {"key": k, "group": "mcp:" + k.split(".")[1], "label": k.split(".", 2)[2], "writes": True}
+            for k in cfg["matrix"] if k.startswith("mcp.") and k.count(".") >= 2],
+        "matrix": cfg["matrix"], "approvers": cfg["approvers"], "approvalTarget": cfg["approval_target"],
+        "approvalTtlMin": cfg["approvalTtlMin"],
+        "hardDeny": [{"label": r["label"], "patterns": _HARD_DENY_EXAMPLES.get(r["label"], [])} for r in guardrails.HARD_DENY],
+    }
+
+
+@router.get("/permissions")
+async def get_permissions():
+    return await _run(_permissions_payload)
+
+
+@router.put("/permissions")
+async def put_permissions(body: dict):
+    from ops_center import guardrails
+
+    patch = {k: body[k] for k in ("enabled", "matrix", "approvers") if k in body}
+    if "approvalTarget" in body:
+        patch["approval_target"] = str(body["approvalTarget"] or "")
+    await _run(guardrails.save_settings, patch)
+    await _act("Permissões atualizadas (valem a partir do próximo pedido)")
+    return await _run(_permissions_payload)
+
+
+@router.get("/approvals")
+async def get_approvals(status: Optional[str] = None, limit: int = Query(100, ge=1, le=500)):
+    return await _run(_store().list_approvals, status, limit)
+
+
+class DecideBody(BaseModel):
+    approve: bool
+    note: str = ""
+
+
+@router.post("/approvals/{approval_id}/decide")
+async def decide_approval(approval_id: int, body: DecideBody):
+    """Decisão pelo painel (vale a primeira, painel ou Telegram). Aprovado: executa em segundo plano."""
+    from ops_center import guardrails
+
+    out = await _run(guardrails.decide, approval_id, body.approve, "Você (painel)", "dashboard", body.note)
+    if not out.get("ok"):
+        raise HTTPException(status_code=409, detail=out.get("error") or "não deu para decidir")
+    if body.approve:
+        # No escopo do perfil (home + segredos); o resultado fica no histórico do pedido.
+        asyncio.get_running_loop().create_task(_scoped(guardrails.execute_approved, approval_id))
+    await _act(f"{'Aprovou' if body.approve else 'Negou'} o pedido #{approval_id}: {out['approval'].get('summary')}")
+    return out["approval"]
+
+
 # ---- pausa do perfil ----
 # Diferente do "Pausar tudo" (/api/estop, frota inteira): o ESTOP fica só na pasta DESTE perfil, e
 # retomar remove só ele — nunca levanta a pausa global. O perfil padrão É a raiz: pausá-lo sozinho
