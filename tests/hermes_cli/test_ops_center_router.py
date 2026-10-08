@@ -97,3 +97,29 @@ def test_default_mode_for_new_channels(client):
     assert client.get("/api/ops/settings").json() == {"default_mode": 1}  # Rascunhar de fábrica
     assert client.put("/api/ops/settings", json={"default_mode": 0}).json() == {"default_mode": 0}
     assert client.put("/api/ops/settings", json={"default_mode": 3}).status_code == 400
+
+
+def test_config_actions_land_in_activity(client):
+    from ops_center import store
+
+    b = client.post("/api/ops/businesses", json={"name": "Loja"}).json()
+    client.put("/api/ops/settings", json={"default_mode": 2})
+    client.put("/api/ops/watches", json={"words": ["boleto"]})
+    client.delete(f"/api/ops/businesses/{b['id']}")
+    actions = [a["action"] for a in store.list_activity()]
+    assert "Criou o negócio “Loja”" in actions and "Removeu o negócio “Loja”" in actions
+    assert "Canais novos passam a começar em Autônomo" in actions and "Palavras vigiadas: boleto" in actions
+    assert client.post("/api/ops/activity", json={"kind": "cfg", "action": "x"}).status_code == 200
+
+
+def test_activity_middleware_rules_never_log_secrets():
+    from hermes_cli.web_routers.ops_activity import match
+
+    assert match("PUT", "/api/estop", {"paused": True}) == "Pausou tudo (kill switch)"
+    assert match("POST", "/api/gateway/restart", {}) == "Reiniciou o gateway"
+    action = match("PUT", "/api/env", {"key": "OPENROUTER_API_KEY", "value": "sk-segredo"})
+    assert action == "Salvou a chave OPENROUTER_API_KEY" and "sk-segredo" not in action
+    creds = match("PUT", "/api/messaging/platforms/telegram", {"env": {"TELEGRAM_BOT_TOKEN": "123:abc"}})
+    assert "TELEGRAM_BOT_TOKEN" in creds and "123:abc" not in creds
+    assert match("PUT", "/api/messaging/platforms/telegram", {"enabled": False}) == "Desligou o canal Telegram"
+    assert match("GET", "/api/estop", {}) is None and match("PUT", "/api/ops/inbox/1", {}) is None

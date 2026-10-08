@@ -3,6 +3,7 @@ import { ask } from "../store";
 import { api, fetchJSON, type CronJob as ApiCron } from "@/lib/api";
 import { classifyLine } from "@/lib/log-classify";
 import { shortWhen, sourceIcon, sourceLabel } from "../chat/sources";
+import { CHANNEL_PT, FIELD_PT, MAIN_CHANNELS, TOOL_PT } from "./channelText";
 import { parseCronPt } from "./cron";
 const DEST_ICON: Record<string, string> = { Telegram: "send", Email: "mail", Discord: "message-circle", WhatsApp: "phone", Slack: "hash", Conversa: "message-square" };
 import type { AgentAdapter, CronJob, Gateway, LogLine, MemoryData, Settings } from "./types";
@@ -87,10 +88,13 @@ export const liveAgent: AgentAdapter = {
 
   async skills() {
     return (await api.getSkills()).map((s) => {
-      const cat = (s.category ?? "").toLowerCase();
-      return { name: s.name, origin: cat.includes("hub") ? "hub" : /learn|auto|aprend/.test(cat) ? "aprendida" : "sua", description: s.description, uses: 0, version: "", updated: s.category ?? "" } as const;
+      const raw = s as typeof s & { provenance?: string; usage?: number };
+      const origin = raw.provenance === "hub" ? "hub" : raw.provenance === "bundled" ? "incluida" : "local";
+      return { name: s.name, origin, description: s.description, uses: raw.usage ?? 0, category: s.category ?? "", enabled: s.enabled } as const;
     });
   },
+  toggleSkill: async (name, enabled) => void (await api.toggleSkill(name, enabled)),
+  skillContent: async (name) => (await api.getSkillContent(name)).content,
 
   crons: async () => (await api.getCronJobs()).map(cronFrom),
   toggleCron: async (c) => {
@@ -111,18 +115,25 @@ export const liveAgent: AgentAdapter = {
     const [{ platforms }, st] = await Promise.all([api.getMessagingPlatforms(), api.getStatus()]);
     return {
       summary: { running: st.gateway_running, label: st.gateway_running ? `gateway ativo${st.gateway_pid ? " · pid " + st.gateway_pid : ""}` : "gateway parado" },
-      items: platforms.map((p) => ({
+      items: platforms
+        .map((p) => ({ p, pt: CHANNEL_PT[p.id], rank: MAIN_CHANNELS.indexOf(p.id) }))
+        .sort((a, b) => (a.rank < 0 ? 99 : a.rank) - (b.rank < 0 ? 99 : b.rank))
+        .map(({ p, pt, rank }) => ({
         id: p.id,
-        name: p.name,
+        name: pt?.name ?? p.name,
         mono: p.name.slice(0, p.name === "Signal" ? 2 : 1),
         account: p.home_channel?.name ?? (p.configured ? "configurado" : "não configurado"),
         enabled: p.enabled,
         configured: p.configured,
         status: p.enabled ? (GW_STATUS[p.state] ?? (p.state === "gateway_stopped" ? "erro" : "pareando")) : "desligado",
         stat: p.error_message ?? (p.state === "gateway_stopped" ? "gateway parado" : p.state === "pending_restart" ? "reinicie o gateway" : ""),
-        description: p.description,
+        description: pt?.description ?? p.description,
         docsUrl: p.docs_url,
-        fields: p.env_vars.map((e) => ({ key: e.key, label: e.prompt || e.key, help: e.help || e.description, url: e.url, secret: e.is_password, list: !!e.is_list, advanced: e.advanced, isSet: e.is_set, value: e.value ?? "" })),
+        main: rank >= 0,
+        fields: p.env_vars.map((e) => {
+          const t = FIELD_PT[e.key];
+          return { key: e.key, label: t?.label ?? (e.prompt || e.key), help: t ? (t.help ?? "") : e.help || e.description, url: e.url, secret: e.is_password, list: !!e.is_list, advanced: t?.advanced ?? e.advanced, isSet: e.is_set, value: e.value ?? "", example: t?.example };
+        }),
       })),
     };
   },
@@ -194,7 +205,7 @@ export const liveAgent: AgentAdapter = {
       backend,
       personas: PERSONAS.map(([, label]) => label),
       persona,
-      tools: toolsets.map((t) => ({ id: t.name, name: t.label || t.name, description: t.description, icon: TOOL_ICON[t.name] ?? "wrench", enabled: t.enabled })),
+      tools: toolsets.map((t) => ({ id: t.name, name: TOOL_PT[t.name]?.[0] ?? (t.label || t.name), description: TOOL_PT[t.name]?.[1] ?? t.description, icon: TOOL_ICON[t.name] ?? "wrench", enabled: t.enabled, available: (t as { available?: boolean }).available !== false })),
       modelError,
     };
   },

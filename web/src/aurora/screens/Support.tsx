@@ -23,6 +23,11 @@ export function Support() {
         icon="life-buoy"
         what="Conecte o seu sistema de tickets."
         needs="O Suporte lista tickets, cruza com os logs do agente e propõe correções a partir de um conector (Linear, Zendesk…). A integração com conectores ainda não existe no Hermes — enquanto isso, peça ao agente na Conversa para investigar um erro ou ler um ticket."
+        action={
+          <a href="/chat" className="au-primary" style={{ textDecoration: "none" }}>
+            Ir para a Conversa
+          </a>
+        }
       />
     );
   return (

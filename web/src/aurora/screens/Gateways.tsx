@@ -72,9 +72,9 @@ export function GatewaySetup({ g, onSaved }: { g: Gateway; onSaved: (restart: bo
             {f.isSet && <span style={{ color: "var(--ok)" }}>· salvo</span>}
           </span>
           {f.list ? (
-            <textarea rows={2} value={vals[f.key]} onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })} placeholder="um por linha" spellCheck={false} />
+            <textarea rows={2} value={vals[f.key]} onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })} placeholder={f.example ? `um por linha — ex.: ${f.example}` : "um por linha"} spellCheck={false} />
           ) : (
-            <input type={f.secret ? "password" : "text"} autoComplete="off" spellCheck={false} value={vals[f.key]} onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })} placeholder={f.secret && f.isSet ? "•••••• salvo — deixe vazio para manter" : f.key} />
+            <input type={f.secret ? "password" : "text"} autoComplete="off" spellCheck={false} value={vals[f.key]} onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })} placeholder={f.secret && f.isSet ? "•••••• salvo — deixe vazio para manter" : f.example ? `ex.: ${f.example}` : ""} />
           )}
           {(f.help || f.url) && (
             <span style={{ fontSize: 11.5, color: "var(--fg3)", lineHeight: 1.45 }}>
@@ -106,6 +106,7 @@ export function GatewaySetup({ g, onSaved }: { g: Gateway; onSaved: (restart: bo
         <button type="button" className="au-outline" disabled={!!busy || !g.configured} onClick={runTest} title={g.configured ? undefined : "Salve as credenciais primeiro"}>
           {busy === "test" ? "Testando…" : "Testar conexão"}
         </button>
+        {!g.configured && <span style={{ fontSize: 12, color: "var(--fg3)" }}>Salve as credenciais para poder testar.</span>}
         {g.fields.some((f) => f.isSet) && (
           <button type="button" className="au-outline danger" onClick={clear}>
             Apagar credenciais
@@ -152,14 +153,16 @@ export function Gateways() {
   const needle = q.trim().toLowerCase();
   const items = (data?.items ?? []).filter((g) => !needle || g.name.toLowerCase().includes(needle) || g.id.includes(needle));
   const mine = items.filter((g) => g.configured || g.enabled);
-  const rest = items.filter((g) => !(g.configured || g.enabled));
+  const rest = items.filter((g) => !(g.configured || g.enabled) && g.main);
+  const others = items.filter((g) => !(g.configured || g.enabled) && !g.main);
   const running = !!data?.summary.running;
 
   const card = (g: Gateway, i: number) => {
     const isOpen = open === g.id;
     return (
       <div key={g.id} className="au-card au-gw" onMouseMove={spot} style={{ animationDelay: i * 35 + "ms", gridColumn: isOpen ? "1 / -1" : undefined }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {/* Cabeçalho inteiro abre/fecha o formulário (o interruptor não). */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }} onClick={(e) => !(e.target as HTMLElement).closest("[role=switch],button") && setOpen(isOpen ? null : g.id)}>
           <span className="au-display" style={{ width: 40, height: 40, borderRadius: "var(--r2)", background: "var(--panel2)", display: "grid", placeItems: "center", fontSize: 18, letterSpacing: 0, flex: "none" }}>{g.mono}</span>
           <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: 1 }}>
             <span style={{ fontSize: 14.5, fontWeight: 500 }}>{g.name}</span>
@@ -251,6 +254,13 @@ export function Gateways() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 14 }}>{rest.map(card)}</div>
           </>
         )}
+        {others.length > 0 && (
+          <details open={!!needle || undefined}>
+            <summary className="au-label" style={{ cursor: "pointer", padding: "4px 0" }}>Outros canais ({others.length})</summary>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 14, marginTop: 12 }}>{others.map(card)}</div>
+          </details>
+        )}
+        {data && needle && items.length === 0 && <p style={{ margin: 0, fontSize: 13.5, color: "var(--fg2)" }}>Nenhum canal com esse nome.</p>}
       </div>
     </div>
   );

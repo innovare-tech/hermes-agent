@@ -61,14 +61,14 @@ export function Home() {
           sub={
             s.paused
               ? "O agente está pausado. Ele continua lendo tudo, mas não envia nada nem executa ações até você retomar."
-              : `Hoje o Hermes respondeu ${s.last24h.autoReplies} ${s.last24h.autoReplies === 1 ? "mensagem" : "mensagens"} sozinho e separou ${needs.length + approvals} ${needs.length + approvals === 1 ? "decisão" : "decisões"} para você${s.health.items.some((x) => x.name === "Gateway de mensagens" && x.status !== "ok") ? ". O gateway de mensagens está parado — ligue em Gateways" : ""}.`
+              : `Hoje o Hermes respondeu ${s.last24h.autoReplies} ${s.last24h.autoReplies === 1 ? "mensagem" : "mensagens"} sozinho e separou ${needs.length + approvals} ${needs.length + approvals === 1 ? "decisão" : "decisões"} para você${s.health.problems.length ? ". Atenção: " + s.health.problems[0].text.charAt(0).toLowerCase() + s.health.problems[0].text.slice(1) : ""}.`
           }
         />
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))", gap: 16 }}>
           <div className="au-card" onMouseMove={spot} style={{ padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span className="au-label">Briefing da manhã · {brief[0]?.at ?? "—"}</span>
+              <span className="au-label">Briefing da manhã{brief[0]?.at ? ` · ${brief[0].at}` : ""}</span>
               {speech.can && brief.length > 0 && (
                 <button
                   onClick={speech.toggle}

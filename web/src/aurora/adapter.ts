@@ -6,7 +6,7 @@ export type BizId = string;
 export type Business = { id: BizId; name: string; color: string };
 export type Priority = "urgente" | "voce" | "resolve" | "ignorar";
 export type AutonomyMode = 0 | 1 | 2; // Observar · Rascunhar · Autônomo
-export type ActivityKind = "msg" | "cmd" | "pay" | "mem" | "tkt";
+export type ActivityKind = "msg" | "cmd" | "pay" | "mem" | "tkt" | "cfg";
 
 export type Session = {
   id: string;

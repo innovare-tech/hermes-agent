@@ -10,6 +10,13 @@ describe("parsePlaybook", () => {
     expect(p.name).toBe("Um cliente pedir nota fiscal no …");
   });
 
+  it("texto antes de 'quando' é o nome; nasce desligado", () => {
+    const p = parsePlaybook("Resumo diário: quando eu pedir, resuma as mensagens", "", "b2")!;
+    expect(p.name).toBe("Resumo diário");
+    expect(p.trigger).toBe("Eu pedir");
+    expect(p.enabled).toBe(false);
+  });
+
   it("sem 'quando': a frase vira o gatilho; vazio não cria nada", () => {
     expect(parsePlaybook("Lead novo no site", "unic")!.nodes[2].text).toBe("Responder com base no histórico");
     expect(parsePlaybook("   ", "unic")).toBeNull();

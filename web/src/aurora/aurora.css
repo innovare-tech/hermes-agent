@@ -69,6 +69,10 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-label{font-family:var(--fm);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg3)}
 /* Áreas roláveis reservam a barra: filtrar/encolher a lista não desloca o layout. */
 .au-root [style*="overflow: auto"]{scrollbar-gutter:stable}
+.au-side-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.au-side-nav{flex:none}
+.au-side-list{flex:1;min-height:0;overflow:auto}
+@media (max-height:820px){.au-side-body{overflow:auto}.au-side-list{flex:none;overflow:visible}}
 .au-page{max-width:1180px;margin:0 auto;padding:40px 36px 72px;display:flex;flex-direction:column;gap:22px;animation:hblurin .7s cubic-bezier(.2,.7,.2,1) both}
 .au-h1{margin:0;font-family:var(--fd);font-weight:var(--fdw);letter-spacing:var(--fdt);font-size:var(--h1);line-height:1.1;padding-bottom:.06em;background:linear-gradient(100deg,var(--fg) 44%,var(--acc) 50%,var(--fg) 56%) 0 0/300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:hsheen 9s ease-in-out infinite}
 

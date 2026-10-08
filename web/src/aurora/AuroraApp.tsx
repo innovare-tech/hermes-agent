@@ -62,7 +62,7 @@ export function AuroraApp() {
   const { pathname } = useLocation();
   useEffect(() => {
     const item = [...OPS, ...AGENT].find((n) => (n.to === "/" ? pathname === "/" : pathname.startsWith(n.to)));
-    document.title = item ? `Hermes · ${item.label}` : "Hermes";
+    document.title = item ? `Hermes · ${item.label}` : pathname.startsWith("/support") ? "Hermes · Suporte" : "Hermes";
   }, [pathname]);
 
   useEffect(() => {

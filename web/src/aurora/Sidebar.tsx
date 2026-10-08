@@ -96,7 +96,9 @@ export function Sidebar() {
 
       <BusinessSwitcher />
 
-      <nav aria-label="Navegação" style={{ display: "flex", flexDirection: "column", gap: 1, padding: "0 8px 8px", flex: "0 1 auto", overflow: "auto", minHeight: 160 }}>
+      {/* Tela alta: menu fixo e só as conversas rolam. Tela baixa (CSS .au-side-body): tudo rola junto. */}
+      <div className="au-side-body">
+      <nav aria-label="Navegação" className="au-side-nav" style={{ display: "flex", flexDirection: "column", gap: 1, padding: "0 8px 8px" }}>
           <div className="au-label" style={{ padding: "12px 11px 6px" }}>Operação</div>
           {OPS.map((n, i) => (
             <NavRow key={n.to} item={n} index={i} hot count={counts[n.to] ? String(counts[n.to]) : ""} />
@@ -107,8 +109,7 @@ export function Sidebar() {
           ))}
       </nav>
 
-      {/* Só as conversas rolam; o menu fica sempre à vista. */}
-      <div style={{ flex: "1 1 0", overflow: "auto", minHeight: 90, borderTop: "1px solid var(--line)" }}>
+      <div className="au-side-list" style={{ borderTop: "1px solid var(--line)" }}>
         <div style={{ padding: "0 8px 16px" }}>
           {GROUPS.filter((g) => s.sessions.some((x) => x.group === g)).map((g) => (
             <div key={g}>
@@ -131,6 +132,7 @@ export function Sidebar() {
             </div>
           ))}
         </div>
+      </div>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderTop: "1px solid var(--line)" }}>

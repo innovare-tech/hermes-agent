@@ -117,7 +117,10 @@ export function Settings() {
                 <Icon name={t.icon} size={15} color="var(--fg2)" />
                 <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   <span style={{ fontSize: 13.5, fontWeight: 500 }}>{t.name}</span>
-                  <span style={{ fontSize: 12, color: "var(--fg3)" }}>{t.description}</span>
+                  <span style={{ fontSize: 12, color: "var(--fg3)" }}>
+                    {t.description}
+                    {!t.available && <span style={{ color: "var(--warn)" }}> · indisponível: falta configurar</span>}
+                  </span>
                 </span>
                 <button role="switch" aria-checked={t.enabled} aria-label={`${t.enabled ? "Desabilitar" : "Habilitar"} ${t.name}`} className="au-switch lg" onClick={() => apply({ tool: { id: t.id, enabled: !t.enabled } })}>
                   <span />
