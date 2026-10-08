@@ -5,6 +5,7 @@ import type { Settings as S } from "../agent/types";
 import { setPrefs, setState, toast, useStore, type Direction } from "../store";
 import { ApiKeysEditor } from "../ops/ApiKeysEditor";
 import { BusinessesEditor } from "../ops/BusinessesEditor";
+import { Notify } from "./Notify";
 import { ProfilesPanel } from "./Profiles";
 import { AgentHeader } from "./Sessions";
 
@@ -41,11 +42,12 @@ function Section({ title, sub, children }: { title: string; sub: string; childre
 
 const TABS = [
   { id: "geral", label: "Geral", to: "/settings" },
+  { id: "avisos", label: "Avisos", to: "/settings/avisos" },
   { id: "perfis", label: "Perfis", to: "/settings/perfis" },
   { id: "aparencia", label: "Aparência", to: "/settings/aparencia" },
 ] as const;
 
-/** Geral · Perfis · Aparência. */
+/** Geral · Avisos · Perfis · Aparência. */
 function SettingsTabs({ tab }: { tab: string }) {
   const navigate = useNavigate();
   return (
@@ -63,7 +65,18 @@ export function Settings() {
   const [s, setS, reload] = useAgentData(() => agent.settings(), []);
   const dir = useStore((x) => x.dir);
   const param = useParams().tab;
-  const tab = param === "perfis" || param === "aparencia" ? param : "geral";
+  const tab = param === "perfis" || param === "aparencia" || param === "avisos" ? param : "geral";
+  if (tab === "avisos") {
+    return (
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div className="au-page au-page-agent" style={{ gap: 22, maxWidth: 1180 }}>
+          <SettingsTabs tab={tab} />
+          <AgentHeader title="Para onde vão os avisos" sub="Escolha em qual tópico do grupo da equipe cada aviso chega, quando ficar em silêncio e quem é chamado no que é crítico." />
+          <Notify />
+        </div>
+      </div>
+    );
+  }
   if (tab === "perfis") {
     return (
       <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>

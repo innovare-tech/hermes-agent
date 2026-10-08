@@ -190,7 +190,18 @@ def format_notice(a: dict) -> str:
 
 
 def send_notice(a: dict) -> Optional[dict]:
-    """Envia ao destino configurado. ``{sentAt}`` ou ``None`` (sem destino, ou falhou — fica no painel)."""
+    """Envia ao destino configurado. ``{sentAt}`` ou ``None`` (sem destino, ou falhou — fica no painel).
+
+    Com as rotas de Avisos (A4) configuradas, o destino é o tópico do nível de urgência (``notify.send``);
+    senão, o ``notify_target`` antigo."""
+    from ops_center import notify
+
+    if notify.is_configured():
+        try:
+            return notify.send("analyses", a.get("urgency") or ("alta" if a.get("status") == "failed" else "media"), format_notice(a))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("ops_center: aviso da análise A-%s não saiu: %s", a.get("id"), e)
+            return None
     target = str(store.listen_settings().get("notify_target") or "").strip()
     if not target:
         return None
