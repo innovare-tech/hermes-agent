@@ -393,6 +393,7 @@ def test_listen_send_notice_uses_routes_and_falls_back(tg, monkeypatch):
     a = {"id": 7, "status": "open", "urgency": "critica", "category": "bug", "summary": "Fila parada", "message_count": 3,
          "channel_id": "whatsapp:g1", "group_name": "Grupo Rota"}
     monkeypatch.setattr(listen, "format_notice", lambda x: "AVISO " + x["summary"])
+    monkeypatch.setattr(listen, "format_notice_html", lambda x: ("<b>AVISO</b> " + x["summary"], [{"text": "📋", "copy_text": {"text": "r"}}]))
     legacy = []
     monkeypatch.setitem(__import__("sys").modules, "tools.send_message_tool",
                         type("M", (), {"send_message_tool": staticmethod(lambda args: legacy.append(args) or json.dumps({"success": True, "message_id": 1}))}))
@@ -403,7 +404,8 @@ def test_listen_send_notice_uses_routes_and_falls_back(tg, monkeypatch):
     legacy.clear()
     sent = listen.send_notice(a)
     assert sent["topic"] == 11 and sent["target"] == f"telegram:{CHAT}:11" and not legacy
-    assert tg.sent()[-1]["text"] == "AVISO Fila parada"
+    assert tg.sent()[-1]["text"] == "<b>AVISO</b> Fila parada"  # versão HTML, com o botão de copiar
+    assert tg.sent()[-1]["reply_markup"] == {"inline_keyboard": [[{"text": "📋", "copy_text": {"text": "r"}}]]}
     notify.save_routes({"analyses": {"critical": {"topic": "off"}}})
     assert listen.send_notice(a) is None and not legacy  # "Não enviar" não cai no destino antigo
     failed = {**a, "status": "failed", "urgency": None}

@@ -204,6 +204,44 @@ def format_notice(a: dict) -> str:
     return "\n\n".join(p for p in parts if p)[:3900]
 
 
+COPY_TEXT_MAX = 256  # limite do botão "copiar" do Telegram (copy_text)
+
+
+def _client_line(a: dict) -> str:
+    """Cliente vinculado ao grupo (nome · plano · id) ou o aviso de que falta vincular."""
+    import html
+
+    if not a.get("client_id"):
+        return "👤 <b>Cliente:</b> não vinculado — vincule este grupo a um cliente em Canais"
+    c = store.get_client(a["client_id"]) or {}
+    name = c.get("name") or a.get("client_name") or a["client_id"]
+    extra = " · ".join(x for x in (f"plano {c['plan']}" if c.get("plan") else "", f"<code>{html.escape(a['client_id'])}</code>") if x)
+    return f"👤 <b>Cliente:</b> {html.escape(name)}" + (f" · {extra}" if extra else "")
+
+
+def format_notice_html(a: dict) -> tuple[str, list[dict]]:
+    """Aviso em HTML do Telegram + botões: cliente em destaque e a resposta sugerida pronta para copiar."""
+    import html
+
+    esc = html.escape
+    group = esc(a.get("group_name") or a.get("channel_id") or "grupo")
+    if a.get("status") == "failed":
+        quotes = "\n".join(f"[{q['at']}] {q['author']}: {q['text']}" for q in (a.get("evidence") or {}).get("quotes") or [])
+        body = (f"⚠️ <b>Não consegui analisar {a.get('message_count', 0)} mensagens</b>\n{_client_line(a)}\n"
+                f"💬 <b>Grupo:</b> {group}\nMotivo: {esc(a.get('error') or 'desconhecido')}\n\n<pre>{esc(quotes[:2800])}</pre>")
+        return body[:3800], []
+    head = f"{_URGENCY_LABEL.get(a.get('urgency') or '', '⚪')} · <b>{esc(_CATEGORY_LABEL.get(a.get('category') or '', 'Análise'))}</b>"
+    parts = [f"{head}\n{_client_line(a)}\n💬 <b>Grupo:</b> {group}", esc(a.get("summary") or "")]
+    if a.get("hypothesis"):
+        parts.append(f"🔎 <b>Hipótese:</b> {esc(a['hypothesis'])}")
+    reply = (a.get("suggested_reply") or "").strip()
+    if reply:
+        parts.append(f"✍️ <b>Resposta sugerida</b> (o Hermes não envia; copie e mande no grupo)\n<pre>{esc(reply)}</pre>")
+    parts.append(f"<i>A-{a['id']} · {a.get('message_count', 0)} mensagens · detalhes em Análises no painel</i>")
+    buttons = [{"text": "📋 Copiar resposta", "copy_text": {"text": reply}}] if reply and len(reply) <= COPY_TEXT_MAX else []
+    return "\n\n".join(p for p in parts if p)[:3800], buttons
+
+
 def send_notice(a: dict) -> Optional[dict]:
     """Envia ao destino configurado. ``{sentAt}`` ou ``None`` (sem destino, ou falhou — fica no painel).
 
@@ -213,7 +251,9 @@ def send_notice(a: dict) -> Optional[dict]:
 
     if notify.is_configured():
         try:
-            return notify.send("analyses", a.get("urgency") or ("alta" if a.get("status") == "failed" else "media"), format_notice(a))
+            body, buttons = format_notice_html(a)
+            return notify.send("analyses", a.get("urgency") or ("alta" if a.get("status") == "failed" else "media"),
+                               format_notice(a), html_body=body, buttons=buttons)
         except Exception as e:  # noqa: BLE001
             logger.warning("ops_center: aviso da análise A-%s não saiu: %s", a.get("id"), e)
             return None

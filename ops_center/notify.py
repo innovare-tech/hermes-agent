@@ -405,13 +405,17 @@ def _url(cid: str, topic: Any, mid: Any) -> Optional[str]:
     return "https://t.me/c/" + "/".join(str(x) for x in (m[1], topic, mid) if x)
 
 
-def _deliver(cid: str, topic: Any, text: str, mentions: Optional[list[int]] = None) -> dict:
-    body = html.escape(text)[:3800]
+def _deliver(cid: str, topic: Any, text: str, mentions: Optional[list[int]] = None, *,
+             html_body: Optional[str] = None, buttons: Optional[list[dict]] = None) -> dict:
+    """``html_body`` (já em HTML do Telegram) substitui o ``text``; ``buttons`` = uma linha de botões inline."""
+    body = html_body[:3800] if html_body else html.escape(text)[:3800]
     if mentions:
         body += "\n\n" + _mention_text(mentions)
     payload: dict[str, Any] = {"chat_id": cid, "text": body, "parse_mode": "HTML", "disable_web_page_preview": True}
     if isinstance(topic, int):
         payload["message_thread_id"] = topic
+    if buttons:
+        payload["reply_markup"] = {"inline_keyboard": [buttons]}
     r = _call("sendMessage", payload)
     mid = r.get("message_id")
     return {"sentAt": time.time(), "messageId": mid, "url": _url(cid, topic, mid), "topic": topic,
@@ -424,7 +428,8 @@ def _enqueue(item: dict) -> None:
         store.set_meta("notify_queue", (q + [item])[-_QUEUE_MAX:])
 
 
-def send(kind: str, level: str, text: str, now: Optional[float] = None) -> Optional[dict]:
+def send(kind: str, level: str, text: str, now: Optional[float] = None, *,
+         html_body: Optional[str] = None, buttons: Optional[list[dict]] = None) -> Optional[dict]:
     """Aplica a rota do nível e envia. ``kind``: ``analyses`` (critica|alta|media|baixa) ou ``infra`` (critical|warning|info).
 
     Devolve ``{sentAt, messageId, url, topic, target}``; ``None`` se não enviou (sem rotas/token/grupo, "Não enviar",
@@ -444,7 +449,8 @@ def send(kind: str, level: str, text: str, now: Optional[float] = None) -> Optio
         _enqueue({"at": now, "kind": kind, "level": key, "topic": row["topic"], "text": text[:300]})
         return None
     try:
-        return _deliver(cid, row["topic"], text, r[kind]["mentions"] if key == "critical" else None)
+        return _deliver(cid, row["topic"], text, r[kind]["mentions"] if key == "critical" else None,
+                        html_body=html_body, buttons=buttons)
     except TelegramError as e:
         logger.warning("ops_center: aviso %s/%s não saiu: %s", kind, key, e.message)
         return None

@@ -436,6 +436,13 @@ def import_clients(items: Any) -> dict:
     return {"imported": len(rows), "total": total}
 
 
+def get_client(system_client_id: str) -> Optional[dict]:
+    with connect() as c:
+        row = c.execute("SELECT system_client_id, name, plan FROM clients WHERE system_client_id=?",
+                        (system_client_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def list_clients(q: str = "", cursor: Optional[str] = None, limit: int = 30) -> dict:
     """Página do diretório, por nome. Busca sem acento por nome ou ``systemClientId``."""
     try:

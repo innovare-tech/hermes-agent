@@ -205,3 +205,21 @@ def test_analysis_job_uses_the_group_analysis_model(monkeypatch):
     listen._run_analysis("Padaria Sol", "", "[10:00] Ana: oi", store.listen_settings())
     assert (seen["provider"], seen["model"]) == ("openrouter", "x/analista")
     assert seen["enabled_toolsets"] == ["vision", "video", "no_mcp"]
+
+
+def test_notice_html_has_client_block_and_copy_button():
+    from ops_center import listen, store
+
+    store.set_meta("x", 1)
+    with store.connect() as c:
+        c.execute("INSERT INTO clients(system_client_id, name, plan, name_norm, updated_at) VALUES('c-sol','Padaria Sol','Pro','padaria sol',0)")
+    a = {"id": 7, "status": "open", "urgency": "alta", "category": "bug", "group_name": "Padaria Sol - Suporte",
+         "client_id": "c-sol", "summary": "Robô parado <desde cedo>", "hypothesis": "bot caiu",
+         "suggested_reply": "Já estamos vendo!", "message_count": 3}
+    body, buttons = listen.format_notice_html(a)
+    assert "👤 <b>Cliente:</b> Padaria Sol · plano Pro · <code>c-sol</code>" in body
+    assert "&lt;desde cedo&gt;" in body and "<pre>Já estamos vendo!</pre>" in body
+    assert buttons == [{"text": "📋 Copiar resposta", "copy_text": {"text": "Já estamos vendo!"}}]
+
+    body, buttons = listen.format_notice_html({**a, "client_id": None, "suggested_reply": "x" * 300})
+    assert "não vinculado" in body and buttons == []  # acima do limite do copy_text: só o bloco <pre>
