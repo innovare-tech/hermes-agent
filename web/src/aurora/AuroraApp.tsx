@@ -4,6 +4,7 @@ import { AskDialog, Background, PauseBanner, Toast } from "./Chrome";
 import { agent } from "./agent";
 import { ONBOARDED_KEY, Onboarding } from "./Onboarding";
 import { Activity } from "./screens/Activity";
+import { Analyses } from "./screens/Analyses";
 import { Agents } from "./screens/Agents";
 import { Cron } from "./screens/Cron";
 import { Gateways } from "./screens/Gateways";
@@ -113,6 +114,7 @@ export function AuroraApp() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/inbox" element={<Inbox />} />
+              <Route path="/analises" element={<Analyses />} />
               <Route path="/approvals" element={<Approvals />} />
               <Route path="/activity" element={<Activity />} />
               <Route path="/radar" element={<Radar />} />

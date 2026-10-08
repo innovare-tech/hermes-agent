@@ -125,6 +125,9 @@ const PROFILE_SCOPED_PREFIXES = [
   "/api/curator",
   "/api/webhooks",
   "/api/ops",
+  // Análises dos grupos (ops.db do perfil) e o diretório de clientes que as filtra.
+  "/api/analyses",
+  "/api/clients",
   "/api/logs",
   "/api/portal",
   // Pool entries live in the profile's home, and DELETE /api/credentials/pool/{provider}/{index}

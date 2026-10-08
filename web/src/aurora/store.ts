@@ -2,6 +2,9 @@ import { useSyncExternalStore } from "react";
 import { adapter, type Approval, type AutonomyMode, type BizId, type Channel, type InboxItem, type OnBehalf, type OpsSnapshot, type Person, type Playbook, type PlaybookDraft, type Session, type Ticket } from "./adapter";
 import { chat } from "./chat";
 
+/** Aviso na tela; `action` desenha um botão (ex.: Desfazer) e dura mais. */
+export type ToastItem = { text: string; id: number; action?: { label: string; run: () => void } };
+
 export type Direction = "aurora" | "ambar" | "sinal";
 export type Theme = "dark" | "light";
 
@@ -14,9 +17,9 @@ export type State = Omit<OpsSnapshot, "account"> & {
   /** "all" ou o id do negócio — filtra todas as telas. */
   biz: string;
   /** Último aviso (atalho para testes e leitores de tela). */
-  toast: { text: string; id: number } | null;
+  toast: ToastItem | null;
   /** Avisos visíveis, empilhados no canto. */
-  toasts: { text: string; id: number }[];
+  toasts: ToastItem[];
   /** Confirmação aberta (diálogo do Aurora, no lugar do window.confirm). */
   ask: AskRequest | null;
   /** Passo do assistente de setup (-1 = fechado). */
@@ -114,11 +117,11 @@ export function answerAsk(ok: boolean) {
   a?.resolve(ok);
 }
 
-export function toast(text: string) {
-  const t = { text, id: ++toastSeq };
+export function toast(text: string, action?: ToastItem["action"]) {
+  const t: ToastItem = { text, id: ++toastSeq, action };
   // Máximo 3 na tela; cada um some sozinho.
   setState((s) => ({ toast: t, toasts: [...s.toasts.filter((x) => x.text !== text), t].slice(-3) }));
-  setTimeout(() => setState((s) => ({ toasts: s.toasts.filter((x) => x.id !== t.id), toast: s.toast?.id === t.id ? null : s.toast })), 3600);
+  setTimeout(() => setState((s) => ({ toasts: s.toasts.filter((x) => x.id !== t.id), toast: s.toast?.id === t.id ? null : s.toast })), action ? 7000 : 3600);
 }
 
 export function setPrefs(p: Partial<Pick<State, "dir" | "theme">>) {

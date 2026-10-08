@@ -1,7 +1,7 @@
 // Peças globais do shell: fundo atmosférico, Toast, PanicButton, faixa de pausa e helpers de página.
 import { useEffect, type MouseEvent, type ReactNode } from "react";
 import { Icon } from "./Icon";
-import { answerAsk, ask, togglePause, useStore } from "./store";
+import { answerAsk, ask, setState, togglePause, useStore } from "./store";
 
 /** Spotlight que segue o cursor dentro do cartão (`.au-card`). */
 export const spot = (e: MouseEvent<HTMLElement>) => {
@@ -79,6 +79,18 @@ export function Toast() {
             ))}
           </span>
           <span>{t.text}</span>
+          {t.action && (
+            <button
+              className="au-outline"
+              style={{ pointerEvents: "auto", padding: "4px 10px", fontSize: 12.5, fontWeight: 600 }}
+              onClick={() => {
+                t.action!.run();
+                setState((s) => ({ toasts: s.toasts.filter((x) => x.id !== t.id), toast: s.toast?.id === t.id ? null : s.toast }));
+              }}
+            >
+              {t.action.label}
+            </button>
+          )}
         </div>
       ))}
     </div>

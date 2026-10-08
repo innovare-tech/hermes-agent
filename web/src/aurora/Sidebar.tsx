@@ -2,11 +2,12 @@ import { NavLink, useNavigate } from "react-router";
 import { Icon } from "./Icon";
 import { inBiz, setPrefs, setState, useStore, type State } from "./store";
 
-type NavItem = { to: string; label: string; icon: string; count?: string };
+type NavItem = { to: string; label: string; icon: string; count?: string; sub?: boolean };
 
 export const OPS: NavItem[] = [
   { to: "/", label: "Painel", icon: "layout-dashboard" },
   { to: "/inbox", label: "Caixa de entrada", icon: "inbox" },
+  { to: "/analises", label: "Análises dos grupos", icon: "scan-search", sub: true },
   { to: "/approvals", label: "Aprovações", icon: "shield-check" },
   { to: "/radar", label: "Radar de grupos", icon: "radar" },
   { to: "/people", label: "Pessoas", icon: "users" },
@@ -56,7 +57,7 @@ export function BusinessSwitcher() {
 
 function NavRow({ item, index, count, hot }: { item: NavItem; index: number; count: string; hot: boolean }) {
   return (
-    <NavLink to={item.to} end={item.to === "/"} className={({ isActive }) => "au-nav" + (isActive ? " active" : "")} style={{ animationDelay: index * 30 + "ms" }}>
+    <NavLink to={item.to} end={item.to === "/"} className={({ isActive }) => "au-nav" + (isActive ? " active" : "")} style={{ animationDelay: index * 30 + "ms", paddingLeft: item.sub ? 26 : undefined }}>
       <Icon name={item.icon} />
       <span style={{ whiteSpace: "nowrap" }}>{item.label}</span>
       <span className={"au-count" + (hot && count ? " hot" : "")}>{count}</span>
