@@ -106,7 +106,22 @@ export type Person = {
   tone: string;
   channels: string;
   pending: string[];
+  /** Identificadores que ligam o contato às mensagens da Caixa. */
+  handles: PersonHandles;
 };
+
+export type PersonHandles = { phone?: string; telegram?: string; email?: string };
+
+/** A mensagem é deste contato? Compara telefone (só dígitos, últimos 8), @telegram e e-mail com o canal e o remetente. */
+export function matchesPerson(item: { channelId: string; from: string }, h: PersonHandles): boolean {
+  const hay = `${item.channelId} ${item.from}`.toLowerCase();
+  const digits = (h.phone ?? "").replace(/\D/g, "");
+  if (digits.length >= 8 && hay.replace(/\D/g, "").includes(digits.slice(-8))) return true;
+  const tg = (h.telegram ?? "").replace(/^@/, "").toLowerCase();
+  if (tg && hay.includes(tg)) return true;
+  const mail = (h.email ?? "").toLowerCase();
+  return !!mail && hay.includes(mail);
+}
 
 export type PlaybookNode = { kind: "trigger" | "action" | "cond" | "end"; text: string; elseText?: string };
 export type Playbook = {

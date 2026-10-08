@@ -67,7 +67,7 @@ function Row({ k, onChange, viaLogin }: { k: ApiKey; onChange: () => void; viaLo
             {keyName(k.key)} <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, fontWeight: 400, color: "var(--fg3)" }}>{k.key}</span>
           </span>
           <span style={{ fontSize: 12, color: k.isSet || viaLogin ? "var(--ok)" : "var(--fg3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {k.isSet ? savedHint(k.preview) : viaLogin ? "conectado por login (sem chave aqui)" : k.description}
+            {k.isSet ? savedHint(k.preview) : viaLogin ? "conectado por login (sem chave aqui)" : k.key in KEY_NAME ? "não configurada" : k.description}
           </span>
         </span>
         {k.url && !k.isSet && (
@@ -122,7 +122,7 @@ export function ApiKeysEditor({ onChange }: { onChange?: () => void }) {
         <div role="tablist" aria-label="Tipo de chave" style={{ display: "flex", gap: 4, padding: 4, borderRadius: "var(--r)", background: "var(--panel2)" }}>
           {TABS.map((t) => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} className="au-seg au-seg-lg" onClick={() => setTab(t.id)}>
-              {t.label} {keys ? `· ${keys.filter((k) => k.category === t.id && k.isSet).length}` : ""}
+              {t.label} {keys ? `· ${keys.filter((k) => k.category === t.id && k.isSet).length} salvas` : ""}
             </button>
           ))}
         </div>

@@ -88,7 +88,14 @@ export function Home() {
                 </button>
               )}
             </div>
-            {brief.length === 0 && <p style={{ margin: 0, paddingTop: 14, borderTop: "1px solid var(--line)", fontSize: 13.5, lineHeight: 1.6, color: "var(--fg2)" }}>Para receber um briefing toda manhã, crie um agendamento — por exemplo “dias úteis às 7h30, resuma minhas mensagens e pendências e mande no Telegram”.</p>}
+            {brief.length === 0 && (
+              <div style={{ paddingTop: 14, borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--fg2)" }}>Receba toda manhã um resumo das mensagens e pendências.</p>
+                <button className="au-outline" onClick={() => navigate("/cron?q=" + encodeURIComponent("dias úteis às 7h30, resuma minhas mensagens e pendências"))}>
+                  <Icon name="calendar-plus" size={13} /> Criar agendamento
+                </button>
+              </div>
+            )}
             {brief.map((b, i) => (
               <div key={b.business} style={{ display: "grid", gridTemplateColumns: "92px minmax(0,1fr)", gap: 14, paddingTop: 14, borderTop: "1px solid var(--line)", animation: "hblurin .6s both", animationDelay: 150 + i * 120 + "ms" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, alignSelf: "start", paddingTop: 2 }}>
@@ -101,10 +108,10 @@ export function Home() {
           </div>
 
           <div className="au-card" onMouseMove={spot} style={{ padding: 22, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "22px 16px", alignContent: "start" }}>
-            <span className="au-label" style={{ gridColumn: "1/-1" }}>Últimas 24 horas</span>
+            <span className="au-label" style={{ gridColumn: "1/-1" }}>Hoje</span>
             {[
-              { v: String(s.activity.filter((a) => /^\d\d:\d\d$/.test(a.at)).length), l: "ações registradas hoje", c: "var(--acc)" },
-              { v: String(s.last24h.autoReplies), l: "respostas enviadas sozinho", c: "var(--fg)" },
+              { v: String(s.activity.filter((a) => /^\d\d:\d\d$/.test(a.at)).length), l: "ações registradas", c: "var(--acc)" },
+              { v: String(s.last24h.autoReplies), l: "respostas enviadas", c: "var(--fg)" },
               { v: String(needs.length + approvals), l: "decisões esperando você", c: "var(--fg)" },
               { v: String(alerts), l: "alertas nos grupos", c: alerts ? "var(--err)" : "var(--fg)" },
             ].map((r, i) => (

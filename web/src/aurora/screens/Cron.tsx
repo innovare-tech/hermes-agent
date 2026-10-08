@@ -1,16 +1,22 @@
 import { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
-import { toast } from "../store";
+import { toast, useStore } from "../store";
+
+const EXAMPLES = ["dias úteis às 7h30, resuma minhas mensagens e pendências", "toda sexta às 18h, faça um resumo da semana", "todo dia 1 às 10h, liste as contas a pagar do mês"];
 import { AgentHeader } from "./Sessions";
 
 export function Cron() {
   const [jobs, setJobs] = useAgentData(() => agent.crons(), []);
-  const [draft, setDraft] = useState("");
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const [draft, setDraft] = useState(params.get("q") ?? "");
+  const gatewayStopped = useStore((s) => s.health.items.some((x) => x.name === "Gateway de mensagens" && x.status !== "ok"));
   const preview = draft.trim() ? agent.previewCron(draft) : null;
 
   const create = async () => {
-    if (!draft.trim()) return;
+    if (!draft.trim()) return toast("Descreva quando e o quê — ex.: “toda sexta às 18h, resuma a semana”");
     try {
       const job = await agent.createCron(draft);
       setJobs([job, ...(jobs ?? [])]);
@@ -29,7 +35,7 @@ export function Cron() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Icon name="calendar-plus" size={16} color="var(--acc)" />
             <input aria-label="Novo agendamento" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} placeholder="ex.: toda sexta às 18h, resuma meus commits da semana e mande no Discord" style={{ flex: 1, border: 0, outline: 0, background: "transparent", color: "var(--fg)", fontSize: 14.5 }} />
-            <button className="au-primary" onClick={create} style={{ padding: "8px 14px", opacity: draft.trim() ? 1 : 0.45 }}>
+            <button className="au-primary" onClick={create} style={{ padding: "8px 14px", opacity: draft.trim() ? 1 : 0.6 }}>
               Agendar
             </button>
           </div>
@@ -53,7 +59,29 @@ export function Cron() {
             </div>
           )}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", border: "1px solid var(--line)", borderRadius: "var(--r)", background: "var(--panel)", backdropFilter: "var(--blur)", overflow: "hidden" }}>
+        {gatewayStopped && (
+          <div role="alert" className="au-card" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, borderColor: "var(--warn)", fontSize: 13.5 }}>
+            <Icon name="octagon-pause" size={15} color="var(--warn)" />
+            Quem executa os agendamentos é o gateway, e ele está parado — nada roda até você iniciá-lo.
+            <button className="au-outline" onClick={() => navigate("/gateways")} style={{ marginLeft: "auto" }}>
+              Abrir Gateways
+            </button>
+          </div>
+        )}
+        {jobs && jobs.length === 0 && (
+          <div className="au-card" style={{ padding: 22, display: "flex", flexDirection: "column", gap: 10 }}>
+            <span style={{ fontSize: 14.5, fontWeight: 600 }}>Nenhum agendamento ainda</span>
+            <span style={{ fontSize: 13, color: "var(--fg2)" }}>Clique num exemplo para começar, ajuste e aperte Agendar:</span>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {EXAMPLES.map((x) => (
+                <button key={x} className="au-chip" onClick={() => setDraft(x)} style={{ cursor: "pointer", background: "transparent", whiteSpace: "normal", textAlign: "left" }}>
+                  {x}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{ display: jobs?.length ? "flex" : "none", flexDirection: "column", border: "1px solid var(--line)", borderRadius: "var(--r)", background: "var(--panel)", backdropFilter: "var(--blur)", overflow: "hidden" }}>
           {jobs?.map((c, i) => (
             <div key={c.id} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 160px 120px 40px", gap: 18, alignItems: "center", padding: "17px 20px", borderBottom: "1px solid var(--line)", opacity: c.enabled ? 1 : 0.5, transition: "opacity .3s", animation: "hup .4s cubic-bezier(.2,.7,.2,1) both", animationDelay: i * 45 + "ms" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>

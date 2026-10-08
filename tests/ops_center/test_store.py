@@ -82,3 +82,20 @@ def test_people_playbooks_meta_roundtrip():
     store.set_meta("support", {"provider": "linear"})
     assert store.get_meta("support") == {"provider": "linear"}
     assert store.get_meta("missing", 3) == 3
+
+
+def test_person_handles_and_migration(tmp_path):
+    import sqlite3
+
+    from ops_center import store
+
+    p = store.save_person({"name": "Ana", "handles": {"phone": "+55 11 9999-0000", "email": " ", "telegram": "@ana"}})
+    assert p["handles"] == {"phone": "+55 11 9999-0000", "telegram": "@ana"}
+    # banco antigo sem a coluna: ganha na primeira conexão
+    old = tmp_path / "old.db"
+    con = sqlite3.connect(old)
+    con.execute("CREATE TABLE people (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT '', business_id TEXT, tone TEXT NOT NULL DEFAULT '', channels TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', pending TEXT NOT NULL DEFAULT '[]', waiting_since REAL, updated_at REAL NOT NULL)")
+    con.commit()
+    con.close()
+    with store.connect(old) as c:
+        assert "handles" in {r[1] for r in c.execute("PRAGMA table_info(people)")}

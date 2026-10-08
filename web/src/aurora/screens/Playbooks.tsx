@@ -4,7 +4,7 @@ import { Icon } from "../Icon";
 import { parsePlaybook } from "../ops/playbook";
 import { PlaybookFlow } from "../ops/PlaybookFlow";
 import { PlaybookSettings } from "../ops/PlaybookSettings";
-import { ask, deletePlaybook, inBiz, savePlaybook, useStore } from "../store";
+import { ask, deletePlaybook, inBiz, savePlaybook, toast, useStore } from "../store";
 
 export function Playbooks() {
   const s = useStore((x) => x);
@@ -15,7 +15,7 @@ export function Playbooks() {
 
   const create = async () => {
     const p = parsePlaybook(draft, s.biz === "all" ? "" : s.biz);
-    if (!p) return;
+    if (!p) return toast("Descreva o fluxo — ex.: “Boletos: quando chegar um boleto no e-mail, avise no Telegram”");
     const { id: _local, runs: _r, lastRun: _l, ...data } = p;
     const saved = await savePlaybook(data, "Fluxo salvo");
     if (saved) {
@@ -39,7 +39,7 @@ export function Playbooks() {
             placeholder="ex.: quando um cliente pedir nota fiscal no WhatsApp, gere a NF no sistema e envie o PDF"
             style={{ flex: 1, border: 0, outline: 0, background: "transparent", color: "var(--fg)", fontSize: 14 }}
           />
-          <button className="au-primary" onClick={create} style={{ opacity: draft.trim() ? 1 : 0.45 }}>
+          <button className="au-primary" onClick={create} style={{ opacity: draft.trim() ? 1 : 0.6 }}>
             Criar fluxo
           </button>
         </div>

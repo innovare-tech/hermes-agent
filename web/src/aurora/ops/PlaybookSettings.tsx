@@ -13,6 +13,12 @@ const PRESETS: { label: string; value: string }[] = [
 ];
 
 /** Configuração do playbook: nome, quando roda (cron do Hermes), para onde vai o resultado e os passos. */
+/** Passo novo entra antes do passo final ("Registrar na Atividade"), não depois dele. */
+export function beforeEnd(nodes: PlaybookNode[], n: PlaybookNode): PlaybookNode[] {
+  const end = nodes.findIndex((x) => x.kind === "end");
+  return end < 0 ? [...nodes, n] : [...nodes.slice(0, end), n, ...nodes.slice(end)];
+}
+
 export function PlaybookSettings({ p }: { p: Playbook }) {
   const channels = useStore((s) => s.autonomy);
   const businesses = useStore((s) => s.businesses);
@@ -81,7 +87,7 @@ export function PlaybookSettings({ p }: { p: Playbook }) {
         ))}
       </div>
       <p style={{ margin: "-4px 0 0", fontSize: 11.5, color: "var(--fg3)", lineHeight: 1.5 }}>
-        Aceita <code>every weekday 9am</code>, <code>every 2h</code>, <code>30m</code> ou cron (<code>0 9 * * 1-5</code>). Quem executa é o gateway — ele precisa estar ligado.
+        Use os atalhos acima ou escreva no formato do agendador: <code>every weekday 9am</code> (dias úteis 9h), <code>every 2h</code> (a cada 2 horas), <code>every monday 9am</code> (segundas 9h). Quem executa é o gateway — ele precisa estar ligado.
       </p>
 
       <label className="au-field">
@@ -108,7 +114,7 @@ export function PlaybookSettings({ p }: { p: Playbook }) {
             <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)", width: 18 }}>{i}</span>
               <div className="au-field" style={{ flex: 1 }}>
-                <input aria-label={`Passo ${i}`} value={n.text} onChange={(e) => setNode(i, { text: e.target.value })} />
+                <input aria-label={`Passo ${i}`} value={n.text} onChange={(e) => setNode(i, { text: e.target.value })} placeholder={n.kind === "cond" ? "se… (ex.: o valor passa de R$ 500?)" : n.kind === "end" ? "fim" : "faça… (ex.: liste os boletos vencendo)"} />
               </div>
               {n.kind === "cond" && (
                 <div className="au-field" style={{ flex: 1 }}>
@@ -122,10 +128,10 @@ export function PlaybookSettings({ p }: { p: Playbook }) {
           ),
         )}
         <div style={{ display: "flex", gap: 6 }}>
-          <button type="button" className="au-outline" onClick={() => set({ nodes: [...d.nodes, { kind: "action", text: "" }] })}>
+          <button type="button" className="au-outline" onClick={() => set({ nodes: beforeEnd(d.nodes, { kind: "action", text: "" }) })}>
             + Ação
           </button>
-          <button type="button" className="au-outline" onClick={() => set({ nodes: [...d.nodes, { kind: "cond", text: "", elseText: "" }] })}>
+          <button type="button" className="au-outline" onClick={() => set({ nodes: beforeEnd(d.nodes, { kind: "cond", text: "", elseText: "" }) })}>
             + Condição
           </button>
         </div>

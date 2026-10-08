@@ -14,10 +14,10 @@ export function ContextPanel({ info, onCompress }: { info: SessionInfo; onCompre
       style={{ width: 300, flex: "none", borderLeft: "1px solid var(--line)", background: "var(--bg2)", backdropFilter: "var(--blur)", WebkitBackdropFilter: "var(--blur)", overflow: "auto", padding: "20px 20px 28px", display: "flex", flexDirection: "column", gap: 26, animation: "hin .3s ease both" }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <span className="au-label">Contexto</span>
+        <span className="au-label" title="Quanto da conversa o modelo consegue considerar de uma vez. Quando enche, use Compactar.">Memória da conversa</span>
         <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
           <span className="au-display" style={{ fontSize: 30, lineHeight: 1 }}>{info.ctxUsed == null ? "—" : k(info.ctxUsed)}</span>
-          <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)" }}>/ {info.ctxMax ? Math.round(info.ctxMax / 1000) + "k" : "—"} tokens</span>
+          <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)" }}>de {info.ctxMax ? Math.round(info.ctxMax / 1000) + "k" : "—"} tokens</span>
         </div>
         <div style={{ height: 6, borderRadius: 6, background: "var(--panel2)", overflow: "hidden" }}>
           <div style={{ height: "100%", width: pct + "%", background: "var(--acc)", borderRadius: 6, transition: "width .8s cubic-bezier(.2,.7,.2,1)" }} />

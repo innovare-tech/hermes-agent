@@ -115,7 +115,9 @@ def test_config_actions_land_in_activity(client):
 def test_activity_middleware_rules_never_log_secrets():
     from hermes_cli.web_routers.ops_activity import match
 
-    assert match("PUT", "/api/estop", {"paused": True}) == "Pausou tudo (kill switch)"
+    assert match("PUT", "/api/estop", {"paused": True}) == "Pausou tudo"
+    assert match("PUT", "/api/skills/toggle", {"name": "ascii-art", "enabled": False}) == "Desligou a skill /ascii-art"
+    assert match("PUT", "/api/tools/toolsets/todo", {"enabled": False}) == "Desligou a ferramenta Plano de tarefas"
     assert match("POST", "/api/gateway/restart", {}) == "Reiniciou o gateway"
     action = match("PUT", "/api/env", {"key": "OPENROUTER_API_KEY", "value": "sk-segredo"})
     assert action == "Salvou a chave OPENROUTER_API_KEY" and "sk-segredo" not in action

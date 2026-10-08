@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS watches (word TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS people (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT '', business_id TEXT,
   tone TEXT NOT NULL DEFAULT '', channels TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
-  pending TEXT NOT NULL DEFAULT '[]', waiting_since REAL, updated_at REAL NOT NULL
+  pending TEXT NOT NULL DEFAULT '[]', waiting_since REAL, updated_at REAL NOT NULL,
+  handles TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS playbooks (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, business_id TEXT, trigger TEXT NOT NULL,
@@ -74,10 +75,18 @@ def connect(path: Optional[Path] = None) -> Iterator[sqlite3.Connection]:
         con.execute("PRAGMA journal_mode=WAL")
         con.execute("PRAGMA busy_timeout=10000")
         con.executescript(SCHEMA)
+        _migrate(con)
         yield con
         con.commit()
     finally:
         con.close()
+
+
+def _migrate(con: sqlite3.Connection) -> None:
+    """Colunas novas em bancos criados antes delas (idempotente)."""
+    cols = {r[1] for r in con.execute("PRAGMA table_info(people)")}
+    if "handles" not in cols:
+        con.execute("ALTER TABLE people ADD COLUMN handles TEXT NOT NULL DEFAULT '{}'")
 
 
 def _rows(cur: sqlite3.Cursor) -> list[dict[str, Any]]:
@@ -284,6 +293,7 @@ def list_people() -> list[dict]:
         rows = _rows(c.execute("SELECT * FROM people ORDER BY name"))
     for r in rows:
         r["pending"] = json.loads(r["pending"] or "[]")
+        r["handles"] = json.loads(r.get("handles") or "{}")
     return rows
 
 
@@ -294,12 +304,13 @@ def save_person(data: dict) -> dict:
         raise ValueError("nome é obrigatório")
     with connect() as c:
         c.execute(
-            "INSERT INTO people(id, name, role, business_id, tone, channels, notes, pending, waiting_since, updated_at) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, role=excluded.role, "
+            "INSERT INTO people(id, name, role, business_id, tone, channels, notes, pending, waiting_since, updated_at, handles) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, role=excluded.role, "
             "business_id=excluded.business_id, tone=excluded.tone, channels=excluded.channels, notes=excluded.notes, "
-            "pending=excluded.pending, waiting_since=excluded.waiting_since, updated_at=excluded.updated_at",
+            "pending=excluded.pending, waiting_since=excluded.waiting_since, updated_at=excluded.updated_at, handles=excluded.handles",
             (pid, name, data.get("role", ""), data.get("business_id"), data.get("tone", ""), data.get("channels", ""),
-             data.get("notes", ""), json.dumps(data.get("pending") or []), data.get("waiting_since"), time.time()),
+             data.get("notes", ""), json.dumps(data.get("pending") or []), data.get("waiting_since"), time.time(),
+             json.dumps({k: str(v).strip() for k, v in (data.get("handles") or {}).items() if str(v or "").strip()})),
         )
     return next(p for p in list_people() if p["id"] == pid)
 

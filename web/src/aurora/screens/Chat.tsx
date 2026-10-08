@@ -171,7 +171,7 @@ export function Chat() {
               <Icon name="drama" size={12} />
               {cap(info.persona === "padrão" || !info.persona ? "Personalidade padrão" : info.persona)}
             </span>
-            <button className="au-iconbtn" title="Contexto" aria-label="Contexto" aria-pressed={insp} onClick={() => setInsp(!insp)}>
+            <button className="au-iconbtn" title="Memória da conversa e custo" aria-label="Memória da conversa e custo" aria-pressed={insp} onClick={() => setInsp(!insp)}>
               <Icon name="panel-right" size={15} />
             </button>
           </div>

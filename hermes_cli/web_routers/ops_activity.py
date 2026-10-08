@@ -43,15 +43,26 @@ def _messaging(m: re.Match, body: dict) -> Optional[str]:
     return None
 
 
+# Nomes das ferramentas como aparecem no painel (Configurações → Ferramentas).
+_TOOLS = {
+    "web": "Busca na web", "browser": "Navegador", "terminal": "Terminal", "file": "Arquivos", "code_execution": "Execução de código",
+    "vision": "Visão", "video": "Análise de vídeo", "image_gen": "Geração de imagens", "video_gen": "Geração de vídeo",
+    "x_search": "Busca no X", "tts": "Fala", "stt": "Transcrição", "skills": "Skills", "todo": "Plano de tarefas",
+    "kanban": "Quadro de tarefas", "memory": "Memória", "context_engine": "Motor de contexto", "session_search": "Busca em conversas",
+    "connections": "Conexões", "clarify": "Perguntas de esclarecimento", "delegation": "Subagentes", "cronjob": "Agendamentos",
+    "spotify": "Spotify", "discord": "Discord", "discord_admin": "Discord (administração)", "computer_use": "Controle do computador",
+    "a2a": "Agente para agente", "homeassistant": "Home Assistant",
+}
+
 # (método, caminho) → texto da ação a partir do match e do corpo JSON. None = não registra.
 _RULES: list[tuple[str, re.Pattern, Callable[[re.Match, dict], Optional[str]]]] = [
-    ("PUT", re.compile(r"^/api/estop$"), lambda m, b: "Pausou tudo (kill switch)" if b.get("paused") else "Retomou o agente"),
+    ("PUT", re.compile(r"^/api/estop$"), lambda m, b: "Pausou tudo" if b.get("paused") else "Retomou o agente"),
     ("POST", re.compile(r"^/api/gateway/(start|stop|restart)$"), lambda m, b: {"start": "Iniciou o gateway", "stop": "Parou o gateway", "restart": "Reiniciou o gateway"}[m.group(1)]),
     ("PUT", re.compile(r"^/api/env$"), lambda m, b: f"Salvou a chave {b.get('key', '')}" if b.get("key") else None),
     ("DELETE", re.compile(r"^/api/env$"), lambda m, b: f"Removeu a chave {b.get('key', '')}" if b.get("key") else None),
     ("PUT", re.compile(r"^/api/messaging/platforms/([\w-]+)$"), _messaging),
-    ("POST", re.compile(r"^/api/skills/toggle$"), lambda m, b: f"{'Ligou' if b.get('enabled') else 'Desligou'} a skill /{b.get('name', '')}"),
-    ("PUT", re.compile(r"^/api/tools/toolsets/([\w-]+)$"), lambda m, b: f"{'Ligou' if b.get('enabled') else 'Desligou'} a ferramenta {m.group(1)}"),
+    ("PUT", re.compile(r"^/api/skills/toggle$"), lambda m, b: f"{'Ligou' if b.get('enabled') else 'Desligou'} a skill /{b.get('name', '')}"),
+    ("PUT", re.compile(r"^/api/tools/toolsets/([\w-]+)$"), lambda m, b: f"{'Ligou' if b.get('enabled') else 'Desligou'} a ferramenta {_TOOLS.get(m.group(1), m.group(1))}"),
     ("POST", re.compile(r"^/api/model/set$"), lambda m, b: f"Trocou o modelo padrão para {b.get('model')} ({b.get('provider')})" if b.get("model") else None),
     ("PUT", re.compile(r"^/api/config$"), lambda m, b: "Alterou as configurações do agente"),
 ]

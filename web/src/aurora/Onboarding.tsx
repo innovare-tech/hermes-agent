@@ -112,7 +112,7 @@ function ModelStep({ catalog, pick, setPick, onCatalog, current }: { catalog: Pr
                 Onde pegar a chave
               </a>
             )}
-            <span style={{ fontSize: 11.5, color: "var(--fg3)" }}>Fica no .env desta máquina; nunca aparece de volta na tela.</span>
+            <span style={{ fontSize: 11.5, color: "var(--fg3)" }}>Fica guardada só neste servidor e nunca aparece de volta na tela.</span>
           </div>
         </form>
       )}

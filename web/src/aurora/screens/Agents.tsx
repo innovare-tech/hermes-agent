@@ -1,10 +1,13 @@
 import { spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
+import { useNavigate } from "react-router";
 import { AgentHeader } from "./Sessions";
 
 export function Agents() {
   const [data] = useAgentData(() => agent.subagents(), [], 1100);
+  const navigate = useNavigate();
+  const empty = (text: string) => <div style={{ padding: "14px 18px", fontSize: 13, color: "var(--fg3)", border: "1px dashed var(--line2)", borderRadius: "var(--r)" }}>{text}</div>;
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page au-page-agent">
@@ -33,7 +36,15 @@ export function Agents() {
               </div>
             </div>
           ))}
-          {data?.running.length === 0 && <p style={{ margin: 0, fontSize: 13, color: "var(--fg2)" }}>Nenhum subagente rodando agora.</p>}
+          {data?.running.length === 0 && (
+            <div className="au-card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>Nenhum subagente rodando agora</span>
+              <span style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.55 }}>O Hermes cria subagentes sozinho para tarefas longas ou paralelas — por exemplo “revise estes três repositórios ao mesmo tempo”. Eles aparecem aqui enquanto trabalham.</span>
+              <button className="au-outline" onClick={() => navigate("/chat")}>
+                Pedir uma tarefa na Conversa
+              </button>
+            </div>
+          )}
         </div>
         <div className="au-label" style={{ fontSize: 11, marginTop: 8 }}>Concluídos hoje</div>
         <div style={{ display: "flex", flexDirection: "column", border: "1px solid var(--line)", borderRadius: "var(--r)", background: "var(--panel)", backdropFilter: "var(--blur)", overflow: "hidden" }}>
@@ -48,7 +59,7 @@ export function Agents() {
               <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)", textAlign: "right" }}>{d.dur}</span>
             </div>
           ))}
-          {data?.done.length === 0 && <div style={{ padding: "14px 18px", fontSize: 13, color: "var(--fg3)" }}>Nada concluído hoje.</div>}
+          {data?.done.length === 0 && empty("Nada concluído hoje.")}
         </div>
       </div>
     </div>

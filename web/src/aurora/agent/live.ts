@@ -65,7 +65,8 @@ function cronFrom(j: ApiCron): CronJob {
 
 /** "2026-10-07 14:03:11,512 INFO gateway.run: texto" → LogLine (formatos desconhecidos viram só a mensagem). */
 export function logFrom(raw: string, i: number): LogLine {
-  const m = raw.match(/(\d{2}:\d{2}:\d{2})[,.\d]*\s+(?:-\s+)?([A-Z]+)\s+(?:-\s+)?([\w.\-]+?):?\s+(?:-\s+)?(.*)$/);
+  // "hh:mm:ss,ms NÍVEL [sessão] origem: mensagem" — o "[sessão]" é opcional.
+  const m = raw.match(/(\d{2}:\d{2}:\d{2})[,.\d]*\s+(?:-\s+)?([A-Z]+)\s+(?:-\s+)?(?:\[[^\]]*\]\s+)?([\w.\-]+?):?\s+(?:-\s+)?(.*)$/);
   const cls = classifyLine(raw);
   const level = /tool|terminal|web_search|delegate/i.test(raw) && cls === "info" ? "TOOL" : cls === "error" ? "ERRO" : cls === "warning" ? "WARN" : "INFO";
   return m ? { id: String(i), t: m[1], level, src: m[3].split(".").pop()!, msg: m[4] } : { id: String(i), t: "", level, src: "", msg: raw };
@@ -80,6 +81,9 @@ export const liveAgent: AgentAdapter = {
       .map((s) => ({ id: s.id, title: s.title || s.preview || "Sem título", source: sourceLabel(s.source), icon: sourceIcon(s.source), snippet: cleanSnippet(s.preview ?? ""), msgs: s.message_count ?? 0, when: shortWhen(s.started_at) }))
       .filter((r) => source === "Todas" || r.source === source);
   },
+
+  renameSession: async (id, title) => void (await api.renameSession(id, title)),
+  deleteSession: async (id) => void (await api.deleteSession(id)),
 
   memory: () => fetchJSON<MemoryData>("/api/ops/memory"),
   addMemory: (target, content) => fetchJSON<MemoryData>("/api/ops/memory", jsonInit("POST", { target, content })),

@@ -56,6 +56,20 @@ export function GatewaySetup({ g, onSaved }: { g: Gateway; onSaved: (restart: bo
     }
   };
 
+  if (g.fields.length === 0)
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
+        {g.description && <p style={{ margin: 0, fontSize: 13, color: "var(--fg2)", lineHeight: 1.5 }}>{g.description}</p>}
+        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55 }}>
+          Este canal ainda não pode ser configurado pelo painel. No servidor, rode <code>hermes gateway setup</code> e escolha {g.name}.
+        </p>
+        {g.docsUrl && (
+          <a href={g.docsUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: "var(--acc)" }}>
+            Guia de configuração
+          </a>
+        )}
+      </div>
+    );
   return (
     <form
       onSubmit={(e) => {
@@ -160,9 +174,15 @@ export function Gateways() {
   const card = (g: Gateway, i: number) => {
     const isOpen = open === g.id;
     return (
-      <div key={g.id} className="au-card au-gw" onMouseMove={spot} style={{ animationDelay: i * 35 + "ms", gridColumn: isOpen ? "1 / -1" : undefined }}>
-        {/* Cabeçalho inteiro abre/fecha o formulário (o interruptor não). */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }} onClick={(e) => !(e.target as HTMLElement).closest("[role=switch],button") && setOpen(isOpen ? null : g.id)}>
+      <div
+        key={g.id}
+        className="au-card au-gw"
+        onMouseMove={spot}
+        // Fechado: o cartão inteiro abre. Aberto: só o cabeçalho fecha (cliques no formulário não contam).
+        onClick={(e) => !isOpen && !(e.target as HTMLElement).closest("[role=switch],button") && setOpen(g.id)}
+        style={{ animationDelay: i * 35 + "ms", gridColumn: isOpen ? "1 / -1" : undefined, cursor: isOpen ? undefined : "pointer" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }} onClick={(e) => isOpen && !(e.target as HTMLElement).closest("[role=switch],button") && setOpen(null)}>
           <span className="au-display" style={{ width: 40, height: 40, borderRadius: "var(--r2)", background: "var(--panel2)", display: "grid", placeItems: "center", fontSize: 18, letterSpacing: 0, flex: "none" }}>{g.mono}</span>
           <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: 1 }}>
             <span style={{ fontSize: 14.5, fontWeight: 500 }}>{g.name}</span>
@@ -200,7 +220,7 @@ export function Gateways() {
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page au-page-agent">
-        <AgentHeader title="Gateways" sub="Conecte os canais onde o Hermes conversa. As credenciais ficam no .env desta máquina.">
+        <AgentHeader title="Gateways" sub="Conecte os canais onde o Hermes conversa. As credenciais ficam guardadas só neste servidor.">
           {data && (
             <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 13px", borderRadius: 999, border: "1px solid var(--line2)", fontFamily: "var(--fm)", fontSize: 11.5, color: "var(--fg2)" }}>

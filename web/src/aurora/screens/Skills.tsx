@@ -31,7 +31,6 @@ function Detail({ s, onToggle, onClose }: { s: Skill; onToggle: () => void; onCl
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontFamily: "var(--fm)", fontSize: 15, fontWeight: 600 }}>/{s.name}</span>
         <span className="au-chip">{ORIGIN[s.origin]}</span>
-        {s.category && <span className="au-chip">{s.category}</span>}
         <button role="switch" aria-checked={s.enabled} aria-label={`${s.enabled ? "Desligar" : "Ligar"} ${s.name}`} className="au-switch lg" onClick={onToggle} style={{ marginLeft: "auto" }}>
           <span />
         </button>

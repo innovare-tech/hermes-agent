@@ -106,13 +106,7 @@ export function Composer({ running, model, provider, commands, onSend, onStop, o
             style={{ width: "100%", resize: "none", border: 0, outline: 0, background: "transparent", color: "var(--fg)", fontSize: 15, lineHeight: 1.5 }}
           />
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {/* ponytail: anexo e voz ficam visuais até o upload/transcrição entrarem na Conversa */}
-            <button className="au-tool" title="Anexar" aria-label="Anexar">
-              <Icon name="paperclip" size={15} />
-            </button>
-            <button className="au-tool" title="Voz" aria-label="Voz">
-              <Icon name="mic" size={15} />
-            </button>
+            {/* ponytail: sem Anexar/Voz até upload e transcrição existirem na Conversa (botão que não faz nada não aparece) */}
             <button className="au-model" aria-haspopup="dialog" aria-expanded={picking} onClick={() => setPicking(!picking)}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--acc)" }} />
               {model}

@@ -321,11 +321,11 @@ export const ticketCard = (t: Ticket) =>
 export const ticketReply = (t: Ticket) =>
   actOnBehalf({ business: t.business, kind: "msg", action: `Respondeu ${t.client} no ticket #${t.n}`, why: "pedido seu no painel de suporte.", done: "Resposta enviada para " + t.client, blocked: "Agente pausado — retome para enviar", target: { kind: "ticket", n: t.n, op: "reply" } });
 
-export async function savePerson(p: Omit<Person, "id" | "initials" | "waitingHours"> & { id?: string }) {
+export async function savePerson(p: Omit<Person, "id" | "initials" | "waitingHours"> & { id?: string }, done?: string) {
   try {
     const saved = await adapter.savePerson(p);
     setState((s) => ({ people: s.people.some((x) => x.id === saved.id) ? s.people.map((x) => (x.id === saved.id ? saved : x)) : [...s.people, saved].sort((a, b) => a.name.localeCompare(b.name)) }));
-    toast(p.id ? "Contato atualizado" : `${saved.name} adicionado`);
+    toast(done ?? (p.id ? "Contato atualizado" : `${saved.name} adicionado`));
     return saved;
   } catch (e) {
     toast(errMsg(e, "Não consegui salvar o contato"));

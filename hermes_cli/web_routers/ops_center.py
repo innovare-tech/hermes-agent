@@ -250,6 +250,7 @@ class PersonBody(BaseModel):
     notes: str = ""
     pending: list[str] = []
     waiting_since: Optional[float] = None
+    handles: dict[str, str] = {}  # phone / telegram / email — liga o contato às mensagens
 
 
 @router.get("/people")

@@ -101,7 +101,7 @@ export function Memory() {
                   }}
                   style={{ display: "flex", gap: 8 }}
                 >
-                  <input aria-label={`Nova entrada em ${sec.file}`} className="au-meminput" value={adding[sec.target]} onChange={(e) => setAdding({ ...adding, [sec.target]: e.target.value })} placeholder={sec.target === "user" ? "Ex.: prefere respostas curtas, em português" : "Ex.: deploy só às terças, depois das 14h"} />
+                  <input aria-label={`Nova entrada em ${sec.file}`} className="au-meminput" value={adding[sec.target]} onChange={(e) => setAdding({ ...adding, [sec.target]: e.target.value })} placeholder={sec.target === "user" ? "Ex.: prefere respostas curtas, em português" : "Ex.: reuniões só à tarde; prefere receber relatórios às sextas"} />
                   <button type="submit" className="au-outline" style={{ opacity: adding[sec.target].trim() ? 1 : 0.5 }}>
                     Adicionar
                   </button>

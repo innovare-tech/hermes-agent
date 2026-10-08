@@ -66,6 +66,8 @@ export type Settings = {
 
 export interface AgentAdapter {
   sessions(query: string, source: string): Promise<SessionRow[]>;
+  renameSession(id: string, title: string): Promise<void>;
+  deleteSession(id: string): Promise<void>;
   memory(): Promise<MemoryData>;
   addMemory(target: MemoryTarget, content: string): Promise<MemoryData>;
   editMemory(target: MemoryTarget, entry: string, content: string): Promise<MemoryData>;

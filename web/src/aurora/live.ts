@@ -2,6 +2,7 @@
 // /api/ops/* (ops_center: negócios, canais, caixa, atividade, vigias, pessoas, playbooks),
 // /api/estop (kill switch = `hermes pause`), /api/status (saúde) e /api/analytics/usage (custos).
 import { api, fetchJSON, type StatusResponse } from "@/lib/api";
+import type { PersonHandles } from "./adapter";
 import type { Activity, Approval, AutonomyMode, Business, Channel, Costs, Health, InboxItem, OpsAdapter, Person, Playbook, Priority, RadarGroup } from "./adapter";
 
 type Estop = { paused: boolean; reason: string | null; engaged_at: string | null };
@@ -10,7 +11,7 @@ type Estop = { paused: boolean; reason: string | null; engaged_at: string | null
 type RawChannel = { id: string; platform: string; chat_id: string; name: string; kind: string; business_id: string | null; mode: number; last_seen: number | null };
 type RawInbox = { id: number; channel_id: string; sender_id: string | null; sender_name: string | null; text: string; received_at: number; priority: string; summary: string | null; draft: string | null; status: string; sent_at: number | null; platform: string; chat_name: string; kind: string; mode: number; business_id: string | null };
 type RawActivity = { id: number; at: number; business_id: string | null; kind: Activity["kind"]; action: string; why: string; reversible: number; undone: number };
-type RawPerson = { id: string; name: string; role: string; business_id: string | null; tone: string; channels: string; notes: string; pending: string[]; waiting_since: number | null };
+type RawPerson = { id: string; name: string; role: string; business_id: string | null; tone: string; channels: string; notes: string; pending: string[]; waiting_since: number | null; handles?: PersonHandles };
 type RawPlaybook = { id: string; name: string; business_id: string | null; trigger: string; nodes: Playbook["nodes"]; enabled: boolean; runs: number; last_run: number | null; schedule: string; deliver: string; next_run: number | null; last_error: string | null };
 
 const MODES = ["Observar", "Rascunhar", "Autônomo"];
@@ -121,6 +122,7 @@ const personFrom = (p: RawPerson): Person => ({
   tone: p.tone,
   channels: p.channels,
   pending: p.pending,
+  handles: p.handles ?? {},
 });
 
 const playbookFrom = (p: RawPlaybook): Playbook => ({
@@ -251,7 +253,7 @@ export const liveAdapter: OpsAdapter = {
     await ops("/watches", json("PUT", { words }));
   },
   async savePerson(p) {
-    const raw = await ops<RawPerson>("/people", json("PUT", { id: p.id, name: p.name, role: p.role, business_id: p.business || null, tone: p.tone, channels: p.channels, notes: p.lastTopic, pending: p.pending }));
+    const raw = await ops<RawPerson>("/people", json("PUT", { id: p.id, name: p.name, role: p.role, business_id: p.business || null, tone: p.tone, channels: p.channels, notes: p.lastTopic, pending: p.pending, handles: p.handles }));
     return personFrom(raw);
   },
   async deletePerson(id) {
