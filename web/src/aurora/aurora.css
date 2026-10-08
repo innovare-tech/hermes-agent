@@ -43,8 +43,20 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 @keyframes hbar{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
 
 /* Todas as animações terminam no estado final; nada de drift, sheen, hrot ou hflow em loop. */
+/* Sinais de "trabalhando" (pontos, cursor): sem eles a conversa parece travada. */
+.au-live-dot{width:6px;height:6px;border-radius:50%;background:var(--acc);animation:hwave 1s ease-in-out infinite}
+.au-live-dot:nth-child(2){animation-delay:.15s}
+.au-live-dot:nth-child(3){animation-delay:.3s}
+.au-caret{display:inline-block;width:8px;height:17px;margin-left:3px;vertical-align:text-bottom;background:var(--acc);border-radius:2px;animation:hblink 1s step-end infinite}
+
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;animation-delay:0s!important;transition-duration:.001ms!important}
+  /* Movimento reduzido ≠ interface morta: o feedback de progresso continua, só com opacidade (nada se desloca). */
+  .au-live-dot{animation:hpulse 1.2s ease-in-out infinite!important}
+  .au-live-dot:nth-child(2){animation-delay:.2s!important}
+  .au-live-dot:nth-child(3){animation-delay:.4s!important}
+  .au-caret{animation:hblink 1s step-end infinite!important}
+  .au-spin{animation:hpulse 1.2s ease-in-out infinite!important}
 }
 
 /* ---- shell ---- */
@@ -98,6 +110,29 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-step{display:flex;align-items:center;gap:9px;min-height:34px;padding:0 10px;margin-left:-10px;border:0;border-radius:var(--r2);background:transparent;background-size:250% 100%;color:var(--fg);cursor:pointer;text-align:left;transition:background .2s}
 .au-step:hover{background:var(--panel)}
 .au-step.run{background-image:linear-gradient(100deg,transparent 30%,var(--accSoft) 50%,transparent 70%);animation:hshim 1.6s linear infinite}
+/* ---- markdown das respostas ---- */
+.au-md{display:flex;flex-direction:column;gap:12px;font-size:15px;line-height:1.7;color:var(--fg);min-width:0}
+.au-md-p{margin:0;text-wrap:pretty;white-space:pre-wrap;overflow-wrap:anywhere}
+.au-md strong{font-weight:650;color:var(--fg)}
+.au-md a{color:var(--acc);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--accSoft)}
+.au-md a:hover{text-decoration-color:var(--acc)}
+.au-md del{color:var(--fg3)}
+.au-md-ic{font-family:var(--fm);font-size:.86em;padding:1px 6px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);color:var(--fg)}
+.au-md-h{margin:6px 0 0;font-family:var(--fd);font-weight:var(--fdw);letter-spacing:var(--fdt);line-height:1.25;color:var(--fg)}
+.au-md-h1{font-size:24px}.au-md-h2{font-size:20px}.au-md-h3{font-size:17px}.au-md-h4,.au-md-h5,.au-md-h6{font-size:15px}
+.au-md-hr{border:0;height:1px;background:var(--line2);margin:4px 0}
+.au-md-quote{margin:0;padding:2px 0 2px 14px;border-left:2px solid var(--acc);color:var(--fg2);display:flex;flex-direction:column;gap:8px}
+.au-md-list{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:4px}
+.au-md-list li::marker{color:var(--acc)}
+.au-md-list li>.au-md-list{margin-top:4px}
+.au-md-code{position:relative;border-radius:var(--r2);background:var(--code);border:1px solid var(--line);overflow:hidden}
+.au-md-code pre{margin:0;padding:14px 16px;overflow:auto;font-family:var(--fm);font-size:12.5px;line-height:1.65;color:var(--fg)}
+.au-md-lang{position:absolute;top:6px;right:10px;font-family:var(--fm);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3)}
+.au-md-table{overflow:auto;border:1px solid var(--line);border-radius:var(--r2)}
+.au-md-table table{border-collapse:collapse;width:100%;font-size:13.5px}
+.au-md-table th,.au-md-table td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.au-md-table th{font-weight:600;background:var(--panel2);color:var(--fg)}
+.au-md-table tr:last-child td{border-bottom:0}
 .au-pre{margin:2px 0 8px;padding:12px 14px;border-radius:var(--r2);background:var(--code);border:1px solid var(--line);font-family:var(--fm);font-size:11.5px;line-height:1.65;color:var(--fg2);white-space:pre-wrap;overflow:auto;animation:hin .25s ease both}
 .au-mini{width:26px;height:26px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--fg3);cursor:pointer}
 .au-mini:hover{background:var(--panel);color:var(--fg)}
@@ -128,7 +163,7 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-outline:hover{border-color:var(--acc)}
 .au-outline.danger:hover{border-color:var(--err);color:var(--err)}
 .au-seg{flex:1;padding:6px 0;border-radius:calc(var(--r2) - 2px);border:0;background:transparent;color:var(--fg3);font-size:12px;font-weight:500;cursor:pointer;transition:all .25s}
-.au-seg[aria-checked="true"]{background:var(--panel);box-shadow:0 1px 4px rgba(0,0,0,.18)}
+.au-seg[aria-checked="true"],.au-seg[aria-selected="true"]{background:var(--panel);box-shadow:0 1px 4px rgba(0,0,0,.18)}
 .au-code{margin:0;padding:11px 13px;border-radius:var(--r2);background:var(--code);border:1px solid var(--line);font-family:var(--fm);font-size:11.5px;line-height:1.6;color:var(--fg);white-space:pre-wrap;word-break:break-word}
 .au-mt3{margin-top:3px}
 
@@ -168,12 +203,15 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-choice{display:flex;flex-direction:column;gap:6px;padding:14px 15px;border-radius:var(--r);border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer;text-align:left;transition:all .2s}
 .au-choice[aria-checked="true"]{border-color:var(--acc);background:var(--accSoft);box-shadow:0 0 0 3px var(--accSoft)}
 .au-seg-lg{flex:none;padding:8px 14px;font-size:13px;color:var(--fg2)}
-.au-seg-lg[aria-checked="true"]{color:var(--fg)}
+.au-seg-lg[aria-checked="true"],.au-seg-lg[aria-selected="true"]{color:var(--fg)}
 .au-step-label{font-family:var(--fm);font-size:11px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase}
 .au-ob-next{padding:12px 20px;font-size:14px;transition:transform .15s}
 .au-ob-next:hover{transform:translateY(-1px)}.au-ob-next:active{transform:scale(.97)}
 
-.au-picker{position:absolute;left:0;bottom:calc(100% + 10px);width:min(420px,100%);border:1px solid var(--line2);border-radius:var(--r);background:var(--panel);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);box-shadow:var(--shadow);padding:4px;display:flex;flex-direction:column;animation:hin .2s ease both;z-index:6}
+/* Flutuantes dentro do Composer: o pai já tem backdrop-filter, então o vidro não desfoca a página —
+   pinta o painel sobre o fundo sólido do tema para o texto atrás não vazar. */
+.au-float{background:linear-gradient(var(--panel),var(--panel)),var(--bg)}
+.au-picker{position:absolute;left:0;bottom:calc(100% + 10px);width:min(420px,100%);border:1px solid var(--line2);border-radius:var(--r);background:linear-gradient(var(--panel),var(--panel)),var(--bg);box-shadow:var(--shadow);padding:4px;display:flex;flex-direction:column;animation:hin .2s ease both;z-index:6}
 .au-select{font:inherit;font-family:var(--fm);font-size:11px;color:var(--fg2);background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 8px;cursor:pointer;max-width:140px}
 .au-select:focus-visible{outline:2px solid var(--acc)}
 .au-field{display:flex;flex-direction:column;gap:6px;min-width:0}

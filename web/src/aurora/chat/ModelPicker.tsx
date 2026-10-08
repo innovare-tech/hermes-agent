@@ -14,7 +14,10 @@ export function ModelPicker({ current, onPick, onClose }: Props) {
 
   useEffect(() => {
     agent.settings().then(
-      (s) => setProviders(s.providers),
+      (s) => {
+        setProviders(s.providers);
+        if (s.modelError) setError(s.modelError);
+      },
       (e: unknown) => {
         setProviders([]);
         setError(e instanceof Error ? e.message : "Não consegui carregar os modelos");
@@ -44,7 +47,11 @@ export function ModelPicker({ current, onPick, onClose }: Props) {
       <div style={{ overflow: "auto", maxHeight: "min(360px, 50vh)", padding: 4 }}>
         {providers === null && <div style={{ padding: 12, fontSize: 12.5, color: "var(--fg3)" }}>Carregando modelos…</div>}
         {error && <div role="alert" style={{ padding: 12, fontSize: 12.5, lineHeight: 1.5, color: "var(--err)" }}>{error}</div>}
-        {!error && providers !== null && groups.length === 0 && <div style={{ padding: 12, fontSize: 12.5, color: "var(--fg3)" }}>Nenhum modelo encontrado.</div>}
+        {!error && providers !== null && groups.length === 0 && (
+          <div style={{ padding: 12, fontSize: 12.5, lineHeight: 1.5, color: "var(--fg3)" }}>
+            {needle ? "Nenhum modelo com esse nome." : "Nenhum provedor com credencial. Adicione uma chave em Configurações → Chaves de API."}
+          </div>
+        )}
         {groups.map((p) => (
           <div key={p.id} role="group" aria-label={p.name}>
             <div className="au-label" style={{ padding: "10px 10px 4px" }}>{p.name}</div>

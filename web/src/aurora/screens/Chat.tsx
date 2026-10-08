@@ -5,6 +5,7 @@ import { Icon } from "../Icon";
 import { chat } from "../chat";
 import { Composer } from "../chat/Composer";
 import { ContextPanel } from "../chat/ContextPanel";
+import { Markdown } from "../chat/Markdown";
 import { ToolTimeline } from "../chat/ToolTimeline";
 import { answered, applyEvent, interrupted } from "../chat/turn";
 import type { AgentMessage, ApprovalChoice, Block, ChatMessage, SessionInfo, SlashCommand } from "../chat/types";
@@ -236,7 +237,6 @@ export function Orbit() {
 
 function AgentBubble({ m, onSend, onCron, onAnswer }: { m: AgentMessage; onSend: (t: string) => void; onCron: () => void; onAnswer: (c: ApprovalChoice) => void }) {
   const running = m.steps.some((s) => s.status === "run");
-  const paras = m.text ? m.text.split(/\n{2,}/) : [];
   return (
     <div style={{ display: "grid", gridTemplateColumns: "30px minmax(0,1fr)", gap: 14, animation: "hblurin .7s cubic-bezier(.2,.7,.2,1) both" }}>
       <div aria-hidden="true" style={{ width: 30, height: 30, borderRadius: "var(--r2)", background: "var(--accSoft)", color: "var(--acc)", display: "grid", placeItems: "center", fontSize: 15 }}>☤</div>
@@ -268,16 +268,12 @@ function AgentBubble({ m, onSend, onCron, onAnswer }: { m: AgentMessage; onSend:
         )}
         {m.live && !running && !m.text && m.approval?.status !== "pending" && (
           <div role="status" aria-label="Pensando" style={{ display: "flex", gap: 5, padding: "6px 0" }}>
-            {[0, 0.15, 0.3].map((d) => (
-              <span key={d} style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--acc)", animation: `hwave 1s ${d}s ease-in-out infinite` }} />
+            {[0, 1, 2].map((d) => (
+              <span key={d} className="au-live-dot" />
             ))}
           </div>
         )}
-        {/* ponytail: parágrafos com quebras preservadas; markdown completo quando o Markdown ganhar estilos Aurora */}
-        {paras.map((p, i) => (
-          <p key={i} style={{ margin: 0, fontSize: 15, lineHeight: 1.7, color: "var(--fg)", textWrap: "pretty", whiteSpace: "pre-wrap" }}>{p}</p>
-        ))}
-        {m.live && !running && m.approval?.status !== "pending" && <span style={{ width: 8, height: 17, background: "var(--acc)", borderRadius: 2, animation: "hblink 1s step-end infinite" }} />}
+        {m.text && <Markdown text={m.text} tail={m.live && !running && m.approval?.status !== "pending" ? <span className="au-caret" aria-hidden="true" /> : undefined} />}
         {m.blocks?.map((b, i) => <BlockView key={i} b={b} onCron={onCron} />)}
         {m.meta && (
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>

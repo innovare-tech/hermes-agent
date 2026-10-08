@@ -47,7 +47,7 @@ function Step({ step, last }: { step: ToolStep; last: boolean }) {
           <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)" }}>{run ? "…" : step.dur}</span>
           <Icon name={open ? "chevron-up" : "chevron-down"} size={12} color="var(--fg3)" />
         </button>
-        {open && <pre className="au-pre">{step.output}</pre>}
+        {open && <pre className="au-pre">{step.output || (run ? `rodando…${step.target ? " " + step.target : ""}` : "(sem saída)")}</pre>}
       </div>
     </div>
   );

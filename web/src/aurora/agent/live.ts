@@ -102,19 +102,55 @@ export const liveAgent: AgentAdapter = {
         mono: p.name.slice(0, p.name === "Signal" ? 2 : 1),
         account: p.home_channel?.name ?? (p.configured ? "configurado" : "não configurado"),
         enabled: p.enabled,
+        configured: p.configured,
         status: p.enabled ? (GW_STATUS[p.state] ?? (p.state === "gateway_stopped" ? "erro" : "pareando")) : "desligado",
-        stat: p.error_message ?? (p.state === "gateway_stopped" ? "gateway parado" : ""),
+        stat: p.error_message ?? (p.state === "gateway_stopped" ? "gateway parado" : p.state === "pending_restart" ? "reinicie o gateway" : ""),
+        description: p.description,
+        docsUrl: p.docs_url,
+        fields: p.env_vars.map((e) => ({ key: e.key, label: e.prompt || e.key, help: e.help || e.description, url: e.url, secret: e.is_password, list: !!e.is_list, advanced: e.advanced, isSet: e.is_set, value: e.value ?? "" })),
       })),
     };
   },
   toggleGateway: async (g) => {
     await api.updateMessagingPlatform(g.id, { enabled: !g.enabled });
   },
+  async saveGateway(id, env, clear) {
+    const r = await api.updateMessagingPlatform(id, { env, clear_env: clear?.length ? clear : undefined, enabled: true });
+    return { restart: !r.hot_served };
+  },
+  async testGateway(id) {
+    const r = await api.testMessagingPlatform(id);
+    return { ok: r.ok, message: r.message };
+  },
+  async gatewayAction(action) {
+    const r = await (action === "start" ? api.startGateway() : action === "stop" ? api.stopGateway() : api.restartGateway());
+    if (!r.ok) throw new Error(r.error || r.message || "o gateway recusou");
+  },
+  async apiKeys() {
+    const all = await api.getEnvVars();
+    return Object.entries(all)
+      .filter(([, v]) => (v.category === "provider" || v.category === "tool" || v.custom) && !v.channel_managed)
+      .map(([key, v]) => ({ key, description: v.description, url: v.url, category: v.custom ? "custom" : v.category, isSet: v.is_set, preview: v.redacted_value ?? "", advanced: v.advanced }));
+  },
+  setApiKey: async (key, value) => void (await api.setEnvVar(key, value)),
+  deleteApiKey: async (key) => void (await api.deleteEnvVar(key)),
 
   logs: async () => (await api.getLogs({ lines: 200 })).lines.map(logFrom),
 
   async settings(): Promise<Settings> {
-    const [opts, cfg, toolsets] = await Promise.all([api.getModelOptions({}), api.getConfig(), api.getToolsets()]);
+    // Opções de modelo podem falhar sozinhas (sem chave, backend reiniciando): o resto da tela continua.
+    let modelError = "";
+    const [opts, cfg, toolsets] = await Promise.all([
+      api.getModelOptions({}).catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : "";
+        modelError = /restart required/i.test(msg)
+          ? "O Hermes foi atualizado nesta máquina e o painel ainda roda a versão anterior. Reinicie o painel (hermes dashboard) para carregar a nova."
+          : msg || "indisponível";
+        return { providers: [], provider: "", model: "" } as unknown as Awaited<ReturnType<typeof api.getModelOptions>>;
+      }),
+      api.getConfig(),
+      api.getToolsets(),
+    ]);
     const c = cfg as { terminal?: { backend?: string }; display?: { personality?: string } };
     const backend = c.terminal?.backend ?? "local";
     const persona = PERSONAS.find(([id]) => id === (c.display?.personality ?? ""))?.[1] ?? cap(c.display?.personality ?? "Padrão");
@@ -129,6 +165,7 @@ export const liveAgent: AgentAdapter = {
       personas: PERSONAS.map(([, label]) => label),
       persona,
       tools: toolsets.map((t) => ({ id: t.name, name: t.label || t.name, description: t.description, icon: TOOL_ICON[t.name] ?? "wrench", enabled: t.enabled })),
+      modelError,
     };
   },
 
