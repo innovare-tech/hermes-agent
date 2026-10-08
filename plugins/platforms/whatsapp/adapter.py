@@ -745,8 +745,13 @@ class WhatsAppAdapter(WhatsAppBehaviorMixin, BasePlatformAdapter):
         if not self._bridge_process:
             print(f"[{self.name}] Disconnecting (external bridge left running)")
         else:
+            # No Windows o taskkill "gentil" (sem /F) falha no processo do Node; a falha não pode pular o
+            # encerramento forçado, senão a ponte fica órfã na porta e o próximo gateway não conecta.
             try:
                 self._terminate_bridge(force=False)
+            except Exception as e:
+                print(f"[{self.name}] Graceful bridge stop failed ({e}); forcing")
+            try:
                 await asyncio.sleep(1)
                 if self._bridge_process.poll() is None:
                     self._terminate_bridge(force=True)
