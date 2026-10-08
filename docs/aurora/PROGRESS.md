@@ -14,7 +14,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | 04 Verdade | 👀 | — | R4: V4.1/V4.2 ❌ → corrigidos |
 | 05 Promessas | 👀 | — | — |
 | 06 Acabamento | 👀 | — | — |
-| 07 Perfis (A1) | 🔧 | — | — |
+| 07 Perfis (A1) | 🧪 | — | P7.1–P7.10 implementados; testes ✅; falta QA no Chrome |
 | 08 Blindagem (1.1) | 🧪 | — | testes B8.1–B8.5 ✅; B8.6 precisa do número real |
 | 09 Escutar (1.2) | 🧪 | — | testes E9.1–E9.6 ✅; E9.7 precisa de número, Jev e Telegram reais |
 
