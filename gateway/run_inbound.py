@@ -234,6 +234,12 @@ class GatewayInboundMixin(GatewayPluginInjectionMixin):
             return None
         source = event.source
 
+        # Grupo em Escutar: só lê (lote de análise) — antes da autorização, porque a equipe do cliente
+        # não é usuária do Hermes; nunca roda turno nem responde.
+        from gateway import ops_hooks
+        if ops_hooks.listen_capture(event, source, home=self._ops_home_for_source(source)):
+            return None
+
         if not self._is_user_authorized_for_source(source):
             if source.user_id is None:
                 # No user identity (Telegram service messages, channel forwards, anonymous admin

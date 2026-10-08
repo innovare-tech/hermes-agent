@@ -3,6 +3,7 @@
 Tudo aqui é fail-open: um erro no ops.db nunca bloqueia nem altera uma mensagem — o gateway segue
 como antes. Pontos de uso:
 
+- ``listen_capture``: grupo em Escutar — grava para o lote de análise antes da autorização e para ali.
 - ``record``: cada mensagem real admitida vira item da caixa de entrada; devolve a autonomia do canal.
 - ``save_draft``: canal em Rascunhar — a resposta final do turno vira rascunho (não é enviada).
 - ``mark_replied``: canal Autônomo — registra a resposta enviada e a Atividade.
@@ -78,6 +79,42 @@ def record(event: Any, source: Any, home: Any = None) -> Optional[dict]:
     except Exception:
         logger.debug("ops_center: falha ao registrar mensagem recebida", exc_info=True)
         return None
+
+
+def _media(event: Any) -> list:
+    kind = getattr(getattr(event, "message_type", None), "value", getattr(event, "message_type", None))
+    types = list(getattr(event, "media_types", None) or [])
+    return [{"type": str(kind or "file"), "path": str(u), "mime": types[i] if i < len(types) else ""}
+            for i, u in enumerate(getattr(event, "media_urls", None) or [])]
+
+
+def listen_capture(event: Any, source: Any, home: Any = None) -> bool:
+    """Grupo em Escutar: grava a mensagem para o próximo lote e diz ao gateway para parar ali.
+
+    Roda ANTES da autorização de remetente: a equipe do cliente não é usuária do Hermes, e ler não
+    é rodar turno. ``False`` = siga o fluxo normal (não é grupo, outro modo, ou erro — fail-open:
+    a trava de saída ainda protege o grupo)."""
+    if _kind(str(getattr(source, "chat_type", "") or "dm")) != "group":
+        return False
+    try:
+        with _home(home):
+            from ops_center import store
+
+            platform, chat_id = _platform_name(source), str(getattr(source, "chat_id", "") or "")
+            ch = store.touch_channel(platform, chat_id, str(getattr(source, "chat_name", "") or ""), "group")
+            if int(ch["mode"]) != LISTEN:
+                return False
+            text = _inbound_text(event)
+            if text:
+                store.record_inbound(
+                    platform, chat_id, text, chat_name=str(getattr(source, "chat_name", "") or ""), kind="group",
+                    sender_id=str(getattr(source, "user_id", "") or ""),
+                    sender_name=str(getattr(source, "user_name", "") or ""),
+                    message_id=str(getattr(event, "message_id", "") or ""), media=_media(event))
+            return True
+    except Exception:
+        logger.warning("ops_center: falha ao capturar mensagem de grupo em Escutar", exc_info=True)
+        return False
 
 
 def mutes_turn(ops: Optional[dict]) -> bool:

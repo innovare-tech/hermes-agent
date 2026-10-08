@@ -61,6 +61,15 @@ CREATE TABLE IF NOT EXISTS playbooks (
   deliver TEXT NOT NULL DEFAULT 'local'
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS analyses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+  created_at REAL NOT NULL, period_from REAL, period_to REAL, message_count INTEGER NOT NULL DEFAULT 0,
+  client_id TEXT, client_name TEXT, category TEXT, urgency TEXT, confidence REAL, social REAL,
+  summary TEXT, participants TEXT NOT NULL DEFAULT '[]', evidence TEXT NOT NULL DEFAULT '{}',
+  checks TEXT NOT NULL DEFAULT '[]', hypothesis TEXT, suggested_reply TEXT, telegram TEXT,
+  seen_by TEXT NOT NULL DEFAULT '[]', resolved TEXT, irrelevant TEXT, error TEXT
+);
+CREATE INDEX IF NOT EXISTS analyses_status ON analyses(status, created_at);
 """
 
 
@@ -92,6 +101,15 @@ def _migrate(con: sqlite3.Connection) -> None:
     cols = {r[1] for r in con.execute("PRAGMA table_info(people)")}
     if "handles" not in cols:
         con.execute("ALTER TABLE people ADD COLUMN handles TEXT NOT NULL DEFAULT '{}'")
+    cols = {r[1] for r in con.execute("PRAGMA table_info(inbox)")}
+    for name, ddl in (("media", "TEXT NOT NULL DEFAULT '[]'"), ("analysis_id", "INTEGER")):
+        if name not in cols:
+            con.execute(f"ALTER TABLE inbox ADD COLUMN {name} {ddl}")
+    cols = {r[1] for r in con.execute("PRAGMA table_info(channels)")}
+    for name, ddl in (("client_id", "TEXT"), ("client_name", "TEXT"), ("listen_silence_min", "INTEGER"),
+                      ("listen_max_min", "INTEGER")):
+        if name not in cols:
+            con.execute(f"ALTER TABLE channels ADD COLUMN {name} {ddl}")
     cols = {r[1] for r in con.execute("PRAGMA table_info(playbooks)")}
     for name, ddl in (("trigger_kind", "TEXT NOT NULL DEFAULT 'manual'"), ("keywords", "TEXT NOT NULL DEFAULT ''"),
                       ("channel_id", "TEXT"), ("deliver", "TEXT NOT NULL DEFAULT 'local'")):
@@ -212,16 +230,19 @@ def update_channel(cid: str, *, mode: Optional[int] = None, business_id: Optiona
 
 def record_inbound(platform: str, chat_id: str, text: str, *, chat_name: str = "", kind: str = "dm",
                    sender_id: str = "", sender_name: str = "", message_id: str = "",
-                   session_id: str = "") -> dict:
-    """Mensagem recebida num gateway → item da caixa. Devolve {item_id, mode}."""
+                   session_id: str = "", media: Optional[list] = None) -> dict:
+    """Mensagem recebida num gateway → item da caixa. Devolve {item_id, mode, kind}.
+
+    Em Escutar o item nasce ``listen``: não pede decisão na caixa, entra no próximo lote de análise."""
     ch = touch_channel(platform, chat_id, chat_name, kind)
     priority = "urgente" if _matches_watch(text) else "voce"
+    status = {AUTONOMOUS: "auto", LISTEN: "listen"}.get(ch["mode"], "new")
     with connect() as c:
         cur = c.execute(
-            "INSERT INTO inbox(channel_id, message_id, sender_id, sender_name, text, received_at, priority, status, session_id) "
-            "VALUES(?,?,?,?,?,?,?,?,?)",
-            (ch["id"], message_id, sender_id, sender_name, text, time.time(), priority,
-             "new" if ch["mode"] != AUTONOMOUS else "auto", session_id),
+            "INSERT INTO inbox(channel_id, message_id, sender_id, sender_name, text, received_at, priority, status, "
+            "session_id, media) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (ch["id"], message_id, sender_id, sender_name, text, time.time(), priority, status, session_id,
+             json.dumps(media or [])),
         )
         return {"item_id": cur.lastrowid, "mode": int(ch["mode"]), "kind": ch["kind"]}
 
@@ -239,7 +260,7 @@ def mark_sent(item_id: int, reply: str, status: str = "sent") -> None:
 
 
 def list_inbox(include_done: bool = False, limit: int = 200) -> list[dict]:
-    where = "" if include_done else "WHERE i.status NOT IN ('archived')"
+    where = "WHERE i.status <> 'listen'" if include_done else "WHERE i.status NOT IN ('archived', 'listen')"
     with connect() as c:
         return _rows(c.execute(
             "SELECT i.*, ch.platform, ch.chat_id, ch.name AS chat_name, ch.kind, ch.mode, ch.business_id "
@@ -393,3 +414,113 @@ def set_meta(key: str, value: Any) -> None:
     with connect() as c:
         c.execute("INSERT INTO meta(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                   (key, json.dumps(value)))
+
+
+# ---- Escutar: lotes e análises ----
+
+LISTEN_DEFAULTS = {
+    "silence_min": 5,          # fecha o lote quando o grupo fica X min em silêncio…
+    "max_min": 30,             # …ou no máximo Y min depois da 1ª mensagem do lote
+    "min_confidence": 0.7,     # triagem: abaixo disso o lote vai para a análise completa
+    "toolsets": ["vision", "video", "no_mcp"],  # análise: só leitura; MCP só listado de propósito
+    "notify_target": "",       # ex.: telegram:-100123:45 (tópico "Grupos de clientes")
+    "triage": {"base_url": "", "model": "jev-latest", "api_key_env": "TYPESAFE_API_KEY"},
+}
+_ANALYSIS_JSON = ("participants", "evidence", "checks", "telegram", "seen_by", "resolved", "irrelevant")
+
+
+def listen_settings() -> dict:
+    saved = get_meta("listen", {}) or {}
+    return {**LISTEN_DEFAULTS, **saved, "triage": {**LISTEN_DEFAULTS["triage"], **(saved.get("triage") or {})}}
+
+
+def set_listen_settings(patch: dict) -> dict:
+    cur = listen_settings()
+    merged = {**cur, **{k: v for k, v in patch.items() if k in LISTEN_DEFAULTS and k != "triage"}}
+    if isinstance(patch.get("triage"), dict):
+        merged["triage"] = {**cur["triage"], **patch["triage"]}
+    if not (1 <= int(merged["silence_min"]) <= 60 and 5 <= int(merged["max_min"]) <= 240):
+        raise ValueError("janela inválida: silêncio 1–60 min, máximo 5–240 min")
+    if not 0.5 <= float(merged["min_confidence"]) <= 0.95:
+        raise ValueError("confiança mínima entre 50% e 95%")
+    set_meta("listen", merged)
+    return merged
+
+
+def due_listen_channels(now: Optional[float] = None) -> list[str]:
+    """Canais em Escutar com lote pronto: silêncio ≥ X min, ou 1ª mensagem há ≥ Y min."""
+    now = now or time.time()
+    cfg = listen_settings()
+    with connect() as c:
+        rows = c.execute(
+            "SELECT ch.id, MIN(i.received_at) AS first, MAX(i.received_at) AS last, "
+            "COALESCE(ch.listen_silence_min, ?) AS silence, COALESCE(ch.listen_max_min, ?) AS maxw "
+            "FROM inbox i JOIN channels ch ON ch.id=i.channel_id "
+            "WHERE i.status='listen' AND i.analysis_id IS NULL AND ch.mode=? GROUP BY ch.id",
+            (cfg["silence_min"], cfg["max_min"], LISTEN)).fetchall()
+    return [r["id"] for r in rows if now - r["last"] >= r["silence"] * 60 or now - r["first"] >= r["maxw"] * 60]
+
+
+def open_batch(channel_id: str) -> Optional[int]:
+    """Fecha o lote do canal numa análise ``pending`` (os itens passam a apontar para ela)."""
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        items = c.execute("SELECT id, received_at FROM inbox WHERE channel_id=? AND status='listen' "
+                          "AND analysis_id IS NULL ORDER BY received_at", (channel_id,)).fetchall()
+        if not items:
+            return None
+        ch = c.execute("SELECT client_id, client_name FROM channels WHERE id=?", (channel_id,)).fetchone()
+        cur = c.execute(
+            "INSERT INTO analyses(channel_id, created_at, period_from, period_to, message_count, client_id, client_name) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (channel_id, time.time(), items[0]["received_at"], items[-1]["received_at"], len(items),
+             ch["client_id"] if ch else None, ch["client_name"] if ch else None))
+        aid = cur.lastrowid
+        c.executemany("UPDATE inbox SET analysis_id=? WHERE id=?", [(aid, r["id"]) for r in items])
+        return aid
+
+
+def batch_items(analysis_id: int) -> list[dict]:
+    with connect() as c:
+        rows = _rows(c.execute("SELECT * FROM inbox WHERE analysis_id=? ORDER BY received_at", (analysis_id,)))
+    for r in rows:
+        r["media"] = json.loads(r.get("media") or "[]")
+    return rows
+
+
+def _analysis(row: sqlite3.Row) -> dict:
+    a = dict(row)
+    for k in _ANALYSIS_JSON:
+        if a.get(k) is not None:
+            a[k] = json.loads(a[k])
+    return a
+
+
+def get_analysis(analysis_id: int) -> Optional[dict]:
+    with connect() as c:
+        row = c.execute("SELECT a.*, ch.name AS group_name, ch.platform, ch.chat_id FROM analyses a "
+                        "JOIN channels ch ON ch.id=a.channel_id WHERE a.id=?", (analysis_id,)).fetchone()
+    return _analysis(row) if row else None
+
+
+def list_analyses(status: Optional[str] = None, limit: int = 200) -> list[dict]:
+    where, args = ("WHERE a.status=?", [status]) if status else ("", [])
+    with connect() as c:
+        rows = c.execute("SELECT a.*, ch.name AS group_name, ch.platform, ch.chat_id FROM analyses a "
+                         f"JOIN channels ch ON ch.id=a.channel_id {where} ORDER BY a.created_at DESC LIMIT ?",
+                         (*args, limit)).fetchall()
+    return [_analysis(r) for r in rows]
+
+
+def update_analysis(analysis_id: int, **fields: Any) -> None:
+    cols = {"status", "category", "urgency", "confidence", "social", "summary", "participants", "evidence", "checks",
+            "hypothesis", "suggested_reply", "telegram", "seen_by", "resolved", "irrelevant", "error",
+            "client_id", "client_name"}
+    bad = set(fields) - cols
+    if bad:
+        raise ValueError(f"campos inválidos: {sorted(bad)}")
+    if not fields:
+        return
+    vals = [json.dumps(v) if k in _ANALYSIS_JSON and v is not None else v for k, v in fields.items()]
+    with connect() as c:
+        c.execute(f"UPDATE analyses SET {', '.join(f'{k}=?' for k in fields)} WHERE id=?", (*vals, analysis_id))

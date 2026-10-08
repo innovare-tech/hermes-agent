@@ -168,3 +168,10 @@ def test_profile_pause_is_local_and_never_lifts_global(client):
     client.put("/api/ops/pause?profile=aibiz", json={"paused": False})
     assert not (get_profile_dir("aibiz") / "ESTOP").exists()
     assert is_engaged()  # retomar o perfil não levanta a pausa global
+
+
+def test_listen_settings_route(client):
+    assert client.get("/api/ops/listen").json()["max_min"] == 30
+    out = client.put("/api/ops/listen", json={"silence_min": 10, "notify_target": "telegram:-100:7"}).json()
+    assert out["silence_min"] == 10 and out["notify_target"] == "telegram:-100:7"
+    assert client.put("/api/ops/listen", json={"max_min": 1000}).status_code == 400

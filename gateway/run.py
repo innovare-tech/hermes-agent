@@ -5701,6 +5701,12 @@ def _start_gateway_start_cron_and_housekeeping(runner):
                 "cron_provider": cron_provider, "runner": runner, "cron_thread": cron_thread},
         daemon=True, name="gateway-housekeeping")
     housekeeping_thread.start()
+    # Escutar (Central de Operações): fecha lotes dos grupos, tria e analisa, em cada perfil servido.
+    try:
+        from ops_center import listen as _ops_listen
+        _ops_listen.start(cron_stop, homes=lambda: _cron_tick_profile_homes(runner.config))
+    except Exception:
+        logger.warning("ops_center: não consegui iniciar o Escutar", exc_info=True)
     return cron_stop, cron_provider, cron_thread, housekeeping_thread
 
 

@@ -156,6 +156,20 @@ async def put_settings(body: OpsSettings):
     return {"default_mode": mode}
 
 
+# ---- Escutar (janela do lote, triagem, destino do aviso) ----
+
+@router.get("/listen")
+async def get_listen():
+    return await _run(_store().listen_settings)
+
+
+@router.put("/listen")
+async def put_listen(body: dict):
+    out = await _run(_store().set_listen_settings, body)
+    await _act("Configuração do Escutar atualizada")
+    return out
+
+
 # ---- pausa do perfil ----
 # Diferente do "Pausar tudo" (/api/estop, frota inteira): o ESTOP fica só na pasta DESTE perfil, e
 # retomar remove só ele — nunca levanta a pausa global. O perfil padrão É a raiz: pausá-lo sozinho
