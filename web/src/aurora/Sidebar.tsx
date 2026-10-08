@@ -1,9 +1,11 @@
+import { useEffect } from "react";
 import { NavLink, useNavigate } from "react-router";
 import { Icon } from "./Icon";
+import { refreshModelsHealth, useModelsProblem } from "./models/health";
 import { ProfileSwitcher } from "./ProfileSwitcher";
 import { inBiz, setPrefs, setState, useStore, type State } from "./store";
 
-type NavItem = { to: string; label: string; icon: string; count?: string; sub?: boolean };
+type NavItem = { to: string; label: string; icon: string; count?: string; sub?: boolean; dot?: boolean };
 
 export const OPS: NavItem[] = [
   { to: "/", label: "Painel", icon: "layout-dashboard" },
@@ -27,6 +29,7 @@ export const AGENT: NavItem[] = [
   { to: "/gateways", label: "Gateways", icon: "radio-tower" },
   { to: "/logs", label: "Logs", icon: "scroll-text" },
   { to: "/settings", label: "Configurações", icon: "settings-2" },
+  { to: "/settings/modelos", label: "Modelos", icon: "cpu", sub: true, dot: true },
   { to: "/settings/avisos", label: "Avisos", icon: "bell-ring", sub: true },
   { to: "/settings/perfis", label: "Perfis", icon: "layers", sub: true },
 ];
@@ -60,11 +63,13 @@ export function BusinessSwitcher() {
 }
 
 function NavRow({ item, index, count, hot }: { item: NavItem; index: number; count: string; hot: boolean }) {
+  const problem = useModelsProblem();
   return (
     <NavLink to={item.to} end={item.to === "/"} className={({ isActive }) => "au-nav" + (isActive ? " active" : "")} style={{ animationDelay: index * 30 + "ms", ...(item.sub ? { paddingLeft: 30 } : {}) }}>
       <Icon name={item.icon} />
       <span style={{ whiteSpace: "nowrap" }}>{item.label}</span>
       <span className={"au-count" + (hot && count ? " hot" : "")}>{count}</span>
+      {item.dot && problem && <span role="img" aria-label="Algum provedor com problema" title="Algum provedor com problema" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--err)", flex: "none" }} />}
     </NavLink>
   );
 }
@@ -75,6 +80,11 @@ export function Sidebar() {
   const navigate = useNavigate();
   const s = useStore((x) => x);
   const counts = opsCounts(s);
+  const profileId = s.profileId;
+  // Ponto vermelho em Modelos: lê o estado guardado dos provedores ao entrar e a cada troca de perfil.
+  useEffect(() => {
+    refreshModelsHealth();
+  }, [profileId]);
   return (
     <aside className="au-side">
       <ProfileSwitcher />

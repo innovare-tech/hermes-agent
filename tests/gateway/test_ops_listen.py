@@ -189,3 +189,19 @@ def test_process_due_runs_each_ready_group(monkeypatch):
                               run=lambda *a: '{"summary": "boleto", "category": "bug", "urgency": "alta"}',
                               notify=lambda a: None)
     assert len(done) == 1 and store.get_analysis(done[0])["status"] == "open"
+
+
+def test_analysis_job_uses_the_group_analysis_model(monkeypatch):
+    from ops_center import listen, store
+
+    store.set_meta("models.group_analysis", {"provider": "openrouter", "model": "x/analista"})
+    seen = {}
+
+    def fake_run_job(job, extra_prompt=None):
+        seen.update(job)
+        return True, "", '{"summary": "ok"}', None
+
+    monkeypatch.setattr("cron.scheduler.run_job", fake_run_job)
+    listen._run_analysis("Padaria Sol", "", "[10:00] Ana: oi", store.listen_settings())
+    assert (seen["provider"], seen["model"]) == ("openrouter", "x/analista")
+    assert seen["enabled_toolsets"] == ["vision", "video", "no_mcp"]

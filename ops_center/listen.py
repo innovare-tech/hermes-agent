@@ -97,6 +97,12 @@ def _run_analysis(group: str, client: str, state: str, cfg: dict) -> str:
     job = {"id": f"ops-listen-{int(time.time() * 1000)}", "name": f"Escutar · {group}"[:80],
            "prompt": ANALYSIS_PROMPT, "enabled_toolsets": list(cfg.get("toolsets") or ["no_mcp"]),
            "deliver": "local", "repeat": {"times": 1, "completed": 0}}
+    try:  # Modelos › "Análise dos grupos" (A5); sem escolha, o modelo do cron/padrão
+        from ops_center.models import group_analysis_model
+
+        job.update(group_analysis_model() or {})
+    except Exception:
+        logger.debug("ops_center: modelo da análise dos grupos indisponível; usando o padrão", exc_info=True)
     ctx = f"Grupo: {group}\nCliente vinculado: {client or 'não vinculado'}\n\nMensagens:\n{state}"
     from ops_center.guardrails import as_origin
 
