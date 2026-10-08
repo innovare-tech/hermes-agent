@@ -1028,6 +1028,7 @@ from hermes_cli.web_routers import (  # noqa: E402
     shared_metrics as _shared_metrics_routes,
     estop as _estop_routes,
     ops_center as _ops_center_routes,
+    ops_profiles as _ops_profiles_routes,
 )
 
 app.include_router(_files_routes.router)
@@ -1063,6 +1064,7 @@ app.include_router(_dashboard_ui_routes.router)
 app.include_router(_shared_metrics_routes.router)
 app.include_router(_estop_routes.router)
 app.include_router(_ops_center_routes.router)
+app.include_router(_ops_profiles_routes.router)  # /api/ops/profiles: agregado NÃO escopado por ?profile=
 # Atividade automática das ações de configuração (só nomes, nunca valores secretos).
 from hermes_cli.web_routers.ops_activity import activity_middleware as _ops_activity_middleware
 app.middleware("http")(_ops_activity_middleware)

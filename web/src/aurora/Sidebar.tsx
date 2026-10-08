@@ -1,8 +1,9 @@
 import { NavLink, useNavigate } from "react-router";
 import { Icon } from "./Icon";
+import { ProfileSwitcher } from "./ProfileSwitcher";
 import { inBiz, setPrefs, setState, useStore, type State } from "./store";
 
-type NavItem = { to: string; label: string; icon: string; count?: string };
+type NavItem = { to: string; label: string; icon: string; count?: string; sub?: boolean };
 
 export const OPS: NavItem[] = [
   { to: "/", label: "Painel", icon: "layout-dashboard" },
@@ -24,6 +25,7 @@ export const AGENT: NavItem[] = [
   { to: "/gateways", label: "Gateways", icon: "radio-tower" },
   { to: "/logs", label: "Logs", icon: "scroll-text" },
   { to: "/settings", label: "Configurações", icon: "settings-2" },
+  { to: "/settings/perfis", label: "Perfis", icon: "layers", sub: true },
 ];
 
 /** Contadores destacados da seção Operação, já filtrados pelo negócio. */
@@ -56,7 +58,7 @@ export function BusinessSwitcher() {
 
 function NavRow({ item, index, count, hot }: { item: NavItem; index: number; count: string; hot: boolean }) {
   return (
-    <NavLink to={item.to} end={item.to === "/"} className={({ isActive }) => "au-nav" + (isActive ? " active" : "")} style={{ animationDelay: index * 30 + "ms" }}>
+    <NavLink to={item.to} end={item.to === "/"} className={({ isActive }) => "au-nav" + (isActive ? " active" : "")} style={{ animationDelay: index * 30 + "ms", ...(item.sub ? { paddingLeft: 30 } : {}) }}>
       <Icon name={item.icon} />
       <span style={{ whiteSpace: "nowrap" }}>{item.label}</span>
       <span className={"au-count" + (hot && count ? " hot" : "")}>{count}</span>
@@ -72,19 +74,7 @@ export function Sidebar() {
   const counts = opsCounts(s);
   return (
     <aside className="au-side">
-      <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "18px 18px 16px" }}>
-        <div className="au-logo" aria-hidden="true">☤</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <span className="au-display" style={{ fontSize: 19, lineHeight: 1 }}>Hermes</span>
-          <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>{s.account?.version || " "}</span>
-        </div>
-        <span
-          role="status"
-          title={s.paused ? "Agente pausado" : "Agente rodando"}
-          aria-label={s.paused ? "Agente pausado" : "Agente rodando"}
-          style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: "50%", background: s.paused ? "var(--err)" : "var(--ok)", boxShadow: "0 0 0 4px var(--accSoft)", animation: "hpulse 2.4s ease-in-out infinite" }}
-        />
-      </div>
+      <ProfileSwitcher />
 
       <div style={{ padding: "0 12px 12px" }}>
         <button className="au-new" onClick={() => navigate("/chat")}>
@@ -136,10 +126,10 @@ export function Sidebar() {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderTop: "1px solid var(--line)" }}>
-        <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--panel2)", display: "grid", placeItems: "center", fontSize: 11.5, fontWeight: 600, color: "var(--fg2)" }}>EU</div>
+        <Icon name="key-round" size={15} color="var(--fg3)" />
         <div style={{ display: "flex", flexDirection: "column", minWidth: 0, gap: 1 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 500 }}>{s.account?.plan}</span>
-          <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>{s.account?.credits}</span>
+          <span style={{ fontSize: 12, fontWeight: 500 }}>Chaves deste perfil</span>
+          <span title={s.keys.join(" · ")} style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.keys.length ? s.keys.join(" · ") : "Nenhuma chave ainda"}</span>
         </div>
         <button className="au-theme" title="Alternar tema" aria-label="Alternar tema" onClick={() => setPrefs({ theme: s.theme === "dark" ? "light" : "dark" })}>
           <Icon name={s.theme === "dark" ? "sun" : "moon"} size={14} />
