@@ -1,9 +1,9 @@
 import type { AutonomyMode } from "../adapter";
 import { MODES } from "../store";
 
-const COLOR = ["var(--fg)", "var(--acc)", "var(--ok)"];
+const COLOR = ["var(--fg)", "var(--acc)", "var(--ok)", "var(--fg2)"];
 
-/** Observar / Rascunhar / Autônomo (de um canal ou do padrão para canais novos). */
+/** Observar / Rascunhar / Autônomo / Escutar (de um canal ou do padrão para canais novos). */
 export function AutonomySegment({ label, mode, onPick }: { label: string; mode: AutonomyMode; onPick: (mode: AutonomyMode) => void }) {
   return (
     <div role="radiogroup" aria-label={label} style={{ display: "flex", gap: 3, padding: 3, borderRadius: "var(--r2)", background: "var(--panel2)" }}>

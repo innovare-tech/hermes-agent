@@ -263,6 +263,9 @@ def _handle_send(args):
                                             native_token=getattr(pconfig, "token", None))
     if _relay_denial:
         return tool_error(_relay_denial)
+    from gateway.outbound_guard import blocked as _ops_blocked
+    if _ops_reason := _ops_blocked(platform_name, chat_id):
+        return tool_error(f"Envio bloqueado pela Central de Operações: {_ops_reason}.")
 
     try:
         from model_tools import _run_async

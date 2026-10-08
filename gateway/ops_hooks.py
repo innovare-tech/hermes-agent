@@ -22,7 +22,11 @@ from typing import Any, Callable, Iterator, Optional
 
 logger = logging.getLogger(__name__)
 
-OBSERVE, DRAFT, AUTONOMOUS = 0, 1, 2
+OBSERVE, DRAFT, AUTONOMOUS, LISTEN = 0, 1, 2, 3
+
+# Mensagem só de mídia (nota de voz, foto sem legenda…) também é registrada, com um marcador.
+_MEDIA_MARKERS = {"voice": "[áudio]", "audio": "[áudio]", "photo": "[imagem]", "video": "[vídeo]",
+                  "document": "[documento]", "sticker": "[figurinha]", "location": "[localização]"}
 
 
 @contextmanager
@@ -45,17 +49,48 @@ def _platform_name(source: Any) -> str:
     return str(getattr(platform, "value", platform) or "")
 
 
-def record(event: Any, source: Any, home: Any = None) -> Optional[dict]:
-    """Grava a mensagem recebida. ``None`` = não registrado (comando, vazio ou erro)."""
+def _inbound_text(event: Any) -> str:
     text = (getattr(event, "text", None) or "").strip()
-    if not text or text.startswith("/"):
+    kind = getattr(getattr(event, "message_type", None), "value", getattr(event, "message_type", None))
+    marker = _MEDIA_MARKERS.get(str(kind or "")) or ("[mídia]" if getattr(event, "media_urls", None) else "")
+    return f"{marker} {text}".strip() if marker else text
+
+
+def record(event: Any, source: Any, home: Any = None) -> Optional[dict]:
+    """Grava a mensagem recebida. ``None`` = não registrado (vazio ou erro).
+
+    Comando (``/…``) não vira item, mas devolve o modo (``command=True``): fora do Autônomo o
+    gateway não o executa — senão ``/help`` num grupo de cliente responderia no grupo."""
+    text = _inbound_text(event)
+    if not text:
         return None
     try:
         with _home(home):
+            if text.startswith("/"):
+                from ops_center import store
+
+                chat_type = str(getattr(source, "chat_type", "") or "dm")
+                ch = store.touch_channel(_platform_name(source), str(getattr(source, "chat_id", "") or ""),
+                                         str(getattr(source, "chat_name", "") or ""), _kind(chat_type))
+                return {"item_id": None, "mode": int(ch["mode"]), "kind": ch["kind"], "command": True,
+                        "home": str(home) if home else None}
             return _record(event, source, text, home)
     except Exception:
         logger.debug("ops_center: falha ao registrar mensagem recebida", exc_info=True)
         return None
+
+
+def mutes_turn(ops: Optional[dict]) -> bool:
+    """O gateway não roda turno: Observar/Escutar, ou comando num canal mudo (grupo em Rascunhar)."""
+    if not ops:
+        return False
+    from ops_center.store import is_muted
+
+    return ops["mode"] in (OBSERVE, LISTEN) or (bool(ops.get("command")) and is_muted(ops["mode"], ops.get("kind", "dm")))
+
+
+def _kind(chat_type: str) -> str:
+    return "group" if chat_type in ("group", "channel", "thread") else "dm"
 
 
 def _record(event: Any, source: Any, text: str, home: Any) -> dict:
@@ -68,7 +103,7 @@ def _record(event: Any, source: Any, text: str, home: Any) -> dict:
         chat_id,
         text,
         chat_name=str(getattr(source, "chat_name", "") or ""),
-        kind="group" if chat_type in ("group", "channel", "thread") else "dm",
+        kind=_kind(chat_type),
         sender_id=str(getattr(source, "user_id", "") or ""),
         sender_name=str(getattr(source, "user_name", "") or ""),
         message_id=str(getattr(event, "message_id", "") or ""),
@@ -132,6 +167,17 @@ def send_text(platform: str, chat_id: str, text: str) -> dict:
     return result
 
 
+def _send_approved(platform: str, chat_id: str, text: str) -> dict:
+    """Resposta aprovada por uma pessoa: passa pela trava de saída, exceto em Escutar."""
+    from gateway import outbound_guard
+
+    with outbound_guard.approved(platform, chat_id):
+        reason = outbound_guard.blocked(platform, chat_id)
+        if reason:
+            raise RuntimeError(reason)
+        return send_text(platform, chat_id, text)
+
+
 def ops_send_verb(runner: Any) -> Callable[..., dict]:
     """``ops-send``: ``{"platform", "chat_id", "text", "profile"?}`` → envia pelo adaptador vivo do
     perfil dono do canal (no multiplexado, sem ``profile`` sairia pelo bot do perfil padrão)."""
@@ -152,9 +198,9 @@ def ops_send_verb(runner: Any) -> Callable[..., dict]:
                 from hermes_cli.profiles import get_profile_dir
 
                 with _profile_runtime_scope(get_profile_dir(profile)):
-                    result = send_text(platform, chat_id, text)
+                    result = _send_approved(platform, chat_id, text)
             else:
-                result = send_text(platform, chat_id, text)
+                result = _send_approved(platform, chat_id, text)
             return {"sent": True, "message_id": result.get("message_id")}
         except Exception as e:  # noqa: BLE001 — devolve o motivo ao dashboard
             return {"sent": False, "error": str(e)[:300]}

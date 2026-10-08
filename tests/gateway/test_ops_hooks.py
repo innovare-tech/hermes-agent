@@ -23,7 +23,9 @@ def test_record_skips_commands_and_follows_channel_mode():
     from gateway import ops_hooks
     from ops_center import store
 
-    assert ops_hooks.record(*_msg("/status")) is None
+    cmd = ops_hooks.record(*_msg("/status"))
+    assert cmd["command"] and cmd["item_id"] is None and not ops_hooks.mutes_turn(cmd)
+    assert store.list_inbox() == []
     ops = ops_hooks.record(*_msg("oi"))
     assert ops["mode"] == ops_hooks.AUTONOMOUS and ops["sender"] == "Ana"
 

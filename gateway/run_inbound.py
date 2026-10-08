@@ -1315,20 +1315,25 @@ class GatewayInboundMixin(GatewayPluginInjectionMixin):
         # calls handle_message directly, so a teardown on the relay's inbound
         # handler left those turns muted.
 
-        _paused_notice = self._hm_estop_gate(event, source, is_internal)
-        if _paused_notice is not None:
-            return _paused_notice
-
-        _quick_key = self._session_key_for_source(source)
-        # Central de Operações: toda mensagem real vira item da caixa de entrada; a autonomia do
-        # canal decide se o Hermes responde (Autônomo), só rascunha (Rascunhar) ou fica quieto.
+        # Central de Operações: toda mensagem real vira item da caixa de entrada (mesmo pausado); a
+        # autonomia do canal decide se o Hermes responde (Autônomo), só rascunha (Rascunhar) ou fica
+        # quieto (Observar/Escutar). Comando fora do Autônomo não roda. Antes da pausa: canal mudo
+        # nem recebe o aviso de pausado.
         if not is_internal:
             from gateway import ops_hooks
             # Síncrono de propósito: um await aqui abre janela para turno duplicado antes da reserva
             # da sessão. ponytail: INSERT local de ~ms no loop; mover para fila se o ops.db ficar lento.
             event._ops = ops_hooks.record(event, source, home=self._ops_home_for_source(source))
-            if event._ops and event._ops["mode"] == ops_hooks.OBSERVE:
+            if ops_hooks.mutes_turn(event._ops):
                 return None
+            if event._ops and event._ops.get("command"):
+                event._ops = None  # comando no Autônomo: segue como sempre, sem item na caixa
+
+        _paused_notice = self._hm_estop_gate(event, source, is_internal)
+        if _paused_notice is not None:
+            return _paused_notice
+
+        _quick_key = self._session_key_for_source(source)
         _reply = await self._hm_pending_reply_intercepts(event, source, _quick_key)
         if _reply is not None:
             return _reply

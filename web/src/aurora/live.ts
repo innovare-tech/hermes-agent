@@ -14,7 +14,7 @@ type RawActivity = { id: number; at: number; business_id: string | null; kind: A
 type RawPerson = { id: string; name: string; role: string; business_id: string | null; tone: string; channels: string; notes: string; pending: string[]; waiting_since: number | null; handles?: PersonHandles };
 type RawPlaybook = { id: string; name: string; business_id: string | null; trigger: string; nodes: Playbook["nodes"]; enabled: boolean; runs: number; last_run: number | null; schedule: string; deliver: string; next_run: number | null; last_error: string | null; trigger_kind?: string; keywords?: string; channel_id?: string | null };
 
-const MODES = ["Observar", "Rascunhar", "Autônomo"];
+const MODES = ["Observar", "Rascunhar", "Autônomo", "Escutar"];
 const PLATFORM_ICON: Record<string, string> = { telegram: "send", whatsapp: "phone", discord: "message-circle", email: "mail", slack: "hash", signal: "message-square", api: "plug" };
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 

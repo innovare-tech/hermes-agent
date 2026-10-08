@@ -170,7 +170,7 @@ export async function actOnBehalf(a: OnBehalf): Promise<boolean> {
 
 // ---- Caixa de entrada · Aprovações · Autonomia ----
 
-export const MODES = ["Observar", "Rascunhar", "Autônomo"] as const;
+export const MODES = ["Observar", "Rascunhar", "Autônomo", "Escutar"] as const;
 
 const quote = (t: string) => "“" + t.slice(0, 70) + (t.length > 70 ? "…" : "") + "”";
 

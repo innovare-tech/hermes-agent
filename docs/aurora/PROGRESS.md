@@ -14,6 +14,8 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | 04 Verdade | 👀 | — | R4: V4.1/V4.2 ❌ → corrigidos |
 | 05 Promessas | 👀 | — | — |
 | 06 Acabamento | 👀 | — | — |
+| 07 Perfis (A1) | 🔧 | — | — |
+| 08 Blindagem (1.1) | 🧪 | — | testes B8.1–B8.5 ✅; B8.6 precisa do número real |
 
 ## Já entregue antes dos specs
 - 🏁 PRs #1–#8: telas Aurora, sem mocks, ops_center, gateway com autonomia, playbooks com horário.
@@ -134,6 +136,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | A6.10 Cabeçalho da barra lateral | ✅ | R3 07/10 |
 
 ## Diário
+- **08/10/2026** — Fase 1.1 (spec 08): trava de saída por canal (`gateway/outbound_guard.py`), modo Escutar no ops.db, mídia sem legenda registrada, comandos não rodam em canal mudo. Spec 07 (Perfis) em implementação.
 - **07/10/2026** — R6 (final): todos os critérios testados ✅. Pendentes: C1.17 (contagem precisa de backend), P2.10 com canal ligado e E5.8 com mensagem real (precisam de credencial de canal). Aguardando validação do dono.
 - **07/10/2026** — R5: 21✅ 2❌ (V4.12, E5.12) → corrigidos. Gatilho por palavra-chave (E5.7/E5.8), avisos graves no Painel (V4.5) e escopo de custo (V4.8) implementados.
 - **07/10/2026** — R4: 13✅ 5❌ (skill na Atividade, Desfazer, textos de canais, clique no cartão, jargão) → corrigidos. Logs, Pessoas, Sessões, Agendamentos, Subagentes implementados.

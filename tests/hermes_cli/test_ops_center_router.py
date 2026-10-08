@@ -96,7 +96,7 @@ def test_reply_sends_marks_sent_and_respects_pause(client, monkeypatch):
 def test_default_mode_for_new_channels(client):
     assert client.get("/api/ops/settings").json() == {"default_mode": 1}  # Rascunhar de fábrica
     assert client.put("/api/ops/settings", json={"default_mode": 0}).json() == {"default_mode": 0}
-    assert client.put("/api/ops/settings", json={"default_mode": 3}).status_code == 400
+    assert client.put("/api/ops/settings", json={"default_mode": 9}).status_code == 400
 
 
 def test_config_actions_land_in_activity(client):

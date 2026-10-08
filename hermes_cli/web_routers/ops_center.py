@@ -44,7 +44,7 @@ async def _act(action: str, *, kind: str = "cfg", business_id: Optional[str] = N
     await _scoped(log, action, kind=kind, business_id=business_id)
 
 
-_MODES = ("Observar", "Rascunhar", "Autônomo")
+_MODES = ("Observar", "Rascunhar", "Autônomo", "Escutar")  # índice = modo no ops.db
 _DOW = ("domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado")
 
 

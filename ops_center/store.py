@@ -5,8 +5,9 @@ dashboard lê e configura. Nada aqui importa o resto do Hermes além de ``hermes
 para o gateway poder chamar sem custo de import.
 
 Modos de autonomia por canal: 0 = Observar (só lê), 1 = Rascunhar (resposta fica aguardando
-aprovação), 2 = Autônomo (envia sozinho). Canal novo nasce Autônomo: é o comportamento atual do
-Hermes, nada muda até o usuário configurar.
+aprovação), 2 = Autônomo (envia sozinho), 3 = Escutar (analisa e avisa a equipe em outro canal).
+Canal novo nasce no modo padrão (``default_mode``; de fábrica, Rascunhar). Em Observar, Escutar e grupo em Rascunhar a trava
+de saída (``gateway/outbound_guard.py``, ``is_muted``) impede o Hermes de enviar qualquer coisa.
 """
 
 from __future__ import annotations
@@ -19,7 +20,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
-OBSERVE, DRAFT, AUTONOMOUS = 0, 1, 2
+OBSERVE, DRAFT, AUTONOMOUS, LISTEN = 0, 1, 2, 3
+# Escutar: lê e analisa (lote + triagem), avisa a equipe em outro canal; nunca envia nada no canal.
+MODES = (OBSERVE, DRAFT, AUTONOMOUS, LISTEN)
 # Padrão de fábrica para canais nunca vistos: Rascunhar (nada sai sem você aprovar). Configurável.
 FACTORY_DEFAULT_MODE = DRAFT
 
@@ -141,11 +144,11 @@ def channel_id(platform: str, chat_id: str) -> str:
 def default_mode() -> int:
     """Modo aplicado a canais novos (Aprovações → Autonomia). Canais já registrados não mudam."""
     mode = get_meta("default_mode", FACTORY_DEFAULT_MODE)
-    return mode if mode in (OBSERVE, DRAFT, AUTONOMOUS) else FACTORY_DEFAULT_MODE
+    return mode if mode in MODES else FACTORY_DEFAULT_MODE
 
 
 def set_default_mode(mode: int) -> int:
-    if mode not in (OBSERVE, DRAFT, AUTONOMOUS):
+    if mode not in MODES:
         raise ValueError("modo inválido")
     set_meta("default_mode", mode)
     return mode
@@ -171,13 +174,26 @@ def channel_mode(platform: str, chat_id: str) -> int:
     return int(row["mode"]) if row else default_mode()
 
 
+def is_muted(mode: int, kind: str) -> bool:
+    """Canal onde nada gerado pelo Hermes sai: Observar/Escutar, ou grupo em Rascunhar. DM em
+    Rascunhar segue normal (só fala ali quem é autorizado); só a resposta final vira rascunho."""
+    return mode in (OBSERVE, LISTEN) or (mode == DRAFT and kind != "dm")
+
+
+def registered_channel(platform: str, chat_id: str) -> Optional[dict]:
+    """``{mode, kind}`` de um canal já visto pelo gateway; ``None`` = desconhecido (destino de cron etc.)."""
+    with connect() as c:
+        row = c.execute("SELECT mode, kind FROM channels WHERE id=?", (channel_id(platform, chat_id),)).fetchone()
+    return {"mode": int(row["mode"]), "kind": row["kind"]} if row else None
+
+
 def list_channels() -> list[dict]:
     with connect() as c:
         return _rows(c.execute("SELECT * FROM channels ORDER BY last_seen DESC"))
 
 
 def update_channel(cid: str, *, mode: Optional[int] = None, business_id: Optional[str] = "", name: Optional[str] = None) -> dict:
-    if mode is not None and mode not in (OBSERVE, DRAFT, AUTONOMOUS):
+    if mode is not None and mode not in MODES:
         raise ValueError("modo inválido")
     with connect() as c:
         if mode is not None:
@@ -207,7 +223,7 @@ def record_inbound(platform: str, chat_id: str, text: str, *, chat_name: str = "
             (ch["id"], message_id, sender_id, sender_name, text, time.time(), priority,
              "new" if ch["mode"] != AUTONOMOUS else "auto", session_id),
         )
-        return {"item_id": cur.lastrowid, "mode": int(ch["mode"])}
+        return {"item_id": cur.lastrowid, "mode": int(ch["mode"]), "kind": ch["kind"]}
 
 
 def set_draft(item_id: int, draft: str) -> None:

@@ -5,7 +5,7 @@ import { liveAdapter } from "./live";
 export type BizId = string;
 export type Business = { id: BizId; name: string; color: string };
 export type Priority = "urgente" | "voce" | "resolve" | "ignorar";
-export type AutonomyMode = 0 | 1 | 2; // Observar · Rascunhar · Autônomo
+export type AutonomyMode = 0 | 1 | 2 | 3; // Observar · Rascunhar · Autônomo · Escutar
 export type ActivityKind = "msg" | "cmd" | "pay" | "mem" | "tkt" | "cfg";
 
 export type Session = {
