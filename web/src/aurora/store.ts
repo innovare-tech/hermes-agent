@@ -3,6 +3,8 @@ import { adapter, type Approval, type AutonomyMode, type BizId, type Channel, ty
 import { chat } from "./chat";
 import type { Profile, ProfileDialog } from "./profileLogic";
 
+/** Aviso na tela; `action` desenha um botão (ex.: Desfazer) e dura mais. */
+
 export type Direction = "aurora" | "ambar" | "sinal";
 export type Theme = "dark" | "light";
 
@@ -168,12 +170,14 @@ export function dismissToast(id: number) {
   setState((s) => ({ toasts: s.toasts.filter((x) => x.id !== id), toast: s.toast?.id === id ? null : s.toast }));
 }
 
-export type ToastOpts = { sub?: string; undo?: () => void; action?: { label: string; run: () => void }; ms?: number };
+export type ToastAction = { label: string; run: () => void };
+export type ToastOpts = { sub?: string; undo?: () => void; action?: ToastAction; ms?: number };
 
 /** ``toast(texto)``, ``toast(texto, linhaDeApoio, ms?)`` ou ``toast(texto, {sub, undo, action, ms})``.
  *  Com botão (``undo``/``action``) o aviso fica 6 s; senão 3,6 s. Máximo 3 na tela. */
-export function toast(text: string, opts?: string | ToastOpts, legacyMs?: number) {
-  const o: ToastOpts = typeof opts === "string" ? { sub: opts, ms: legacyMs } : { ...(opts ?? {}) };
+export function toast(text: string, opts?: string | ToastOpts | ToastAction, legacyMs?: number) {
+  const o: ToastOpts = typeof opts === "string" ? { sub: opts, ms: legacyMs }
+    : opts && "run" in opts ? { action: opts } : { ...(opts ?? {}) };
   const action = o.action ?? (o.undo ? { label: "Desfazer", run: o.undo } : undefined);
   const t = { text, sub: o.sub, id: ++toastSeq, action };
   // Máximo 3 na tela; cada um some sozinho (ou no X).

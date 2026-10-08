@@ -8,6 +8,7 @@ type NavItem = { to: string; label: string; icon: string; count?: string; sub?: 
 export const OPS: NavItem[] = [
   { to: "/", label: "Painel", icon: "layout-dashboard" },
   { to: "/inbox", label: "Caixa de entrada", icon: "inbox" },
+  { to: "/analises", label: "Análises dos grupos", icon: "scan-search", sub: true },
   { to: "/approvals", label: "Aprovações", icon: "shield-check" },
   { to: "/radar", label: "Radar de grupos", icon: "radar" },
   { to: "/channels", label: "Canais", icon: "messages-square" },

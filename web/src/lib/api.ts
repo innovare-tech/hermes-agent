@@ -125,7 +125,8 @@ const PROFILE_SCOPED_PREFIXES = [
   "/api/curator",
   "/api/webhooks",
   "/api/ops",
-  // Diretório de clientes da Central de Operações (tabela `clients` do ops.db do perfil).
+  // Análises dos grupos e diretório de clientes da Central de Operações (ops.db do perfil).
+  "/api/analyses",
   "/api/clients",
   "/api/logs",
   "/api/portal",
