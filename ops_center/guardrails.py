@@ -478,8 +478,9 @@ def decide(approval_id: int, approve: bool, by: str, by_id: str, note: str = "")
         return {"ok": False, "error": f"este pedido já está {a['status']}", "approval": a}
     if by_id and a.get("requested_by_id") and str(by_id) == str(a["requested_by_id"]):
         return {"ok": False, "error": "quem pediu não aprova o próprio pedido", "approval": a}
+    # Quem entra no painel é o dono: decide sempre. A lista de aprovadores vale para o Telegram.
     approvers = [str(x) for x in settings()["approvers"]]
-    if approvers and str(by_id) not in approvers:
+    if approvers and str(by_id) != "dashboard" and str(by_id) not in approvers:
         return {"ok": False, "error": "você não está entre os aprovadores deste perfil", "approval": a}
     claimed = store.claim_approval(approval_id, approve, by, str(by_id), note)
     if not claimed:

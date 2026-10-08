@@ -226,7 +226,7 @@ export function PermissionsPanel() {
                 <Rule icon="layout-dashboard">O mesmo pedido aparece aqui, no histórico, com Aprovar e Negar. Vale o que for decidido primeiro.</Rule>
               </div>
             </div>
-            <ApprovalsHistory panelBlocked={perms.approvers.length > 0 && !perms.approvers.map(String).includes(PANEL_APPROVER)} rows={rows} error={rowsError} ttlMin={perms.approvalTtlMin} deciding={deciding} onRetry={() => loadRows()} onDecide={decide} onExample={showExample} />
+            <ApprovalsHistory panelBlocked={false} rows={rows} error={rowsError} ttlMin={perms.approvalTtlMin} deciding={deciding} onRetry={() => loadRows()} onDecide={decide} onExample={showExample} />
           </section>
 
           {cells > 0 && (
@@ -321,7 +321,6 @@ function ApprovalSettings({ perms, onSaved }: { perms: Permissions; onSaved: (p:
   const idOk = draftId === "" || validApprover(draftId);
   const dirty = target.trim() !== perms.approvalTarget || ids.join() !== perms.approvers.map(String).join();
   const people = ids.filter((i) => i !== PANEL_APPROVER);
-  const panelOn = ids.includes(PANEL_APPROVER);
 
   const addId = () => {
     const v = draftId.trim();
@@ -384,16 +383,8 @@ function ApprovalSettings({ perms, onSaved }: { perms: Permissions; onSaved: (p:
             </button>
           </div>
           <span id="pm-approver-d" style={{ fontSize: 11.5, lineHeight: 1.45, color: idOk ? "var(--fg3)" : "var(--err)" }}>
-            {!idOk ? "O id do Telegram tem só números." : people.length ? "Só estas pessoas aprovam. Quem pediu nunca aprova o próprio pedido." : "Lista vazia: qualquer pessoa que veja o pedido pode aprovar (menos quem pediu)."}
+            {!idOk ? "O id do Telegram tem só números." : people.length ? "No Telegram, só estas pessoas aprovam; aqui no painel, você sempre pode. Quem pediu nunca aprova o próprio pedido." : "Lista vazia: qualquer pessoa que veja o pedido pode aprovar (menos quem pediu)."}
           </span>
-          {people.length > 0 && (
-            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, marginTop: 2 }}>
-              <button type="button" role="switch" aria-checked={panelOn} aria-label="Este painel também pode aprovar" className="au-switch" onClick={() => setIds(panelOn ? ids.filter((x) => x !== PANEL_APPROVER) : [...ids, PANEL_APPROVER])} style={{ marginLeft: 0 }}>
-                <span />
-              </button>
-              Este painel também pode aprovar
-            </label>
-          )}
         </div>
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>

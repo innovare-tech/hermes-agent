@@ -156,11 +156,11 @@ describe("Permissões", () => {
     expect(container.textContent).not.toContain("Aguardando decisão");
   });
 
-  it("com lista de aprovadores sem o painel, Aprovar/Negar ficam desabilitados e explicam", async () => {
+  it("com lista de aprovadores, o painel (o dono) continua podendo aprovar", async () => {
     perms.approvers = ["123"];
     await mount();
-    expect(container.textContent).toContain("Este painel não está na lista de aprovadores");
-    expect((q('[aria-label^="Aprovar:"]') as HTMLButtonElement).disabled).toBe(true);
+    expect(container.textContent).not.toContain("Este painel não está na lista de aprovadores");
+    expect((q('[aria-label^="Aprovar:"]') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("erro ao carregar: mensagem, regras salvas continuam e 'Tentar de novo' recarrega", async () => {

@@ -212,3 +212,13 @@ def test_core_pre_tool_call_path_enforces_it():
     with session(platform="whatsapp", chat_type="group"):
         d = _get_pre_tool_call_directive_details("terminal", {"command": "kubectl scale deploy/x --replicas=0"})
     assert d.action == "block" and "grupo de cliente" in d.message
+
+
+def test_dashboard_always_decides_even_with_approvers(monkeypatch):
+    from ops_center import guardrails
+
+    guardrails.save_settings({"enabled": True, "approvers": ["22"]})
+    monkeypatch.setattr(guardrails, "_send_approval_prompt", lambda *a: True)
+    with session(platform="telegram", chat_type="group", chat_id="-100", user_id="11"):
+        guardrails.check("terminal", {"command": "systemctl restart x"})
+    assert guardrails.decide(1, False, "Você (painel)", "dashboard")["ok"]
