@@ -742,6 +742,8 @@ async function startSocket() {
         lookupQuotedMedia: (quotedChatId, quotedMessageId) => quotedMediaCache.get(quotedChatId, quotedMessageId),
       });
       event.fromOwner = fromOwner;
+      // Nome real do grupo (assunto) em vez do id: análises e avisos mostram "Padaria Sol", não 120363…
+      if (isGroup) event.chatName = (await groupSubject(chatId)) || event.chatName;
 
       // Ignore Hermes' own reply messages in self-chat mode to avoid loops.
       if (msg.key.fromMe && ((REPLY_PREFIX && event.body.startsWith(REPLY_PREFIX)) || recentlySentIds.has(msg.key.id))) {
@@ -1098,6 +1100,23 @@ app.post('/read', async (req, res) => {
     return res.status(500).json({ error: 'Failed to send read receipt' });
   }
 });
+
+// Assunto dos grupos em cache (1 h): uma consulta ao WhatsApp por grupo, não uma por mensagem.
+const groupSubjects = new Map();
+async function groupSubject(chatId) {
+  const hit = groupSubjects.get(chatId);
+  if (hit && Date.now() - hit.at < 3600_000) return hit.name;
+  try {
+    const metadata = await sock.groupMetadata(chatId);
+    if (metadata?.subject) {
+      groupSubjects.set(chatId, { name: metadata.subject, at: Date.now() });
+      return metadata.subject;
+    }
+  } catch {
+    // sem nome: fica o id
+  }
+  return hit?.name || '';
+}
 
 // Chat info
 app.get('/chat/:id', async (req, res) => {
