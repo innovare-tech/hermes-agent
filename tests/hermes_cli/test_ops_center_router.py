@@ -125,3 +125,11 @@ def test_activity_middleware_rules_never_log_secrets():
     assert "TELEGRAM_BOT_TOKEN" in creds and "123:abc" not in creds
     assert match("PUT", "/api/messaging/platforms/telegram", {"enabled": False}) == "Desligou o canal Telegram"
     assert match("GET", "/api/estop", {}) is None and match("PUT", "/api/ops/inbox/1", {}) is None
+
+
+def test_human_schedule_in_activity():
+    from hermes_cli.web_routers.ops_center import _human_schedule
+
+    assert _human_schedule("0 18 * * 5") == "toda sexta às 18:00"
+    assert _human_schedule("30 7 * * 1-5") == "dias úteis às 07:30"
+    assert _human_schedule("every 2h") == "every 2h"

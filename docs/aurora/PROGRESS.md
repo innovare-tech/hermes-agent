@@ -9,11 +9,11 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | Spec | Estado | PR | Última validação |
 |---|---|---|---|
 | 01 Conversa e Sessões | 👀 | — | R2 07/10: 15/15 ✅ (+C1.17 novo) |
-| 02 Primeiro uso | 🧪 | — | R3 07/10: 9✅ (P2.10 parcial) |
-| 03 Português e clareza | ✅ | — | R5 07/10: 21/21 ✅ |
-| 04 Verdade | 🧪 | — | R4: V4.1/V4.2 ❌ → corrigidos |
-| 05 Promessas | 🧪 | — | — |
-| 06 Acabamento | 🔧 | — | — |
+| 02 Primeiro uso | 👀 | — | R3 07/10: 9✅ (P2.10 parcial) |
+| 03 Português e clareza | 👀 | — | R5 07/10: 21/21 ✅ |
+| 04 Verdade | 👀 | — | R4: V4.1/V4.2 ❌ → corrigidos |
+| 05 Promessas | 👀 | — | — |
+| 06 Acabamento | 👀 | — | — |
 
 ## Já entregue antes dos specs
 - 🏁 PRs #1–#8: telas Aurora, sem mocks, ops_center, gateway com autonomia, playbooks com horário.
@@ -87,15 +87,14 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | V4.2 O quê/quando/por quê/desfazer | ✅ | R5 07/10 |
 | V4.3 Filtros só do que existe | ✅ | R3 07/10 |
 | V4.4 Saúde real | ✅ | R4 07/10 |
-| V4.5 Avisos graves no Painel | 🧪 | "travado por N min" e falha de canal na última hora → Painel |
+| V4.5 Avisos graves no Painel | ✅ | R6 07/10 |
 | V4.6 Períodos corretos | ✅ | R5 07/10 |
 | V4.7 "US$ 0,16" | ✅ | R3 07/10 |
-| V4.8 Filtro por negócio | 🧪 | custo sem recorte por negócio → "todos os negócios" |
+| V4.8 Filtro por negócio | ✅ | R6 07/10 |
 | V4.9 Zero neutro, sem traço solto | ✅ | R3 07/10 |
 | V4.10 Briefing cria agendamento | ✅ | R5 07/10 |
 | V4.11 Logs: busca e download | ✅ | R5 07/10 |
-| V4.12 Logs: sem duplicação; vazio | 🧪 | R5 ❌ linhas com "
-" no fim não casavam → trimEnd + teste |
+| V4.12 Logs: sem duplicação; vazio | ✅ | R6 07/10 |
 | V4.13 Logs: ruído agrupado | ✅ | R5 07/10 |
 
 ## 05 · Promessas
@@ -107,12 +106,12 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | E5.4 Histórico do contato | ✅ | R5 07/10 |
 | E5.5 Validação e campos vazios | ✅ | R5 07/10 |
 | E5.6 Vazio com filtro | ✅ | R5 07/10 |
-| E5.7 Tipo de gatilho explícito | 🧪 | Manual / Horário / Palavra-chave (+ canal) |
-| E5.8 Gatilho por palavra-chave funciona | 🧪 | gateway dispara job único com a mensagem; kill switch; Observar não dispara; Rascunhar só registra; Atividade |
+| E5.7 Tipo de gatilho explícito | ✅ | R6 07/10 |
+| E5.8 Gatilho por palavra-chave funciona | ✅ | R6 07/10 (salvar/Atividade no painel; disparo real coberto por teste automático — falta testar com canal real) |
 | E5.9 Playbook nasce desligado | ✅ | R4 07/10 |
 | E5.10 Nome separado do gatilho | ✅ | R4 07/10 |
 | E5.11 Condição/placeholder/feedback | ✅ | R5 07/10 |
-| E5.12 Ajuda de horário em PT | 🧪 | R5 ❌ atalhos/ajuda em inglês → frases em PT convertidas ao salvar; exibição em PT |
+| E5.12 Ajuda de horário em PT | ✅ | R6 07/10 |
 | E5.13 Agendamentos: vazio + aviso | ✅ | R5 07/10 |
 | E5.14 "Agendar" vazio | ✅ | R5 07/10 |
 | E5.15 Subagentes: vazio útil | ✅ | R5 07/10 |
@@ -135,6 +134,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | A6.10 Cabeçalho da barra lateral | ✅ | R3 07/10 |
 
 ## Diário
+- **07/10/2026** — R6 (final): todos os critérios testados ✅. Pendentes: C1.17 (contagem precisa de backend), P2.10 com canal ligado e E5.8 com mensagem real (precisam de credencial de canal). Aguardando validação do dono.
 - **07/10/2026** — R5: 21✅ 2❌ (V4.12, E5.12) → corrigidos. Gatilho por palavra-chave (E5.7/E5.8), avisos graves no Painel (V4.5) e escopo de custo (V4.8) implementados.
 - **07/10/2026** — R4: 13✅ 5❌ (skill na Atividade, Desfazer, textos de canais, clique no cartão, jargão) → corrigidos. Logs, Pessoas, Sessões, Agendamentos, Subagentes implementados.
 - **07/10/2026** — R3: 18✅ 3❌ (A6.4, V4.4, P2.10 parcial) → corrigidos. Spec 03 implementado; V4.1 (Atividade automática) no backend.

@@ -28,6 +28,27 @@ async def _act(action: str, *, kind: str = "cfg", business_id: Optional[str] = N
 
 
 _MODES = ("Observar", "Rascunhar", "Autônomo")
+_DOW = ("domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado")
+
+
+def _human_schedule(s: str) -> str:
+    """Cron de 5 campos → português para a Atividade ("0 18 * * 5" → "toda sexta às 18:00")."""
+    import re
+
+    m = re.fullmatch(r"(\d+) (\d+) (\*|\d+) \* (\*|[\d,-]+)", s.strip())
+    if not m:
+        return s
+    at = f"{int(m[2]):02d}:{int(m[1]):02d}"
+    if m[3] != "*":
+        return f"todo dia {m[3]} às {at}"
+    if m[4] == "*":
+        return f"todo dia às {at}"
+    if m[4] == "1-5":
+        return f"dias úteis às {at}"
+    if m[4].isdigit() and int(m[4]) < 7:
+        d = int(m[4])
+        return f"{'todo' if d in (0, 6) else 'toda'} {_DOW[d]} às {at}"
+    return s
 
 
 def _clip(t: str, n: int = 60) -> str:
@@ -311,7 +332,7 @@ async def list_playbooks():
 async def save_playbook(body: PlaybookBody):
     data = body.model_dump(exclude={"schedule", "deliver"})
     p = await _run(_playbooks().save, data, body.schedule, body.deliver)
-    when = f" · {p['schedule']}" if p.get("schedule") else ""
+    when = f" · {_human_schedule(p['schedule'])}" if p.get("schedule") else ""
     await _act(f"{'Salvou' if body.id else 'Criou'} o playbook “{p['name']}”{when}{'' if p['enabled'] else ' (desligado)'}", business_id=p.get("business_id"))
     return p
 

@@ -44,7 +44,6 @@ export function Home() {
   const health = [
     ...s.health.items,
     { name: "Fila de mensagens", status: s.paused ? "warn" : "ok", value: s.paused ? "retida (pausado)" : "0 pendentes" } as const,
-    { name: "Tempo médio de resposta", status: "ok", value: s.health.responseTime } as const,
   ];
   const online = s.health.online && !s.paused;
   const attention = online && s.health.level === "warn";

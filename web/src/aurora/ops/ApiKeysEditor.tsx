@@ -122,7 +122,7 @@ export function ApiKeysEditor({ onChange }: { onChange?: () => void }) {
         <div role="tablist" aria-label="Tipo de chave" style={{ display: "flex", gap: 4, padding: 4, borderRadius: "var(--r)", background: "var(--panel2)" }}>
           {TABS.map((t) => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} className="au-seg au-seg-lg" onClick={() => setTab(t.id)}>
-              {t.label} {keys ? `· ${keys.filter((k) => k.category === t.id && k.isSet).length} salvas` : ""}
+              {t.label} {keys ? (() => { const n = keys.filter((k) => k.category === t.id && k.isSet).length; return `· ${n} ${n === 1 ? "salva" : "salvas"}`; })() : ""}
             </button>
           ))}
         </div>
