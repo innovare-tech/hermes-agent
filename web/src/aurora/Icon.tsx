@@ -110,6 +110,17 @@ import {
   Link2,
   Minus,
   Unlink,
+  ArrowLeft,
+  Ban,
+  Braces,
+  Container,
+  Database,
+  Hand,
+  List,
+  Server,
+  ShieldAlert,
+  Timer,
+  TimerOff,
   type LucideIcon,
 } from "lucide-react";
 
@@ -224,6 +235,17 @@ const ICONS: Record<string, LucideIcon> = {
   "link-2": Link2,
   minus: Minus,
   unlink: Unlink,
+  "arrow-left": ArrowLeft,
+  ban: Ban,
+  braces: Braces,
+  container: Container,
+  database: Database,
+  hand: Hand,
+  list: List,
+  server: Server,
+  "shield-alert": ShieldAlert,
+  timer: Timer,
+  "timer-off": TimerOff,
 };
 
 export function Icon({ name, size = 16, color, className }: { name: string; size?: number; color?: string; className?: string }) {

@@ -210,15 +210,52 @@ _HARD_DENY_EXAMPLES = {
 }
 
 
+def _mcp_connectors(matrix: dict) -> tuple[list[dict], list[dict]]:
+    """Conectores MCP do perfil → (ferramentas, servidores) sem conectar a ninguém.
+
+    Servidores vêm do ``mcp_servers`` da config; ferramentas, do cache de esquema que a última conexão
+    gravou (``tools/mcp_schema_cache``, com o ``readOnlyHint`` de cada uma). Sem cache válido o servidor
+    entra sem ferramentas (``discovered: False``) e elas aparecem depois da primeira conexão. A chave é
+    ``mcp.<servidor>.<ferramenta>`` com os nomes que a checagem recebe (``mcp__servidor__ferramenta``).
+    """
+    tools: dict[str, dict] = {}
+    servers: dict[str, dict] = {}
+    try:
+        from hermes_cli.mcp_config import _get_mcp_servers
+        from tools.mcp_schema_cache import config_fingerprint, get_cached_entry, tools_from_cache_entry
+        from tools.mcp_tool_schema import mcp_prefixed_tool_name, sanitize_mcp_name_component
+
+        for name, cfg in _get_mcp_servers().items():
+            if not isinstance(cfg, dict) or cfg.get("enabled") is False:
+                continue
+            entry = get_cached_entry(name, config_fingerprint(cfg))
+            rows = [t for t in tools_from_cache_entry(entry) if isinstance(t, dict) and t.get("name")] if entry else []
+            server = sanitize_mcp_name_component(name)
+            for t in rows:  # nome exato que a checagem recebe (sanitizado e, se longo, encurtado com hash)
+                tool = mcp_prefixed_tool_name(name, t["name"])[len("mcp__") + len(server) + 2:]
+                ann = t.get("annotations") if isinstance(t.get("annotations"), dict) else {}
+                tools[f"mcp.{server}.{tool}"] = {
+                    "key": f"mcp.{server}.{tool}", "group": "mcp:" + server, "label": t["name"],
+                    "writes": ann.get("readOnlyHint") is not True, "description": str(t.get("description") or "")[:240]}
+            servers[server] = {"id": server, "label": name, "discovered": bool(rows), "tools": len(rows)}
+    except Exception:
+        pass  # sem config/cache legível: só entram os conectores que já têm regra salva
+    for k in matrix:  # regra salva de ferramenta que o cache não conhece (servidor removido, cache velho)
+        if k.startswith("mcp.") and k.count(".") >= 2 and k not in tools:
+            server = k.split(".")[1]
+            tools[k] = {"key": k, "group": "mcp:" + server, "label": k.split(".", 2)[2], "writes": True}
+            servers.setdefault(server, {"id": server, "label": server, "discovered": True, "tools": 0})
+    return list(tools.values()), list(servers.values())
+
+
 def _permissions_payload() -> dict:
     from ops_center import guardrails
 
     cfg = guardrails.settings()
+    mcp_tools, mcp_servers = _mcp_connectors(cfg["matrix"])
     return {
         "enabled": cfg["enabled"], "origins": list(guardrails.ORIGINS), "originLabels": guardrails.ORIGIN_LABEL,
-        "actions": guardrails.ACTIONS + [
-            {"key": k, "group": "mcp:" + k.split(".")[1], "label": k.split(".", 2)[2], "writes": True}
-            for k in cfg["matrix"] if k.startswith("mcp.") and k.count(".") >= 2],
+        "actions": guardrails.ACTIONS + mcp_tools, "mcpServers": mcp_servers,
         "matrix": cfg["matrix"], "approvers": cfg["approvers"], "approvalTarget": cfg["approval_target"],
         "approvalTtlMin": cfg["approvalTtlMin"],
         "hardDeny": [{"label": r["label"], "patterns": _HARD_DENY_EXAMPLES.get(r["label"], [])} for r in guardrails.HARD_DENY],

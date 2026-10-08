@@ -200,6 +200,35 @@ def test_permissions_and_approvals_routes(client, monkeypatch):
     assert client.post(f"/api/ops/approvals/{aid}/decide", json={"approve": False}).status_code == 409
 
 
+def test_permissions_list_mcp_connectors_from_schema_cache(client, tmp_path):
+    import yaml
+
+    from tools.mcp_schema_cache import config_fingerprint, write_cache_entry
+
+    home = tmp_path / ".hermes"
+    home.mkdir(exist_ok=True)
+    gh = {"command": "npx", "args": ["gh-mcp"]}
+    (home / "config.yaml").write_text(yaml.safe_dump({"mcp_servers": {
+        "github": gh, "linear": {"url": "https://x.test/mcp"}, "off": {"url": "https://y.test", "enabled": False}}}), encoding="utf-8")
+    write_cache_entry("github", config_fingerprint(gh), tools=[
+        {"name": "get_issue", "description": "Lê uma issue", "annotations": {"readOnlyHint": True}},
+        {"name": "create-pr", "description": "", "annotations": {"readOnlyHint": False}},
+        {"name": "sem_dica", "annotations": {}}])
+    perms = client.get("/api/ops/permissions").json()
+    mcp = {a["key"]: a for a in perms["actions"] if a["group"].startswith("mcp:")}
+    assert mcp["mcp.github.get_issue"]["writes"] is False and mcp["mcp.github.get_issue"]["description"] == "Lê uma issue"
+    assert mcp["mcp.github.create_pr"]["writes"] is True and mcp["mcp.github.create_pr"]["label"] == "create-pr"
+    assert mcp["mcp.github.sem_dica"]["writes"] is True  # sem readOnlyHint = altera
+    servers = {s["id"]: s for s in perms["mcpServers"]}
+    assert servers["github"] == {"id": "github", "label": "github", "discovered": True, "tools": 3}
+    assert servers["linear"]["discovered"] is False and servers["linear"]["tools"] == 0 and "off" not in servers
+    # regra salva de ferramenta que o cache não conhece continua na matriz
+    client.put("/api/ops/permissions", json={"matrix": {"mcp.asaas.refund": {"telegram_team": "approve"}}})
+    perms = client.get("/api/ops/permissions").json()
+    assert any(a["key"] == "mcp.asaas.refund" and a["writes"] for a in perms["actions"])
+    assert any(s["id"] == "asaas" for s in perms["mcpServers"])
+
+
 def test_channels_a2_contract_and_clients_directory(client):
     from ops_center import store
 

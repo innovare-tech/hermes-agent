@@ -5,6 +5,7 @@ import type { Settings as S } from "../agent/types";
 import { setPrefs, setState, toast, useStore, type Direction } from "../store";
 import { ApiKeysEditor } from "../ops/ApiKeysEditor";
 import { BusinessesEditor } from "../ops/BusinessesEditor";
+import { PermissionsPanel } from "../permissions/PermissionsPanel";
 import { ProfilesPanel } from "./Profiles";
 import { AgentHeader } from "./Sessions";
 
@@ -42,10 +43,11 @@ function Section({ title, sub, children }: { title: string; sub: string; childre
 const TABS = [
   { id: "geral", label: "Geral", to: "/settings" },
   { id: "perfis", label: "Perfis", to: "/settings/perfis" },
+  { id: "permissoes", label: "Permissões", to: "/settings/permissoes" },
   { id: "aparencia", label: "Aparência", to: "/settings/aparencia" },
 ] as const;
 
-/** Geral · Perfis · Aparência. */
+/** Geral · Perfis · Permissões · Aparência. */
 function SettingsTabs({ tab }: { tab: string }) {
   const navigate = useNavigate();
   return (
@@ -63,13 +65,23 @@ export function Settings() {
   const [s, setS, reload] = useAgentData(() => agent.settings(), []);
   const dir = useStore((x) => x.dir);
   const param = useParams().tab;
-  const tab = param === "perfis" || param === "aparencia" ? param : "geral";
+  const tab = param === "perfis" || param === "permissoes" || param === "aparencia" ? param : "geral";
   if (tab === "perfis") {
     return (
       <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
         <div className="au-page au-page-agent" style={{ gap: 22, maxWidth: 1060 }}>
           <SettingsTabs tab={tab} />
           <ProfilesPanel />
+        </div>
+      </div>
+    );
+  }
+  if (tab === "permissoes") {
+    return (
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div className="au-page au-page-agent" style={{ gap: 22, maxWidth: 1140 }}>
+          <SettingsTabs tab={tab} />
+          <PermissionsPanel />
         </div>
       </div>
     );

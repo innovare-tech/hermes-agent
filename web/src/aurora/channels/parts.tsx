@@ -30,12 +30,12 @@ export function useEscape(onEsc: () => void, active = true) {
 }
 
 /** Diálogo do Aurora: fundo escurecido, `aria-modal`, Esc e clique fora fecham (a menos que esteja ocupado). */
-export function Modal({ title, onClose, busy, width = 480, children }: { title: string; onClose: () => void; busy?: boolean; width?: number; children: ReactNode }) {
+export function Modal({ title, onClose, busy, width = 480, role = "dialog", children }: { title: string; onClose: () => void; busy?: boolean; width?: number; role?: "dialog" | "alertdialog"; children: ReactNode }) {
   const id = useId();
   useEscape(() => !busy && onClose());
   return (
     <div style={{ position: "absolute", inset: 0, zIndex: 75, background: "rgba(0,0,0,.45)", display: "grid", placeItems: "center", padding: 24, animation: "hin .2s ease both" }} onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div role="dialog" aria-modal="true" aria-labelledby={id} className="au-card au-float" style={{ width: `min(${width}px,100%)`, maxHeight: "calc(100vh - 48px)", overflow: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div role={role} aria-modal="true" aria-labelledby={id} className="au-card au-float" style={{ width: `min(${width}px,100%)`, maxHeight: "calc(100vh - 48px)", overflow: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
         <span id={id} style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.35 }}>
           {title}
         </span>
