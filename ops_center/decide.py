@@ -60,7 +60,8 @@ def triage(state: str, cfg: dict, *, timeout: float = 20.0) -> Optional[dict]:
     key = get_secret_str(str(cfg.get("api_key_env") or "TYPESAFE_API_KEY"))
     if not base or not key:
         return None
-    url = base if base.endswith("/decisions") else f"{base}/decisions"
+    # A TypeSafe publica o mesmo contrato em ``/v1/systemone`` (nativo) e ``/decisions`` (Portkey/OpenRouter).
+    url = base if base.endswith(("/decisions", "/systemone")) else f"{base}/decisions"
     out = _post(url, key, {"model": cfg.get("model") or "jev-latest", "state": state[-60000:],
                            "questions": _questions()}, timeout)
     return parse(out)
