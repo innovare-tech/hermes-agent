@@ -4,8 +4,8 @@ Canal registrado em Observar ou Escutar, ou grupo em Rascunhar (``store.is_muted
 nada vindo do Hermes — resposta, "digitando", aviso de ocupado, erro, eco de transcrição, pergunta,
 reação, ``send_message`` do agente ou do cron. A única exceção é uma resposta aprovada por uma
 pessoa no painel (``approved``), e nem ela passa em Escutar. Canal nunca visto pelo gateway
-(destino de cron, home channel) não é afetado: grupo não recebe resposta de admissão (pareamento
-é só por DM) e a primeira mensagem já o registra no modo padrão.
+(destino de cron, home channel) não é afetado pelo ``send_message``; nos adaptadores, grupo de
+WhatsApp ainda não registrado já fica mudo (o "digitando" sai antes do registro).
 
 Dois pontos de aplicação, um só critério (``blocked``):
 - ``install(adapter)``: embrulha os métodos de saída de cada adaptador (``_create_adapter``).
@@ -66,8 +66,12 @@ def channel(platform: str, chat_id: str, home: Any = None) -> Optional[dict]:
         return store.registered_channel(platform, str(chat_id))
 
 
-def blocked(platform: str, chat_id: Any, home: Any = None) -> Optional[str]:
-    """Motivo do bloqueio, ou ``None`` quando pode enviar."""
+def blocked(platform: str, chat_id: Any, home: Any = None, *, unknown_group_muted: bool = False) -> Optional[str]:
+    """Motivo do bloqueio, ou ``None`` quando pode enviar.
+
+    ``unknown_group_muted`` (só nos adaptadores): grupo de WhatsApp que a Central ainda não registrou
+    também fica mudo. O adaptador liga o "digitando" antes de o gateway registrar o grupo (que nasce
+    em Escutar), então sem isso a 1ª mensagem de um grupo novo vazava um "digitando"."""
     from ops_center.store import LISTEN, is_muted
 
     if not platform or chat_id in (None, ""):
@@ -80,6 +84,8 @@ def blocked(platform: str, chat_id: Any, home: Any = None) -> Optional[str]:
         if platform == "whatsapp" and chat_id.endswith("@g.us"):
             return "não consegui confirmar o modo deste grupo; nada é enviado"
         return None
+    if ch is None and unknown_group_muted and platform == "whatsapp" and chat_id.endswith("@g.us"):
+        return "grupo ainda não registrado na Central (nasce em Escutar)"
     if ch is None or not is_muted(ch["mode"], ch["kind"]):
         return None
     if ch["mode"] == LISTEN:
@@ -141,7 +147,8 @@ def _guarded(adapter: Any, platform: str, name: str, fn: Any) -> Any:
     @functools.wraps(fn)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         chat_id = _chat_id_of(args, kwargs)
-        reason = blocked(platform, chat_id, _adapter_home(adapter)) if chat_id is not None else None
+        reason = (blocked(platform, chat_id, _adapter_home(adapter), unknown_group_muted=True)
+                  if chat_id is not None else None)
         if reason:
             logger.info("ops_center: saída %s bloqueada para %s:%s (%s)", name, platform, chat_id, reason)
             return _muted_result(name, reason)

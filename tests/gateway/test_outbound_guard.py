@@ -99,7 +99,7 @@ def test_autonomous_and_unknown_non_group_channels_pass():
 
 def test_draft_dm_keeps_working_and_unknown_group_is_not_touched():
     """DM em Rascunhar: só autorizados falam ali — comandos e "digitando" seguem; a resposta final
-    vira rascunho no run_turn. Grupo nunca visto: a 1ª mensagem o registra no modo padrão."""
+    vira rascunho no run_turn."""
     from gateway import ops_hooks
 
     dm = "5511999@s.whatsapp.net"
@@ -114,9 +114,14 @@ def test_draft_dm_keeps_working_and_unknown_group_is_not_touched():
     source.chat_type = "dm"
     assert not ops_hooks.mutes_turn(ops_hooks.record(event, source))
 
+    # Grupo de WhatsApp ainda não registrado: no adaptador fica mudo — o "digitando" da 1ª mensagem
+    # sai antes de o gateway registrar o grupo (que nasce em Escutar).
     adapter = _guarded()
     _drive(adapter, "999@g.us")
-    assert len(adapter.calls) == 5
+    assert adapter.calls == []
+    from gateway import outbound_guard
+
+    assert outbound_guard.blocked("whatsapp", "999@g.us") is None  # send_message (destino escolhido) segue a regra antiga
 
 
 def test_unreadable_ops_db_mutes_whatsapp_groups_only(monkeypatch):
