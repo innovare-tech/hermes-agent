@@ -1,15 +1,16 @@
 import { useState } from "react";
 import type { Playbook, PlaybookNode } from "../adapter";
 import { spot } from "../Chrome";
+import { humanizeSchedule, toSchedule } from "../agent/cron";
 import { Icon } from "../Icon";
 import { runPlaybook, savePlaybook, useStore } from "../store";
 
 const PRESETS: { label: string; value: string }[] = [
   { label: "Só manual", value: "" },
-  { label: "Dias úteis 9h", value: "every weekday 9am" },
-  { label: "Todo dia 18h", value: "every day 6pm" },
-  { label: "Toda segunda 9h", value: "every monday 9am" },
-  { label: "A cada hora", value: "every 1h" },
+  { label: "Dias úteis 9h", value: "dias úteis às 9h" },
+  { label: "Todo dia 18h", value: "todo dia às 18h" },
+  { label: "Toda segunda 9h", value: "toda segunda às 9h" },
+  { label: "A cada hora", value: "a cada 1 hora" },
 ];
 
 /** Configuração do playbook: nome, quando roda (cron do Hermes), para onde vai o resultado e os passos. */
@@ -19,18 +20,25 @@ export function beforeEnd(nodes: PlaybookNode[], n: PlaybookNode): PlaybookNode[
   return end < 0 ? [...nodes, n] : [...nodes.slice(0, end), n, ...nodes.slice(end)];
 }
 
+const KINDS: [Playbook["triggerKind"], string][] = [
+  ["manual", "Manual"],
+  ["schedule", "Horário"],
+  ["keyword", "Palavra-chave"],
+];
+
 export function PlaybookSettings({ p }: { p: Playbook }) {
   const channels = useStore((s) => s.autonomy);
   const businesses = useStore((s) => s.businesses);
-  const [d, setD] = useState(p);
+  // O campo mostra o horário em português; ao salvar vira o formato do agendador.
+  const [d, setD] = useState({ ...p, schedule: humanizeSchedule(p.schedule) });
   const set = (patch: Partial<Playbook>) => setD({ ...d, ...patch });
   const setNode = (i: number, patch: Partial<PlaybookNode>) => set({ nodes: d.nodes.map((n, j) => (j === i ? { ...n, ...patch } : n)) });
-  const dirty = JSON.stringify(d) !== JSON.stringify(p);
+  const dirty = JSON.stringify(d) !== JSON.stringify({ ...p, schedule: humanizeSchedule(p.schedule) });
 
   const save = () => {
-    const { id, name, business, trigger, enabled, nodes, schedule, deliver } = d;
+    const { id, name, business, trigger, enabled, nodes, schedule, deliver, triggerKind, keywords, channelId } = d;
     const first = nodes[0]?.kind === "trigger" ? [{ ...nodes[0], text: trigger }, ...nodes.slice(1)] : nodes;
-    return savePlaybook({ id, name: name.trim() || p.name, business, trigger, enabled, nodes: first, schedule: schedule.trim(), deliver }, "Playbook salvo");
+    return savePlaybook({ id, name: name.trim() || p.name, business, trigger, enabled, nodes: first, schedule: triggerKind === "schedule" ? toSchedule(schedule) : "", deliver, triggerKind, keywords, channelId }, "Playbook salvo");
   };
 
   return (
@@ -48,7 +56,7 @@ export function PlaybookSettings({ p }: { p: Playbook }) {
           Configuração
         </span>
         <span style={{ marginLeft: "auto", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>
-          {p.schedule ? (p.enabled ? (p.nextRun ? `próxima ${p.nextRun}` : "agendado") : "desligado") : "só manual"} · {p.runs} execuções
+          {!p.enabled ? "desligado" : p.triggerKind === "keyword" ? "dispara por palavra-chave" : p.schedule ? (p.nextRun ? `próxima ${p.nextRun}` : "agendado") : "só manual"} · {p.runs} {p.runs === 1 ? "execução" : "execuções"}
         </span>
       </div>
       {p.lastError && (
@@ -75,20 +83,59 @@ export function PlaybookSettings({ p }: { p: Playbook }) {
         </label>
       </div>
 
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <span className="au-label">O que dispara</span>
+        <div role="radiogroup" aria-label="Tipo de gatilho" style={{ display: "flex", gap: 3, padding: 3, borderRadius: "var(--r2)", background: "var(--panel2)", alignSelf: "flex-start" }}>
+          {KINDS.map(([k, label]) => (
+            <button key={k} type="button" role="radio" aria-checked={d.triggerKind === k} className="au-seg au-seg-lg" onClick={() => set({ triggerKind: k })}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {d.triggerKind === "manual" && <p style={{ margin: 0, fontSize: 12.5, color: "var(--fg3)" }}>Roda só quando você clicar em “Executar agora”.</p>}
+
+      {d.triggerKind === "keyword" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12 }}>
+          <label className="au-field">
+            <span className="au-label">Palavras-chave</span>
+            <input value={d.keywords} onChange={(e) => set({ keywords: e.target.value })} placeholder="ex.: orçamento, cotação, preço" />
+            <span style={{ fontSize: 11.5, color: "var(--fg3)" }}>Separe por vírgula. Maiúsculas e acentos não importam.</span>
+          </label>
+          <label className="au-field">
+            <span className="au-label">De qual canal</span>
+            <select value={d.channelId} onChange={(e) => set({ channelId: e.target.value })}>
+              <option value="">Qualquer canal</option>
+              {channels.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} · {c.platform}
+                </option>
+              ))}
+            </select>
+            <span style={{ fontSize: 11.5, color: "var(--fg3)" }}>Respeita a autonomia: em Observar não dispara; em Rascunhar o resultado só fica registrado.</span>
+          </label>
+        </div>
+      )}
+
+      {d.triggerKind === "schedule" && (
+      <>
       <label className="au-field">
         <span className="au-label">Quando rodar</span>
-        <input value={d.schedule} onChange={(e) => set({ schedule: e.target.value })} placeholder="vazio = só quando você clicar em Executar agora" spellCheck={false} />
+        <input value={d.schedule} onChange={(e) => set({ schedule: e.target.value })} placeholder="ex.: dias úteis às 9h, toda sexta às 18h, a cada 2 horas" spellCheck={false} />
       </label>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: -6 }}>
-        {PRESETS.map((x) => (
+        {PRESETS.filter((x) => x.value).map((x) => (
           <button key={x.label} type="button" className="au-chip" aria-pressed={d.schedule === x.value} onClick={() => set({ schedule: x.value })} style={{ cursor: "pointer", background: d.schedule === x.value ? "var(--accSoft)" : "transparent" }}>
             {x.label}
           </button>
         ))}
       </div>
       <p style={{ margin: "-4px 0 0", fontSize: 11.5, color: "var(--fg3)", lineHeight: 1.5 }}>
-        Use os atalhos acima ou escreva no formato do agendador: <code>every weekday 9am</code> (dias úteis 9h), <code>every 2h</code> (a cada 2 horas), <code>every monday 9am</code> (segundas 9h). Quem executa é o gateway — ele precisa estar ligado.
+        Escreva como fala: “dias úteis às 9h”, “toda sexta às 18h”, “todo dia 1 às 10h”, “a cada 2 horas”. O Hermes executa no horário enquanto o gateway estiver ligado.
       </p>
+      </>
+      )}
 
       <label className="au-field">
         <span className="au-label">Enviar o resultado para</span>

@@ -47,9 +47,6 @@ export function Cron() {
                     quando <b style={{ color: "var(--fg)", fontWeight: 500 }}>{preview.human}</b>
                   </span>
                   <span>
-                    cron <b style={{ color: "var(--fg)", fontWeight: 500 }}>{preview.expr}</b>
-                  </span>
-                  <span>
                     entrega <b style={{ color: "var(--fg)", fontWeight: 500 }}>{preview.dest}</b>
                   </span>
                 </>
@@ -87,7 +84,7 @@ export function Cron() {
               <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
                 <span style={{ fontSize: 14, fontWeight: 500 }}>{c.title}</span>
                 <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)" }}>
-                  {c.human} · {c.expr}
+                  {c.human}
                 </span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>

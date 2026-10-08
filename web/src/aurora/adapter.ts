@@ -139,6 +139,12 @@ export type Playbook = {
   deliver: string;
   nextRun: string;
   lastError: string;
+  /** Manual (Executar agora), Horário (schedule) ou Palavra-chave (mensagem recebida). */
+  triggerKind: "manual" | "schedule" | "keyword";
+  /** Palavras separadas por vírgula (gatilho por palavra-chave). */
+  keywords: string;
+  /** Canal que pode disparar ("" = qualquer). */
+  channelId: string;
 };
 
 export type PlaybookDraft = Omit<Playbook, "id" | "runs" | "lastRun" | "nextRun" | "lastError"> & { id?: string };

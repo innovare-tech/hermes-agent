@@ -46,7 +46,7 @@ function NotFound() {
         <span className="au-label">404</span>
         <h1 className="au-h1">Página não encontrada</h1>
         <p style={{ margin: 0, color: "var(--fg2)", fontSize: 14.5, lineHeight: 1.55 }}>
-          Esse endereço não existe. A interface antiga continua em <a href="?ui=legacy">?ui=legacy</a>.
+          Esse endereço não existe. Use o menu ao lado para voltar.
         </p>
       </div>
     </div>

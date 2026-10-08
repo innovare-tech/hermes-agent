@@ -68,7 +68,7 @@ export function Home() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))", gap: 16 }}>
           <div className="au-card" onMouseMove={spot} style={{ padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span className="au-label">Briefing da manhã{brief[0]?.at ? ` · ${brief[0].at}` : ""}</span>
+              <span className="au-label">Resumo da manhã{brief[0]?.at ? ` · ${brief[0].at}` : ""}</span>
               {speech.can && brief.length > 0 && (
                 <button
                   onClick={speech.toggle}
@@ -171,7 +171,7 @@ export function Home() {
           </div>
 
           <div className="au-card" onMouseMove={spot} style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
-            <span className="au-label">Custos · {c.month}</span>
+            <span className="au-label">Custos · {c.month}{s.biz !== "all" ? " · todos os negócios" : ""}</span>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
               <span className="au-display" style={{ lineHeight: 1, fontSize: 36 }}>{money(c.total)}</span>
               {c.limit != null && <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)" }}>de ${c.limit} · limite mensal</span>}

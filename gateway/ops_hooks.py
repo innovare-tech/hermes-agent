@@ -45,7 +45,14 @@ def record(event: Any, source: Any) -> Optional[dict]:
             sender_name=str(getattr(source, "user_name", "") or ""),
             message_id=str(getattr(event, "message_id", "") or ""),
         )
-        return {**result, "sender": str(getattr(source, "user_name", "") or getattr(source, "chat_name", "") or "")}
+        sender = str(getattr(source, "user_name", "") or getattr(source, "chat_name", "") or "")
+        try:
+            from ops_center import playbooks
+
+            playbooks.fire_keyword(_platform_name(source), str(getattr(source, "chat_id", "") or ""), text, sender=sender, mode=result["mode"])
+        except Exception:
+            logger.debug("ops_center: falha ao disparar playbooks por palavra-chave", exc_info=True)
+        return {**result, "sender": sender}
     except Exception:
         logger.debug("ops_center: falha ao registrar mensagem recebida", exc_info=True)
         return None

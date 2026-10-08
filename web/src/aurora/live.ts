@@ -12,7 +12,7 @@ type RawChannel = { id: string; platform: string; chat_id: string; name: string;
 type RawInbox = { id: number; channel_id: string; sender_id: string | null; sender_name: string | null; text: string; received_at: number; priority: string; summary: string | null; draft: string | null; status: string; sent_at: number | null; platform: string; chat_name: string; kind: string; mode: number; business_id: string | null };
 type RawActivity = { id: number; at: number; business_id: string | null; kind: Activity["kind"]; action: string; why: string; reversible: number; undone: number };
 type RawPerson = { id: string; name: string; role: string; business_id: string | null; tone: string; channels: string; notes: string; pending: string[]; waiting_since: number | null; handles?: PersonHandles };
-type RawPlaybook = { id: string; name: string; business_id: string | null; trigger: string; nodes: Playbook["nodes"]; enabled: boolean; runs: number; last_run: number | null; schedule: string; deliver: string; next_run: number | null; last_error: string | null };
+type RawPlaybook = { id: string; name: string; business_id: string | null; trigger: string; nodes: Playbook["nodes"]; enabled: boolean; runs: number; last_run: number | null; schedule: string; deliver: string; next_run: number | null; last_error: string | null; trigger_kind?: string; keywords?: string; channel_id?: string | null };
 
 const MODES = ["Observar", "Rascunhar", "Autônomo"];
 const PLATFORM_ICON: Record<string, string> = { telegram: "send", whatsapp: "phone", discord: "message-circle", email: "mail", slack: "hash", signal: "message-square", api: "plug" };
@@ -39,7 +39,20 @@ const initials = (name: string) =>
     .map((w) => w[0]!.toUpperCase())
     .join("") || "?";
 
-export function healthFrom(st: StatusResponse, platforms: { name: string; enabled: boolean; configured: boolean; error_message?: string | null }[] = []): Health {
+/** Avisos graves da última hora no log → problemas do Painel (o resto fica só em Logs). */
+export function severeFromLogs(lines: string[], now = Date.now()): { text: string; to: string }[] {
+  const out = new Map<string, { text: string; to: string }>();
+  for (const l of lines) {
+    const ts = l.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/);
+    if (!ts || now - new Date(`${ts[1]}T${ts[2]}`).getTime() > 3600_000) continue;
+    const stall = l.match(/event loop stalled ([\d.]+)s/);
+    if (stall) out.set("stall", { text: `O painel ficou travado por ${Math.round(Number(stall[1]) / 60)} min na última hora`, to: "/logs" });
+    else if (/startup_failed|adapter .*failed|fatal/i.test(l)) out.set("adapter", { text: "Um canal falhou ao iniciar — veja os detalhes em Logs", to: "/logs" });
+  }
+  return [...out.values()];
+}
+
+export function healthFrom(st: StatusResponse, platforms: { name: string; enabled: boolean; configured: boolean; error_message?: string | null }[] = [], logs: string[] = []): Health {
   const items = Object.entries(st.gateway_platforms ?? {}).map(([name, p]) => ({
     name: name[0].toUpperCase() + name.slice(1),
     status: ["connected", "running", "ready", "ok"].includes(p.state) ? ("ok" as const) : p.error_code ? ("err" as const) : ("warn" as const),
@@ -52,6 +65,7 @@ export function healthFrom(st: StatusResponse, platforms: { name: string; enable
   const problems = [
     ...(live.length && !st.gateway_running ? [{ text: `Gateway parado com ${live.length === 1 ? "1 canal ligado" : live.length + " canais ligados"} — ninguém recebe resposta`, to: "/gateways" }] : []),
     ...live.filter((p) => p.error_message).map((p) => ({ text: `${p.name}: ${p.error_message}`, to: "/gateways" })),
+    ...severeFromLogs(logs),
   ];
   return { online: true, level: problems.length ? "warn" : "ok", problems, uptime: version, items: [gateway, ...items], responseTime: "—" };
 }
@@ -138,6 +152,9 @@ const playbookFrom = (p: RawPlaybook): Playbook => ({
   deliver: p.deliver || "local",
   nextRun: p.next_run ? whenLabel(p.next_run) : "",
   lastError: p.last_error ?? "",
+  triggerKind: (p.trigger_kind as Playbook["triggerKind"]) || (p.schedule ? "schedule" : "manual"),
+  keywords: p.keywords ?? "",
+  channelId: p.channel_id ?? "",
 });
 
 /** Grupos para o Radar: canais de grupo + volume de hoje vindo da caixa de entrada. */
@@ -166,7 +183,7 @@ function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
 
 export const liveAdapter: OpsAdapter = {
   async load() {
-    const [estop, status, costs, businesses, channels, inboxRaw, activity, watches, people, playbooks, settings, messaging] = await Promise.all([
+    const [estop, status, costs, businesses, channels, inboxRaw, activity, watches, people, playbooks, settings, messaging, warnLogs] = await Promise.all([
       fetchJSON<Estop>("/api/estop"),
       api.getStatus(),
       costsThisMonth(),
@@ -179,6 +196,7 @@ export const liveAdapter: OpsAdapter = {
       ops<RawPlaybook[]>("/playbooks"),
       ops<{ default_mode: AutonomyMode }>("/settings"),
       api.getMessagingPlatforms().then((r) => r.platforms, () => []),
+      api.getLogs({ lines: 300, level: "WARNING" }).then((r) => r.lines, () => [] as string[]),
     ]);
     const inbox = inboxRaw.map(inboxFrom);
     const autonomy = channels.map(channelFrom);
@@ -195,7 +213,7 @@ export const liveAdapter: OpsAdapter = {
       autonomy,
       briefing: [],
       last24h: { saved: "", autoReplies: inboxRaw.filter((i) => (i.status === "auto" || i.status === "sent") && i.received_at >= today).length },
-      health: healthFrom(status, messaging),
+      health: healthFrom(status, messaging, warnLogs),
       costs,
       watches,
       support: { firstResponse: "", resolvedByHermes: "", csat: "", kbUsage: "" },
@@ -260,7 +278,7 @@ export const liveAdapter: OpsAdapter = {
     await ops(`/people/${id}`, json("DELETE"));
   },
   async savePlaybook(p) {
-    const raw = await ops<RawPlaybook>("/playbooks", json("PUT", { id: p.id, name: p.name, business_id: p.business || null, trigger: p.trigger, nodes: p.nodes, enabled: p.enabled, schedule: p.schedule, deliver: p.deliver }));
+    const raw = await ops<RawPlaybook>("/playbooks", json("PUT", { id: p.id, name: p.name, business_id: p.business || null, trigger: p.trigger, nodes: p.nodes, enabled: p.enabled, schedule: p.triggerKind === "schedule" ? p.schedule : "", deliver: p.deliver, trigger_kind: p.triggerKind, keywords: p.keywords, channel_id: p.channelId || null }));
     return playbookFrom(raw);
   },
   async deletePlaybook(id) {

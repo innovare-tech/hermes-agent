@@ -50,7 +50,7 @@ export function Settings() {
         <AgentHeader title="Configurações" sub="Modelo, chaves, ambiente e aparência do Hermes.">
           <button className="au-outline" onClick={() => setState({ onboarding: 0 })} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, background: "var(--panel)" }}>
             <Icon name="rocket" size={14} color="var(--acc)" />
-            Assistente de setup
+            Assistente de configuração
           </button>
         </AgentHeader>
 

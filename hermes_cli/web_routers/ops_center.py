@@ -284,6 +284,9 @@ class PlaybookBody(BaseModel):
     enabled: bool = True
     schedule: str = ""  # vazio = só manual; senão sintaxe do cron ("every day 9am", "0 9 * * *", "2h")
     deliver: str = "local"  # "local" = só registra; ou "plataforma:chat_id"
+    trigger_kind: str = "manual"  # manual | schedule | keyword
+    keywords: str = ""  # separadas por vírgula (gatilho keyword)
+    channel_id: Optional[str] = None  # restringe o gatilho keyword a um canal
 
 
 def _playbooks():

@@ -10,7 +10,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 |---|---|---|---|
 | 01 Conversa e Sessões | 👀 | — | R2 07/10: 15/15 ✅ (+C1.17 novo) |
 | 02 Primeiro uso | 🧪 | — | R3 07/10: 9✅ (P2.10 parcial) |
-| 03 Português e clareza | 🧪 | — | R4 07/10: 16✅ 4❌ → corrigidos |
+| 03 Português e clareza | ✅ | — | R5 07/10: 21/21 ✅ |
 | 04 Verdade | 🧪 | — | R4: V4.1/V4.2 ❌ → corrigidos |
 | 05 Promessas | 🧪 | — | — |
 | 06 Acabamento | 🔧 | — | — |
@@ -38,7 +38,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | C1.13 Botões da resposta em PT | ✅ | R2 07/10 |
 | C1.14 Saída real do passo | ✅ | R2 07/10 |
 | C1.15 Passo em PT | ✅ | R1 07/10 |
-| C1.17 Contagem sem mensagens internas de ferramenta | ⬜ | R2: 1 pergunta = "4 mensagens"; backend só guarda o total → precisa de contagem por papel no session.list |
+| C1.17 Contagem sem mensagens internas de ferramenta | ⬜ | backend: message_count inclui ferramentas; tool_call_count não dá conta exata (várias chamadas por resposta) e session.list não tem. Precisa de contagem por papel no backend — baixa prioridade |
 | C1.16 Markdown | ✅ | validado 07/10 (sessão "Exemplo com formatações diversas") |
 
 ## 02 · Primeiro uso
@@ -58,11 +58,11 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 ## 03 · Português e clareza
 | Critério | Estado | Nota |
 |---|---|---|
-| T3.1 Canais principais em PT | 🧪 | R4 ❌ WhatsApp Business sem campos, Teams/Telegram com jargão → corrigidos |
+| T3.1 Canais principais em PT | ✅ | R5 07/10 |
 | T3.2 Campo de lista coerente | ✅ | R4 07/10 |
 | T3.3 Dependentes em avançado | ✅ | R4 07/10 |
 | T3.4 Ordem por relevância + "Outros" | ✅ | R4 07/10 |
-| T3.5 Cartão clicável; busca vazia | 🧪 | R4 ❌ só o título abria → cartão inteiro |
+| T3.5 Cartão clicável; busca vazia | ✅ | R5 07/10 |
 | T3.6 Motivo do "Testar" desabilitado | ✅ | R4 07/10 |
 | T3.7 Chaves: só relevantes por padrão | ✅ | R4 07/10 |
 | T3.8 Nome amigável da chave | ✅ | R4 07/10 |
@@ -77,47 +77,48 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | T3.17 Skills: descrições não-PT | ✅ | R4 07/10 |
 | T3.18 lang pt-BR e título da aba | ✅ | R3 07/10 |
 | T3.19 Ctrl K / ⌘K | ✅ | R3 07/10 |
-| T3.20 Sem jargão visível | 🧪 | R4 ❌ YAML, lock-in, /personality, .env, CONTEXTO, descrições de chaves → corrigidos |
+| T3.20 Sem jargão visível | ✅ | R5 07/10 |
 | T3.21 Contadores com unidade | ✅ | R3 07/10 |
 
 ## 04 · Verdade
 | Critério | Estado | Nota |
 |---|---|---|
-| V4.1 Atividade automática no backend | 🧪 | R4 ❌ skill não registrava (PUT, não POST) → corrigido; ferramentas com nome em PT |
-| V4.2 O quê/quando/por quê/desfazer | 🧪 | R4 ❌ subtítulo prometia Desfazer → texto honesto; Desfazer só onde reversível |
+| V4.1 Atividade automática no backend | ✅ | R5 07/10 |
+| V4.2 O quê/quando/por quê/desfazer | ✅ | R5 07/10 |
 | V4.3 Filtros só do que existe | ✅ | R3 07/10 |
 | V4.4 Saúde real | ✅ | R4 07/10 |
-| V4.5 Avisos graves no Painel | ⬜ | |
-| V4.6 Períodos corretos | 🧪 | "Hoje" com rótulos coerentes |
+| V4.5 Avisos graves no Painel | 🧪 | "travado por N min" e falha de canal na última hora → Painel |
+| V4.6 Períodos corretos | ✅ | R5 07/10 |
 | V4.7 "US$ 0,16" | ✅ | R3 07/10 |
-| V4.8 Filtro por negócio | ⬜ | |
+| V4.8 Filtro por negócio | 🧪 | custo sem recorte por negócio → "todos os negócios" |
 | V4.9 Zero neutro, sem traço solto | ✅ | R3 07/10 |
-| V4.10 Briefing cria agendamento | 🧪 | botão "Criar agendamento" |
-| V4.11 Logs: busca e download | 🧪 | busca + "Baixar o que está na tela" |
-| V4.12 Logs: sem duplicação; vazio | 🧪 | regex com [sessão]; "Nenhuma linha" |
-| V4.13 Logs: ruído agrupado | 🧪 | conexões ocultas por padrão |
+| V4.10 Briefing cria agendamento | ✅ | R5 07/10 |
+| V4.11 Logs: busca e download | ✅ | R5 07/10 |
+| V4.12 Logs: sem duplicação; vazio | 🧪 | R5 ❌ linhas com "
+" no fim não casavam → trimEnd + teste |
+| V4.13 Logs: ruído agrupado | ✅ | R5 07/10 |
 
 ## 05 · Promessas
 | Critério | Estado | Nota |
 |---|---|---|
 | E5.1 Suporte fora do menu | ✅ | R4 07/10 |
-| E5.2 Pendências reais | 🧪 | checkbox conclui e salva |
-| E5.3 Identificadores do contato | 🧪 | telefone/Telegram/e-mail (coluna handles + migração) |
-| E5.4 Histórico do contato | 🧪 | mensagens do contato pelos identificadores |
-| E5.5 Validação e campos vazios | 🧪 | erro no nome; sem campos vazios |
-| E5.6 Vazio com filtro | 🧪 | já existia |
-| E5.7 Tipo de gatilho explícito | ⬜ | |
-| E5.8 Gatilho por palavra-chave funciona | ⬜ | |
+| E5.2 Pendências reais | ✅ | R5 07/10 |
+| E5.3 Identificadores do contato | ✅ | R5 07/10 |
+| E5.4 Histórico do contato | ✅ | R5 07/10 |
+| E5.5 Validação e campos vazios | ✅ | R5 07/10 |
+| E5.6 Vazio com filtro | ✅ | R5 07/10 |
+| E5.7 Tipo de gatilho explícito | 🧪 | Manual / Horário / Palavra-chave (+ canal) |
+| E5.8 Gatilho por palavra-chave funciona | 🧪 | gateway dispara job único com a mensagem; kill switch; Observar não dispara; Rascunhar só registra; Atividade |
 | E5.9 Playbook nasce desligado | ✅ | R4 07/10 |
 | E5.10 Nome separado do gatilho | ✅ | R4 07/10 |
-| E5.11 Condição/placeholder/feedback | 🧪 | condição antes do fim; placeholders; feedback |
-| E5.12 Ajuda de horário em PT | 🧪 | ajuda em PT |
-| E5.13 Agendamentos: vazio + aviso | 🧪 | exemplos + aviso de gateway parado |
-| E5.14 "Agendar" vazio | 🧪 | feedback |
-| E5.15 Subagentes: vazio útil | 🧪 | vazio útil + botão |
-| E5.16 Sessões: renomear/apagar | 🧪 | renomear/apagar |
+| E5.11 Condição/placeholder/feedback | ✅ | R5 07/10 |
+| E5.12 Ajuda de horário em PT | 🧪 | R5 ❌ atalhos/ajuda em inglês → frases em PT convertidas ao salvar; exibição em PT |
+| E5.13 Agendamentos: vazio + aviso | ✅ | R5 07/10 |
+| E5.14 "Agendar" vazio | ✅ | R5 07/10 |
+| E5.15 Subagentes: vazio útil | ✅ | R5 07/10 |
+| E5.16 Sessões: renomear/apagar | ✅ | R5 07/10 |
 | E5.17 Memória: filtro vazio | ✅ | R3 07/10 |
-| E5.18 Anexar/Voz funcionam ou somem | 🧪 | botões removidos |
+| E5.18 Anexar/Voz funcionam ou somem | ✅ | R5 07/10 |
 
 ## 06 · Acabamento
 | Critério | Estado | Nota |
@@ -125,7 +126,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | A6.1 Toasts no canto | ✅ | R3 07/10 — canto inferior direito, empilham, somem; podem passar sobre um valor de cartão (não títulos/faixas) |
 | A6.2 Diálogo de confirmação próprio | ✅ | R3 07/10 |
 | A6.3 Chips estáveis | ✅ | R3 07/10 |
-| A6.4 Barra lateral: só a lista rola | 🧪 | R4 ✅ com ressalva (900px deixava 110px de conversas) → limite subiu para 1000px |
+| A6.4 Barra lateral: só a lista rola | ✅ | R5 07/10 |
 | A6.5 Pausa: um "Retomar"; confirmação | ✅ | R3 07/10 |
 | A6.6 Configurações alinhada | ✅ | R3 07/10 |
 | A6.7 Datas em uma linha | ✅ | R3 07/10 |
@@ -134,6 +135,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | A6.10 Cabeçalho da barra lateral | ✅ | R3 07/10 |
 
 ## Diário
+- **07/10/2026** — R5: 21✅ 2❌ (V4.12, E5.12) → corrigidos. Gatilho por palavra-chave (E5.7/E5.8), avisos graves no Painel (V4.5) e escopo de custo (V4.8) implementados.
 - **07/10/2026** — R4: 13✅ 5❌ (skill na Atividade, Desfazer, textos de canais, clique no cartão, jargão) → corrigidos. Logs, Pessoas, Sessões, Agendamentos, Subagentes implementados.
 - **07/10/2026** — R3: 18✅ 3❌ (A6.4, V4.4, P2.10 parcial) → corrigidos. Spec 03 implementado; V4.1 (Atividade automática) no backend.
 - **07/10/2026** — Spec 01 R2: 15/15 ✅. Spec 02 R1: 8✅ 1❌ (P2.2) → corrigido. Adiantados itens de 03/04/05/06.

@@ -24,6 +24,13 @@ describe("healthFrom", () => {
     expect(healthFrom({ gateway_running: false, gateway_platforms: {} } as unknown as StatusResponse).items).toEqual([{ name: "Gateway de mensagens", status: "warn", value: "parado" }]);
   });
 
+  it("avisos graves da última hora viram problema; antigos não", async () => {
+    const { severeFromLogs } = await import("./live");
+    const now = new Date("2026-10-07T21:00:00").getTime();
+    const lines = ["2026-10-07 20:30:00,1 WARNING web_server: event loop stalled 4051.7s (GIL pressure suspected)", "2026-10-07 18:00:00,1 ERROR gateway: telegram startup_failed"];
+    expect(severeFromLogs(lines, now)).toEqual([{ text: "O painel ficou travado por 68 min na última hora", to: "/logs" }]);
+  });
+
   it("atenção: gateway parado com canal ligado; ok sem canais", () => {
     const stopped = { gateway_running: false, gateway_platforms: {} } as unknown as StatusResponse;
     expect(healthFrom(stopped).level).toBe("ok");

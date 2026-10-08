@@ -24,6 +24,9 @@ export function parsePlaybook(text: string, business: BizId, id = "b" + Date.now
     deliver: "local",
     nextRun: "",
     lastError: "",
+    triggerKind: "manual",
+    keywords: "",
+    channelId: "",
     nodes: [
       { kind: "trigger", text: trigger },
       { kind: "action", text: "Entender o contexto (memória, histórico e pessoa)" },

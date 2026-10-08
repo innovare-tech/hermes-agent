@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { BizTag, PageHeader, spot } from "../Chrome";
+import { humanizeSchedule } from "../agent/cron";
 import { Icon } from "../Icon";
 import { parsePlaybook } from "../ops/playbook";
 import { PlaybookFlow } from "../ops/PlaybookFlow";
@@ -77,8 +78,14 @@ export function Playbooks() {
                   {p.schedule && (
                     <span style={{ display: "flex", gap: 6, alignItems: "center", fontFamily: "var(--fm)", fontSize: 10.5, color: p.lastError ? "var(--err)" : "var(--acc)" }}>
                       <Icon name="calendar-clock" size={11} />
-                      {p.schedule}
+                      {humanizeSchedule(p.schedule)}
                       {p.enabled && p.nextRun ? ` · próxima ${p.nextRun}` : ""}
+                    </span>
+                  )}
+                  {p.triggerKind === "keyword" && p.keywords && (
+                    <span style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11.5, color: "var(--acc)" }}>
+                      <Icon name="zap" size={11} />
+                      quando aparecer: {p.keywords}
                     </span>
                   )}
                   <span style={{ display: "flex", gap: 10, alignItems: "center", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>

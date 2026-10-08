@@ -64,7 +64,8 @@ function cronFrom(j: ApiCron): CronJob {
 }
 
 /** "2026-10-07 14:03:11,512 INFO gateway.run: texto" → LogLine (formatos desconhecidos viram só a mensagem). */
-export function logFrom(raw: string, i: number): LogLine {
+export function logFrom(line: string, i: number): LogLine {
+  const raw = line.trimEnd(); // a API manda as linhas com "\n" no fim, e o "$" da regex não casa antes dele
   // "hh:mm:ss,ms NÍVEL [sessão] origem: mensagem" — o "[sessão]" é opcional.
   const m = raw.match(/(\d{2}:\d{2}:\d{2})[,.\d]*\s+(?:-\s+)?([A-Z]+)\s+(?:-\s+)?(?:\[[^\]]*\]\s+)?([\w.\-]+?):?\s+(?:-\s+)?(.*)$/);
   const cls = classifyLine(raw);

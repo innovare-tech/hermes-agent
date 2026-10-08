@@ -208,7 +208,7 @@ export function Onboarding() {
   const backendName = s?.backends.find((b) => b.id === backend)?.name ?? backend;
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Assistente de setup" style={{ position: "absolute", inset: 0, zIndex: 40, background: "var(--bg)", display: "flex", flexDirection: "column", animation: "hin .35s ease both" }}>
+    <div role="dialog" aria-modal="true" aria-label="Assistente de configuração" style={{ position: "absolute", inset: 0, zIndex: 40, background: "var(--bg)", display: "flex", flexDirection: "column", animation: "hin .35s ease both" }}>
       <div className="au-abs" style={{ background: "var(--atmo)" }} />
       <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, padding: "22px 28px" }}>
         <div className="au-logo" style={{ animation: "none", boxShadow: "none" }} aria-hidden="true">☤</div>

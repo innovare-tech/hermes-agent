@@ -53,7 +53,9 @@ CREATE TABLE IF NOT EXISTS people (
 CREATE TABLE IF NOT EXISTS playbooks (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, business_id TEXT, trigger TEXT NOT NULL,
   nodes TEXT NOT NULL DEFAULT '[]', enabled INTEGER NOT NULL DEFAULT 1, runs INTEGER NOT NULL DEFAULT 0,
-  last_run REAL, cron_job_id TEXT
+  last_run REAL, cron_job_id TEXT,
+  trigger_kind TEXT NOT NULL DEFAULT 'manual', keywords TEXT NOT NULL DEFAULT '', channel_id TEXT,
+  deliver TEXT NOT NULL DEFAULT 'local'
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
@@ -87,6 +89,11 @@ def _migrate(con: sqlite3.Connection) -> None:
     cols = {r[1] for r in con.execute("PRAGMA table_info(people)")}
     if "handles" not in cols:
         con.execute("ALTER TABLE people ADD COLUMN handles TEXT NOT NULL DEFAULT '{}'")
+    cols = {r[1] for r in con.execute("PRAGMA table_info(playbooks)")}
+    for name, ddl in (("trigger_kind", "TEXT NOT NULL DEFAULT 'manual'"), ("keywords", "TEXT NOT NULL DEFAULT ''"),
+                      ("channel_id", "TEXT"), ("deliver", "TEXT NOT NULL DEFAULT 'local'")):
+        if name not in cols:
+            con.execute(f"ALTER TABLE playbooks ADD COLUMN {name} {ddl}")
 
 
 def _rows(cur: sqlite3.Cursor) -> list[dict[str, Any]]:
@@ -335,11 +342,15 @@ def save_playbook(data: dict) -> dict:
     pid = data.get("id") or _new_id()
     with connect() as c:
         c.execute(
-            "INSERT INTO playbooks(id, name, business_id, trigger, nodes, enabled, runs, last_run, cron_job_id) "
-            "VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, business_id=excluded.business_id, "
-            "trigger=excluded.trigger, nodes=excluded.nodes, enabled=excluded.enabled, cron_job_id=excluded.cron_job_id",
+            "INSERT INTO playbooks(id, name, business_id, trigger, nodes, enabled, runs, last_run, cron_job_id, "
+            "trigger_kind, keywords, channel_id, deliver) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+            "name=excluded.name, business_id=excluded.business_id, trigger=excluded.trigger, nodes=excluded.nodes, "
+            "enabled=excluded.enabled, cron_job_id=excluded.cron_job_id, trigger_kind=excluded.trigger_kind, "
+            "keywords=excluded.keywords, channel_id=excluded.channel_id, deliver=excluded.deliver",
             (pid, data["name"], data.get("business_id"), data["trigger"], json.dumps(data.get("nodes") or []),
-             int(bool(data.get("enabled", True))), int(data.get("runs") or 0), data.get("last_run"), data.get("cron_job_id")),
+             int(bool(data.get("enabled", True))), int(data.get("runs") or 0), data.get("last_run"), data.get("cron_job_id"),
+             data.get("trigger_kind") or "manual", data.get("keywords") or "", data.get("channel_id") or None,
+             data.get("deliver") or "local"),
         )
     return next(p for p in list_playbooks() if p["id"] == pid)
 
