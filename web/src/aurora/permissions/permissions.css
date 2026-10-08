@@ -1,0 +1,52 @@
+/* Permissões (A6). Só tokens do Aurora; o acento (--acc) segue a cor do perfil. Telegram tem a paleta própria do app. */
+[data-ht="dark"] .pm-root{--tgBg:#0e1621;--tgBub:#182533;--tgBtn:#22303f;--tgFg:#f5f5f5;--tgFg2:#7f91a4}
+[data-ht="light"] .pm-root{--tgBg:#dfe7ee;--tgBub:#ffffff;--tgBtn:#c9d6e2;--tgFg:#000000;--tgFg2:#6d7f8f}
+
+.pm-grid{display:grid;grid-template-columns:minmax(0,1fr) repeat(var(--pm-n,4),152px);gap:8px;align-items:center}
+.pm-head{position:sticky;top:0;z-index:4;align-items:stretch;padding:14px 16px 12px;border-bottom:1px solid var(--line);border-radius:var(--r) var(--r) 0 0;background:linear-gradient(var(--panel),var(--panel)),var(--bg)}
+.pm-col{position:relative;display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:12px;background:var(--panel2)}
+.pm-colbtn{margin-left:auto;width:22px;height:22px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--fg3);cursor:pointer}
+.pm-colbtn:hover,.pm-colbtn[aria-expanded="true"]{background:var(--line);color:var(--fg)}
+.pm-bar{display:flex;gap:3px;height:4px;border-radius:4px;overflow:hidden}
+.pm-menu{position:absolute;right:0;top:40px;z-index:6;width:236px;padding:6px;border:1px solid var(--line2);border-radius:var(--r2);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:1px;animation:hin .15s both}
+.pm-mitem{display:flex;align-items:center;gap:9px;padding:8px 10px;border:0;border-radius:8px;background:transparent;color:var(--fg);font-size:12.5px;cursor:pointer;text-align:left}
+.pm-mitem:hover,.pm-mitem:focus-visible{background:var(--panel2)}
+.pm-group{width:100%;display:flex;align-items:center;gap:9px;padding:12px 16px 8px;border:0;background:transparent;color:var(--fg);text-align:left}
+button.pm-group{cursor:pointer}
+button.pm-group:hover .pm-grouplabel{color:var(--fg)}
+.pm-grouplabel{font-family:var(--fm);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg2)}
+.pm-row{position:relative;padding:7px 16px;border-top:1px solid var(--line)}
+.pm-cell{width:100%;display:flex;align-items:center;gap:7px;height:36px;padding:0 10px;border-radius:10px;border:1px solid color-mix(in oklab,var(--lv) 30%,transparent);background:color-mix(in oklab,var(--lv) 12%,transparent);color:var(--lv);font-size:12.5px;font-weight:600;cursor:pointer;transition:background .2s,border-color .2s}
+.pm-cell[data-lv="deny"]{background:transparent;border-color:var(--line2)}
+.pm-cell:hover{border-color:var(--fg3)}
+.pm-cell[aria-expanded="true"]{border-color:var(--acc)}
+.pm-pop{position:absolute;right:0;top:42px;z-index:6;width:270px;padding:6px;border:1px solid var(--line2);border-radius:var(--r2);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:1px;animation:hin .15s both}
+.pm-opt{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border:0;border-radius:9px;background:transparent;color:var(--fg);cursor:pointer;text-align:left}
+.pm-opt:hover:not([aria-disabled="true"]),.pm-opt:focus-visible{background:var(--panel2)}
+.pm-opt[aria-selected="true"]{background:var(--accSoft)}
+.pm-opt[aria-disabled="true"]{opacity:.55;cursor:not-allowed}
+.pm-badge{padding:0 6px;border-radius:999px;border:1px solid var(--line2);font-size:10px;color:var(--fg2)}
+.pm-dot{width:6px;height:6px;border-radius:50%;background:var(--acc);flex:none}
+.pm-hist{display:grid;grid-template-columns:62px minmax(0,1fr) 168px;gap:12px;align-items:start;width:100%;padding:12px 16px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--fg);text-align:left;cursor:pointer}
+.pm-hist:hover{background:var(--panel2)}
+.pm-hist.fresh{animation:pmrow 2s ease-out both}
+@keyframes pmrow{from{background:var(--accSoft)}to{background:transparent}}
+.pm-chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:600}
+.pm-clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pm-bar2{position:sticky;bottom:22px;z-index:40;align-self:center;display:flex;align-items:center;gap:12px;padding:9px 10px 9px 16px;border-radius:999px;border:1px solid var(--line2);box-shadow:var(--shadow);white-space:nowrap;animation:htoast .3s both}
+.pm-tg{border-radius:var(--r);overflow:hidden;border:1px solid var(--line2);box-shadow:var(--shadow);background:var(--tgBg)}
+.pm-tgbtn{padding:9px;border:0;border-radius:9px;background:var(--tgBtn);color:var(--tgFg);font-size:13px;cursor:pointer}
+.pm-tgbtn:hover{filter:brightness(1.15)}
+.pm-input{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:var(--r2);border:1px solid var(--line2);background:var(--panel)}
+.pm-input:focus-within{border-color:var(--acc)}
+.pm-input[data-invalid="true"]{border-color:var(--err)}
+.pm-input input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);font:inherit;font-family:var(--fm);font-size:13px}
+.pm-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pm-id{display:inline-flex;align-items:center;gap:4px;padding:3px 4px 3px 10px;border-radius:999px;border:1px solid var(--line2);background:var(--panel2);font-family:var(--fm);font-size:11.5px}
+.pm-id button{width:20px;height:20px;display:grid;place-items:center;border:0;border-radius:50%;background:transparent;color:var(--fg3);cursor:pointer}
+.pm-id button:hover{color:var(--err)}
+.pm-cell:focus-visible,.pm-colbtn:focus-visible,.pm-hist:focus-visible,button.pm-group:focus-visible,.pm-tgbtn:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.pm-skel{height:14px;border-radius:6px;background:linear-gradient(90deg,var(--panel2) 30%,var(--line2) 50%,var(--panel2) 70%);background-size:200% 100%;animation:hshim 1.6s linear infinite}
+.pm-split{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1000px){.pm-split{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion:reduce){.pm-menu,.pm-pop,.pm-bar2,.pm-hist.fresh,.pm-skel{animation:none}}

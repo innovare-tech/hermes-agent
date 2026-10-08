@@ -67,4 +67,5 @@ POST /api/ops/approvals/{id}/decide {approve, note?}   (409 se já decidido/expi
 - "Mais de 500 linhas" não é checável sem rodar a consulta. Só os padrões sem `WHERE`/filtro vazio são bloqueados.
 - A classificação de terminal é heurística (lista de comandos de leitura). Na dúvida, conta como escrita.
 - A aprovação pelo **painel** executa no processo do painel. Ferramentas MCP que só existem no gateway devem ser aprovadas pelo Telegram.
-- **Tela A6:** falta implementar. Matriz com conectores MCP descobertos, histórico e o diálogo "Liberar sem aprovação?".
+- **Tela A6** (Configurações › Permissões, `web/src/aurora/permissions/`): matriz, "Sempre bloqueado", destino e aprovadores, histórico com pendentes e o diálogo "Liberar sem aprovação?". Conectores MCP: `GET /api/ops/permissions` lista os servidores do `mcp_servers` do perfil (`mcpServers`) e as ferramentas do cache de esquema (`cache/mcp_schema_cache.json`, gravado a cada conexão, com `readOnlyHint`). Servidor que nunca conectou aparece sem ferramentas até a primeira conexão.
+- **Aprovar pelo painel:** a rota `/decide` decide como `dashboard`. Com lista de `approvers` definida, só decide se `dashboard` estiver nela (a tela tem a chave "Este painel também pode aprovar").
