@@ -3,19 +3,21 @@ import { Icon } from "../Icon";
 import { agent } from "../agent";
 import type { Provider } from "../agent/types";
 
-type Props = { current: string; onPick: (provider: string, model: string) => void; onClose: () => void };
+type Props = { current: string; currentProvider?: string; onPick: (provider: string, model: string) => void; onClose: () => void };
 
 /** Seletor de modelo ancorado no chip do Composer: provedores conectados → modelos, com busca. */
-export function ModelPicker({ current, onPick, onClose }: Props) {
+export function ModelPicker({ current, currentProvider, onPick, onClose }: Props) {
   const [providers, setProviders] = useState<Provider[] | null>(null);
   const [q, setQ] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [defaultProvider, setDefaultProvider] = useState("");
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     agent.settings().then(
       (s) => {
         setProviders(s.providers);
+        setDefaultProvider(s.provider);
         if (s.modelError) setError(s.modelError);
       },
       (e: unknown) => {
@@ -33,6 +35,9 @@ export function ModelPicker({ current, onPick, onClose }: Props) {
     };
   }, [onClose]);
 
+  // Um item ativo só: o mesmo modelo pode existir em vários provedores (ex.: via Copilot e direto).
+  const offering = (id?: string) => (providers ?? []).find((p) => p.id === id && p.models.includes(current))?.id;
+  const active = offering(currentProvider) ?? offering(defaultProvider) ?? (providers ?? []).find((p) => p.models.includes(current))?.id;
   const needle = q.trim().toLowerCase();
   const groups = (providers ?? [])
     .map((p) => ({ ...p, models: p.models.filter((m) => !needle || m.toLowerCase().includes(needle) || p.name.toLowerCase().includes(needle)) }))
@@ -56,9 +61,9 @@ export function ModelPicker({ current, onPick, onClose }: Props) {
           <div key={p.id} role="group" aria-label={p.name}>
             <div className="au-label" style={{ padding: "10px 10px 4px" }}>{p.name}</div>
             {p.models.map((m) => (
-              <button key={p.id + m} role="option" aria-selected={m === current} className="au-slash" style={{ gridTemplateColumns: "minmax(0,1fr) 16px", fontFamily: "var(--fm)", fontSize: 12.5 }} onClick={() => onPick(p.id, m)}>
+              <button key={p.id + m} role="option" aria-selected={m === current && p.id === active} className="au-slash" style={{ gridTemplateColumns: "minmax(0,1fr) 16px", fontFamily: "var(--fm)", fontSize: 12.5 }} onClick={() => onPick(p.id, m)}>
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m}</span>
-                {m === current && <Icon name="check" size={13} color="var(--acc)" />}
+                {m === current && p.id === active && <Icon name="check" size={13} color="var(--acc)" />}
               </button>
             ))}
           </div>

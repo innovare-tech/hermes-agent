@@ -20,7 +20,8 @@ from pathlib import Path
 from typing import Any, Iterator, Optional
 
 OBSERVE, DRAFT, AUTONOMOUS = 0, 1, 2
-DEFAULT_MODE = AUTONOMOUS
+# Padrão de fábrica para canais nunca vistos: Rascunhar (nada sai sem você aprovar). Configurável.
+FACTORY_DEFAULT_MODE = DRAFT
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS businesses (
@@ -46,12 +47,15 @@ CREATE TABLE IF NOT EXISTS watches (word TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS people (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT '', business_id TEXT,
   tone TEXT NOT NULL DEFAULT '', channels TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
-  pending TEXT NOT NULL DEFAULT '[]', waiting_since REAL, updated_at REAL NOT NULL
+  pending TEXT NOT NULL DEFAULT '[]', waiting_since REAL, updated_at REAL NOT NULL,
+  handles TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS playbooks (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, business_id TEXT, trigger TEXT NOT NULL,
   nodes TEXT NOT NULL DEFAULT '[]', enabled INTEGER NOT NULL DEFAULT 1, runs INTEGER NOT NULL DEFAULT 0,
-  last_run REAL, cron_job_id TEXT
+  last_run REAL, cron_job_id TEXT,
+  trigger_kind TEXT NOT NULL DEFAULT 'manual', keywords TEXT NOT NULL DEFAULT '', channel_id TEXT,
+  deliver TEXT NOT NULL DEFAULT 'local'
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
@@ -73,10 +77,23 @@ def connect(path: Optional[Path] = None) -> Iterator[sqlite3.Connection]:
         con.execute("PRAGMA journal_mode=WAL")
         con.execute("PRAGMA busy_timeout=10000")
         con.executescript(SCHEMA)
+        _migrate(con)
         yield con
         con.commit()
     finally:
         con.close()
+
+
+def _migrate(con: sqlite3.Connection) -> None:
+    """Colunas novas em bancos criados antes delas (idempotente)."""
+    cols = {r[1] for r in con.execute("PRAGMA table_info(people)")}
+    if "handles" not in cols:
+        con.execute("ALTER TABLE people ADD COLUMN handles TEXT NOT NULL DEFAULT '{}'")
+    cols = {r[1] for r in con.execute("PRAGMA table_info(playbooks)")}
+    for name, ddl in (("trigger_kind", "TEXT NOT NULL DEFAULT 'manual'"), ("keywords", "TEXT NOT NULL DEFAULT ''"),
+                      ("channel_id", "TEXT"), ("deliver", "TEXT NOT NULL DEFAULT 'local'")):
+        if name not in cols:
+            con.execute(f"ALTER TABLE playbooks ADD COLUMN {name} {ddl}")
 
 
 def _rows(cur: sqlite3.Cursor) -> list[dict[str, Any]]:
@@ -121,15 +138,29 @@ def channel_id(platform: str, chat_id: str) -> str:
     return f"{platform}:{chat_id}"
 
 
+def default_mode() -> int:
+    """Modo aplicado a canais novos (Aprovações → Autonomia). Canais já registrados não mudam."""
+    mode = get_meta("default_mode", FACTORY_DEFAULT_MODE)
+    return mode if mode in (OBSERVE, DRAFT, AUTONOMOUS) else FACTORY_DEFAULT_MODE
+
+
+def set_default_mode(mode: int) -> int:
+    if mode not in (OBSERVE, DRAFT, AUTONOMOUS):
+        raise ValueError("modo inválido")
+    set_meta("default_mode", mode)
+    return mode
+
+
 def touch_channel(platform: str, chat_id: str, name: str = "", kind: str = "dm") -> dict:
     """Registra/atualiza um canal visto pelo gateway e devolve sua política atual."""
     cid = channel_id(platform, chat_id)
+    mode = default_mode()
     with connect() as c:
         c.execute(
             "INSERT INTO channels(id, platform, chat_id, name, kind, mode, last_seen) VALUES(?,?,?,?,?,?,?) "
             "ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen, "
             "name=CASE WHEN excluded.name<>'' THEN excluded.name ELSE channels.name END, kind=excluded.kind",
-            (cid, platform, str(chat_id), name or "", kind, DEFAULT_MODE, time.time()),
+            (cid, platform, str(chat_id), name or "", kind, mode, time.time()),
         )
         return dict(c.execute("SELECT * FROM channels WHERE id=?", (cid,)).fetchone())
 
@@ -137,7 +168,7 @@ def touch_channel(platform: str, chat_id: str, name: str = "", kind: str = "dm")
 def channel_mode(platform: str, chat_id: str) -> int:
     with connect() as c:
         row = c.execute("SELECT mode FROM channels WHERE id=?", (channel_id(platform, chat_id),)).fetchone()
-    return int(row["mode"]) if row else DEFAULT_MODE
+    return int(row["mode"]) if row else default_mode()
 
 
 def list_channels() -> list[dict]:
@@ -269,6 +300,7 @@ def list_people() -> list[dict]:
         rows = _rows(c.execute("SELECT * FROM people ORDER BY name"))
     for r in rows:
         r["pending"] = json.loads(r["pending"] or "[]")
+        r["handles"] = json.loads(r.get("handles") or "{}")
     return rows
 
 
@@ -279,12 +311,13 @@ def save_person(data: dict) -> dict:
         raise ValueError("nome é obrigatório")
     with connect() as c:
         c.execute(
-            "INSERT INTO people(id, name, role, business_id, tone, channels, notes, pending, waiting_since, updated_at) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, role=excluded.role, "
+            "INSERT INTO people(id, name, role, business_id, tone, channels, notes, pending, waiting_since, updated_at, handles) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, role=excluded.role, "
             "business_id=excluded.business_id, tone=excluded.tone, channels=excluded.channels, notes=excluded.notes, "
-            "pending=excluded.pending, waiting_since=excluded.waiting_since, updated_at=excluded.updated_at",
+            "pending=excluded.pending, waiting_since=excluded.waiting_since, updated_at=excluded.updated_at, handles=excluded.handles",
             (pid, name, data.get("role", ""), data.get("business_id"), data.get("tone", ""), data.get("channels", ""),
-             data.get("notes", ""), json.dumps(data.get("pending") or []), data.get("waiting_since"), time.time()),
+             data.get("notes", ""), json.dumps(data.get("pending") or []), data.get("waiting_since"), time.time(),
+             json.dumps({k: str(v).strip() for k, v in (data.get("handles") or {}).items() if str(v or "").strip()})),
         )
     return next(p for p in list_people() if p["id"] == pid)
 
@@ -309,11 +342,15 @@ def save_playbook(data: dict) -> dict:
     pid = data.get("id") or _new_id()
     with connect() as c:
         c.execute(
-            "INSERT INTO playbooks(id, name, business_id, trigger, nodes, enabled, runs, last_run, cron_job_id) "
-            "VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, business_id=excluded.business_id, "
-            "trigger=excluded.trigger, nodes=excluded.nodes, enabled=excluded.enabled, cron_job_id=excluded.cron_job_id",
+            "INSERT INTO playbooks(id, name, business_id, trigger, nodes, enabled, runs, last_run, cron_job_id, "
+            "trigger_kind, keywords, channel_id, deliver) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+            "name=excluded.name, business_id=excluded.business_id, trigger=excluded.trigger, nodes=excluded.nodes, "
+            "enabled=excluded.enabled, cron_job_id=excluded.cron_job_id, trigger_kind=excluded.trigger_kind, "
+            "keywords=excluded.keywords, channel_id=excluded.channel_id, deliver=excluded.deliver",
             (pid, data["name"], data.get("business_id"), data["trigger"], json.dumps(data.get("nodes") or []),
-             int(bool(data.get("enabled", True))), int(data.get("runs") or 0), data.get("last_run"), data.get("cron_job_id")),
+             int(bool(data.get("enabled", True))), int(data.get("runs") or 0), data.get("last_run"), data.get("cron_job_id"),
+             data.get("trigger_kind") or "manual", data.get("keywords") or "", data.get("channel_id") or None,
+             data.get("deliver") or "local"),
         )
     return next(p for p in list_playbooks() if p["id"] == pid)
 

@@ -45,9 +45,16 @@ def save(data: dict, schedule: str, deliver: str) -> dict:
     from cron import jobs
 
     schedule, deliver = schedule.strip(), (deliver.strip() or "local")
+    kind = data.get("trigger_kind") or ("schedule" if schedule else "manual")
+    if kind not in ("manual", "schedule", "keyword"):
+        raise ValueError("tipo de gatilho inválido")
+    if kind == "keyword" and not _keywords(data.get("keywords") or ""):
+        raise ValueError("informe pelo menos uma palavra-chave")
+    if kind != "schedule":
+        schedule = ""
     old = next((p for p in store.list_playbooks() if p["id"] == data.get("id")), None) if data.get("id") else None
     job = _job((old or {}).get("cron_job_id"))
-    p = {**data, "cron_job_id": None}
+    p = {**data, "cron_job_id": None, "trigger_kind": kind, "deliver": deliver}
     if schedule:
         name, prompt = f"Playbook · {data['name']}"[:80], prompt_for(data)
         if job:
@@ -84,12 +91,61 @@ def run_now(pid: str) -> dict:
     p = next((x for x in store.list_playbooks() if x["id"] == pid), None)
     if not p:
         raise KeyError(pid)
-    deliver = (_job(p.get("cron_job_id")) or {}).get("deliver") or "local"
+    deliver = (_job(p.get("cron_job_id")) or {}).get("deliver") or p.get("deliver") or "local"
     job = jobs.create_job(prompt_for(p), datetime.now(timezone.utc).isoformat(), name=f"Playbook · {p['name']} (agora)"[:80],
                           repeat=1, deliver=deliver)
     _notify()
     store.mark_playbook_run(pid)
     return {"job_id": job["id"], "playbook": enrich(next(x for x in store.list_playbooks() if x["id"] == pid))}
+
+
+def _fold(t: str) -> str:
+    """Minúsculas e sem acento: "Orçamento" casa com "orcamento"."""
+    import unicodedata
+
+    return "".join(c for c in unicodedata.normalize("NFKD", t.casefold()) if not unicodedata.combining(c))
+
+
+def _keywords(raw: str) -> list[str]:
+    return [_fold(k.strip()) for k in raw.split(",") if k.strip()]
+
+
+def fire_keyword(platform: str, chat_id: str, text: str, *, sender: str = "", mode: int = 2) -> list[str]:
+    """Mensagem recebida → dispara playbooks ligados de palavra-chave que casam (canal opcional).
+
+    Kill switch: nada dispara. Observar: não dispara. Rascunhar: roda, mas o resultado só fica
+    registrado (deliver=local). Autônomo: entrega onde o playbook manda. Devolve os nomes disparados."""
+    from cron import jobs
+
+    try:
+        from agent.estop import is_engaged
+
+        if is_engaged():
+            return []
+    except Exception:
+        pass
+    if mode == store.OBSERVE:
+        return []
+    msg, cid = _fold(text), store.channel_id(platform, chat_id)
+    fired = []
+    for p in store.list_playbooks():
+        if not p["enabled"] or p.get("trigger_kind") != "keyword":
+            continue
+        if p.get("channel_id") and p["channel_id"] != cid:
+            continue
+        if not any(k in msg for k in _keywords(p.get("keywords") or "")):
+            continue
+        deliver = "local" if mode == store.DRAFT else (p.get("deliver") or "local")
+        prompt = "\n\n".join([prompt_for(p), f"Mensagem que disparou (de {sender or 'contato'}, {platform}): “{text[:2000]}”"])
+        jobs.create_job(prompt, datetime.now(timezone.utc).isoformat(), name=f"Playbook · {p['name']} (mensagem)"[:80], repeat=1, deliver=deliver)
+        store.mark_playbook_run(p["id"])
+        store.log_activity("cmd", f"Playbook “{p['name']}” disparado por mensagem de {sender or 'contato'} ({platform})",
+                           "palavra-chave na mensagem" + (" · canal em Rascunhar: resultado só registrado" if mode == store.DRAFT else "") + ".",
+                           business_id=p.get("business_id"))
+        fired.append(p["name"])
+    if fired:
+        _notify()
+    return fired
 
 
 def _ts(iso: Any) -> Optional[float]:
@@ -102,7 +158,7 @@ def _ts(iso: Any) -> Optional[float]:
 def enrich(p: dict) -> dict:
     """Junta ao playbook o estado do job: horário, destino, próxima execução, último erro."""
     job = _job(p.get("cron_job_id"))
-    out = {**p, "schedule": "", "deliver": "local", "next_run": None, "last_status": None, "last_error": None}
+    out = {**p, "schedule": "", "deliver": p.get("deliver") or "local", "next_run": None, "last_status": None, "last_error": None}
     if job:
         out.update(
             schedule=job.get("schedule_display") or "",

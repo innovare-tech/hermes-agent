@@ -55,3 +55,49 @@ export function parseCronPt(text: string): CronParse | null {
   const prompt = (comma >= 0 ? text.slice(comma + 1) : text).trim();
   return { human: `${human}, ${at}`, expr: `${min} ${hour} ${dom} * ${dow}`, dest, prompt: prompt.charAt(0).toUpperCase() + prompt.slice(1) };
 }
+
+const DOW_PT = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+const EN_DAY: Record<string, string> = { weekday: "dias úteis", day: "todo dia", sunday: "todo domingo", monday: "toda segunda", tuesday: "toda terça", wednesday: "toda quarta", thursday: "toda quinta", friday: "toda sexta", saturday: "todo sábado" };
+
+/** "9am" / "6:30pm" / "18:00" → "09:00". */
+function clock(t: string): string {
+  const m = t.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  if (!m) return t;
+  let h = Number(m[1]) % 24;
+  if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
+  if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
+  return `${pad(h)}:${m[2] ?? "00"}`;
+}
+
+/** Frase em português ("dias úteis às 9h", "a cada 2 horas") → formato do agendador. Já no formato? Mantém. */
+export function toSchedule(text: string): string {
+  const t = text.trim();
+  if (!t || /^(every\b|\d+[mhd]$|[\d*])/i.test(t)) return t;
+  const every = t.toLowerCase().match(/a cada (\d+)\s*(h|horas?|min|minutos?)\b/);
+  if (every) return `every ${every[1]}${every[2].startsWith("h") ? "h" : "m"}`;
+  return parseCronPt(t)?.expr ?? t;
+}
+
+/** Formato do agendador → português, para mostrar ("0 9 * * 1-5" → "dias úteis às 09:00"). */
+export function humanizeSchedule(s: string): string {
+  const t = s.trim();
+  const cron = t.match(/^(\d+) (\d+) (\*|\d+) \* (\*|[\d,-]+)$/);
+  if (cron) {
+    const at = `${pad(Number(cron[2]))}:${pad(Number(cron[1]))}`;
+    if (cron[3] !== "*") return `todo dia ${cron[3]} às ${at}`;
+    if (cron[4] === "*") return `todo dia às ${at}`;
+    if (cron[4] === "1-5") return `dias úteis às ${at}`;
+    if (/^\d$/.test(cron[4])) return `${Number(cron[4]) === 0 || Number(cron[4]) === 6 ? "todo" : "toda"} ${DOW_PT[Number(cron[4])]} às ${at}`;
+    return t;
+  }
+  const iv = t.match(/^(?:every\s+)?(\d+)\s*([mhd])$/i);
+  if (iv) {
+    const n = Number(iv[1]);
+    const unit = iv[2].toLowerCase();
+    if (unit === "m" && n % 60 === 0) return n === 60 ? "a cada hora" : `a cada ${n / 60} horas`;
+    return unit === "m" ? `a cada ${n} min` : unit === "h" ? (n === 1 ? "a cada hora" : `a cada ${n} horas`) : n === 1 ? "todo dia" : `a cada ${n} dias`;
+  }
+  const en = t.match(/^every\s+(\w+)\s+(?:at\s+)?([\d:]+\s*(?:am|pm)?)$/i);
+  if (en && EN_DAY[en[1].toLowerCase()]) return `${EN_DAY[en[1].toLowerCase()]} às ${clock(en[2])}`;
+  return t;
+}

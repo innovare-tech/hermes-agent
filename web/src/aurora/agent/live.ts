@@ -1,24 +1,37 @@
 // Telas do agente ligadas ao backend real (mesmas rotas do dashboard antigo).
+import { ask } from "../store";
 import { api, fetchJSON, type CronJob as ApiCron } from "@/lib/api";
 import { classifyLine } from "@/lib/log-classify";
+import { shortWhen, sourceIcon, sourceLabel } from "../chat/sources";
+import { CHANNEL_PT, FIELD_PT, MAIN_CHANNELS, TOOL_PT } from "./channelText";
 import { parseCronPt } from "./cron";
 const DEST_ICON: Record<string, string> = { Telegram: "send", Email: "mail", Discord: "message-circle", WhatsApp: "phone", Slack: "hash", Conversa: "message-square" };
 import type { AgentAdapter, CronJob, Gateway, LogLine, MemoryData, Settings } from "./types";
 
+// Reserva para provedores cujo catálogo não informa a variável da chave.
+const KEY_ENV: Record<string, string> = { openrouter: "OPENROUTER_API_KEY", anthropic: "ANTHROPIC_API_KEY", gemini: "GEMINI_API_KEY", "openai-api": "OPENAI_API_KEY", fireworks: "FIREWORKS_API_KEY", novita: "NOVITA_API_KEY", huggingface: "HF_TOKEN" };
+
 const jsonInit = (method: string, body: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
-const SOURCE_ICON: Record<string, string> = { telegram: "send", discord: "message-circle", whatsapp: "phone", cron: "calendar-clock", cli: "square-terminal", tui: "square-terminal", web: "globe" };
+/** Trecho de busca legível: sem marcadores de destaque, markdown e escapes de JSON. */
+export const cleanSnippet = (t: string) =>
+  t
+    .replace(/>>>|<<</g, "")
+    .replace(/\\+(["/])/g, "$1") // \" e \/ de JSON
+    .replace(/\\{2,}/g, "\\") // \\\\ → \
+    .replace(/\*\*|__|`+|^#+\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
-const when = (ts?: number | null) => (ts ? new Date(ts * 1000).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
 
 const BACKENDS = [
-  { id: "local", name: "Local", description: "Na sua máquina" },
-  { id: "docker", name: "Docker", description: "Contêiner isolado" },
-  { id: "ssh", name: "SSH", description: "Servidor remoto" },
-  { id: "singularity", name: "Singularity", description: "Clusters HPC" },
-  { id: "modal", name: "Modal", description: "Serverless, hiberna" },
-  { id: "daytona", name: "Daytona", description: "Serverless, persistente" },
-  { id: "vercel_sandbox", name: "Vercel Sandbox", description: "Efêmero" },
+  { id: "local", name: "Local", description: "Nesta máquina, onde o Hermes está instalado (recomendado)" },
+  { id: "docker", name: "Docker", description: "Num contêiner isolado nesta máquina" },
+  { id: "ssh", name: "SSH", description: "Em outro servidor, via SSH" },
+  { id: "modal", name: "Modal", description: "Nuvem da Modal (avançado)" },
+  { id: "daytona", name: "Daytona", description: "Nuvem da Daytona (avançado)" },
+  { id: "vercel_sandbox", name: "Vercel Sandbox", description: "Ambiente temporário na Vercel (avançado)" },
+  { id: "singularity", name: "Singularity", description: "Clusters de pesquisa (avançado)" },
 ];
 
 // Personalidades nativas do Hermes (hermes_cli/personality.py) com rótulo em português.
@@ -51,8 +64,10 @@ function cronFrom(j: ApiCron): CronJob {
 }
 
 /** "2026-10-07 14:03:11,512 INFO gateway.run: texto" → LogLine (formatos desconhecidos viram só a mensagem). */
-export function logFrom(raw: string, i: number): LogLine {
-  const m = raw.match(/(\d{2}:\d{2}:\d{2})[,.\d]*\s+(?:-\s+)?([A-Z]+)\s+(?:-\s+)?([\w.\-]+?):?\s+(?:-\s+)?(.*)$/);
+export function logFrom(line: string, i: number): LogLine {
+  const raw = line.trimEnd(); // a API manda as linhas com "\n" no fim, e o "$" da regex não casa antes dele
+  // "hh:mm:ss,ms NÍVEL [sessão] origem: mensagem" — o "[sessão]" é opcional.
+  const m = raw.match(/(\d{2}:\d{2}:\d{2})[,.\d]*\s+(?:-\s+)?([A-Z]+)\s+(?:-\s+)?(?:\[[^\]]*\]\s+)?([\w.\-]+?):?\s+(?:-\s+)?(.*)$/);
   const cls = classifyLine(raw);
   const level = /tool|terminal|web_search|delegate/i.test(raw) && cls === "info" ? "TOOL" : cls === "error" ? "ERRO" : cls === "warning" ? "WARN" : "INFO";
   return m ? { id: String(i), t: m[1], level, src: m[3].split(".").pop()!, msg: m[4] } : { id: String(i), t: "", level, src: "", msg: raw };
@@ -60,10 +75,16 @@ export function logFrom(raw: string, i: number): LogLine {
 
 export const liveAgent: AgentAdapter = {
   async sessions(query, source) {
-    const opts = { source: source === "Todas" ? null : source.toLowerCase(), order: "recent" as const };
-    const rows = query.trim() ? (await api.searchSessions(query, opts)).results.map((r) => ({ ...r, id: r.session_id ?? r.id, preview: r.snippet || r.preview })) : (await api.getSessions(50, 0, opts)).sessions;
-    return rows.map((s) => ({ id: s.id, title: s.title || s.preview || "Sem título", source: cap(s.source ?? "web"), icon: SOURCE_ICON[s.source ?? ""] ?? "globe", snippet: (s.preview ?? "").replace(/>>>|<<</g, ""), msgs: s.message_count ?? 0, when: when(s.started_at) }));
+    // Filtro por rótulo no cliente: "Terminal" junta tui e cli, que o backend guarda separados.
+    const opts = { source: null, order: "recent" as const };
+    const rows = query.trim() ? (await api.searchSessions(query, opts)).results.map((r) => ({ ...r, id: r.session_id ?? r.id, preview: r.snippet || r.preview })) : (await api.getSessions(100, 0, opts)).sessions;
+    return rows
+      .map((s) => ({ id: s.id, title: s.title || s.preview || "Sem título", source: sourceLabel(s.source), icon: sourceIcon(s.source), snippet: cleanSnippet(s.preview ?? ""), msgs: s.message_count ?? 0, when: shortWhen(s.started_at) }))
+      .filter((r) => source === "Todas" || r.source === source);
   },
+
+  renameSession: async (id, title) => void (await api.renameSession(id, title)),
+  deleteSession: async (id) => void (await api.deleteSession(id)),
 
   memory: () => fetchJSON<MemoryData>("/api/ops/memory"),
   addMemory: (target, content) => fetchJSON<MemoryData>("/api/ops/memory", jsonInit("POST", { target, content })),
@@ -72,10 +93,13 @@ export const liveAgent: AgentAdapter = {
 
   async skills() {
     return (await api.getSkills()).map((s) => {
-      const cat = (s.category ?? "").toLowerCase();
-      return { name: s.name, origin: cat.includes("hub") ? "hub" : /learn|auto|aprend/.test(cat) ? "aprendida" : "sua", description: s.description, uses: 0, version: "", updated: s.category ?? "" } as const;
+      const raw = s as typeof s & { provenance?: string; usage?: number };
+      const origin = raw.provenance === "hub" ? "hub" : raw.provenance === "bundled" ? "incluida" : "local";
+      return { name: s.name, origin, description: s.description, uses: raw.usage ?? 0, category: s.category ?? "", enabled: s.enabled } as const;
     });
   },
+  toggleSkill: async (name, enabled) => void (await api.toggleSkill(name, enabled)),
+  skillContent: async (name) => (await api.getSkillContent(name)).content,
 
   crons: async () => (await api.getCronJobs()).map(cronFrom),
   toggleCron: async (c) => {
@@ -96,18 +120,25 @@ export const liveAgent: AgentAdapter = {
     const [{ platforms }, st] = await Promise.all([api.getMessagingPlatforms(), api.getStatus()]);
     return {
       summary: { running: st.gateway_running, label: st.gateway_running ? `gateway ativo${st.gateway_pid ? " · pid " + st.gateway_pid : ""}` : "gateway parado" },
-      items: platforms.map((p) => ({
+      items: platforms
+        .map((p) => ({ p, pt: CHANNEL_PT[p.id], rank: MAIN_CHANNELS.indexOf(p.id) }))
+        .sort((a, b) => (a.rank < 0 ? 99 : a.rank) - (b.rank < 0 ? 99 : b.rank))
+        .map(({ p, pt, rank }) => ({
         id: p.id,
-        name: p.name,
+        name: pt?.name ?? p.name,
         mono: p.name.slice(0, p.name === "Signal" ? 2 : 1),
         account: p.home_channel?.name ?? (p.configured ? "configurado" : "não configurado"),
         enabled: p.enabled,
         configured: p.configured,
         status: p.enabled ? (GW_STATUS[p.state] ?? (p.state === "gateway_stopped" ? "erro" : "pareando")) : "desligado",
         stat: p.error_message ?? (p.state === "gateway_stopped" ? "gateway parado" : p.state === "pending_restart" ? "reinicie o gateway" : ""),
-        description: p.description,
+        description: pt?.description ?? p.description,
         docsUrl: p.docs_url,
-        fields: p.env_vars.map((e) => ({ key: e.key, label: e.prompt || e.key, help: e.help || e.description, url: e.url, secret: e.is_password, list: !!e.is_list, advanced: e.advanced, isSet: e.is_set, value: e.value ?? "" })),
+        main: rank >= 0,
+        fields: p.env_vars.map((e) => {
+          const t = FIELD_PT[e.key];
+          return { key: e.key, label: t?.label ?? (e.prompt || e.key), help: t ? (t.help ?? "") : e.help || e.description, url: e.url, secret: e.is_password, list: !!e.is_list, advanced: t?.advanced ?? e.advanced, isSet: e.is_set, value: e.value ?? "", example: t?.example };
+        }),
       })),
     };
   },
@@ -131,6 +162,21 @@ export const liveAgent: AgentAdapter = {
     return Object.entries(all)
       .filter(([, v]) => (v.category === "provider" || v.category === "tool" || v.custom) && !v.channel_managed)
       .map(([key, v]) => ({ key, description: v.description, url: v.url, category: v.custom ? "custom" : v.category, isSet: v.is_set, preview: v.redacted_value ?? "", advanced: v.advanced }));
+  },
+  async providerCatalog(refresh) {
+    const opts = await api.getModelOptions({ refresh });
+    return opts.providers.map((p) => {
+      const raw = p as typeof p & { key_env?: string | null; auth_type?: string | null };
+      const keyEnv = raw.key_env || KEY_ENV[p.slug] || null;
+      return {
+        id: p.slug,
+        name: p.name,
+        connected: !!p.authenticated,
+        keyEnv: raw.auth_type && raw.auth_type !== "api_key" && !p.authenticated ? null : keyEnv,
+        models: p.models?.length ? p.models : (p.featured_models ?? []),
+        current: !!p.is_current,
+      };
+    });
   },
   setApiKey: async (key, value) => void (await api.setEnvVar(key, value)),
   deleteApiKey: async (key) => void (await api.deleteEnvVar(key)),
@@ -164,7 +210,7 @@ export const liveAgent: AgentAdapter = {
       backend,
       personas: PERSONAS.map(([, label]) => label),
       persona,
-      tools: toolsets.map((t) => ({ id: t.name, name: t.label || t.name, description: t.description, icon: TOOL_ICON[t.name] ?? "wrench", enabled: t.enabled })),
+      tools: toolsets.map((t) => ({ id: t.name, name: TOOL_PT[t.name]?.[0] ?? (t.label || t.name), description: TOOL_PT[t.name]?.[1] ?? t.description, icon: TOOL_ICON[t.name] ?? "wrench", enabled: t.enabled, available: (t as { available?: boolean }).available !== false })),
       modelError,
     };
   },
@@ -174,7 +220,7 @@ export const liveAgent: AgentAdapter = {
       const body = { scope: "main" as const, provider: patch.provider, model: patch.model };
       const r = (await api.setModelAssignment(body)) as { confirm_required?: boolean; message?: string };
       if (r.confirm_required) {
-        if (!window.confirm(r.message ?? "Este modelo é caro. Usar mesmo assim?")) throw new Error("Troca de modelo cancelada");
+        if (!(await ask({ title: "Este modelo é caro", body: r.message ?? "Cada resposta custa mais que o normal.", confirm: "Usar mesmo assim" }))) throw new Error("Troca de modelo cancelada");
         await api.setModelAssignment({ ...body, confirm_expensive_model: true });
       }
     }

@@ -7,6 +7,14 @@ describe("logFrom", () => {
     expect(logFrom("2026-10-07 14:03:12,001 ERROR agent.loop: timeout ao abrir página", 1)).toMatchObject({ level: "ERRO", src: "loop" });
   });
 
+  it("linha com quebra no fim (como vem da API) também é separada", () => {
+    expect(logFrom("2026-10-07 21:33:28,710 INFO agent.auxiliary_client: Vision auto-detect\n", 4)).toMatchObject({ t: "21:33:28", level: "INFO", src: "auxiliary_client", msg: "Vision auto-detect" });
+  });
+
+  it("linha com [sessão] não duplica o nível na mensagem", () => {
+    expect(logFrom("2026-10-07 18:38:09,232 INFO [20261007_183751_cada95] agent.conversation_loop: API call #3", 3)).toMatchObject({ t: "18:38:09", level: "INFO", src: "conversation_loop", msg: "API call #3" });
+  });
+
   it("linha fora do formato vira só mensagem", () => {
     expect(logFrom("Traceback (most recent call last):", 2)).toMatchObject({ t: "", src: "", msg: "Traceback (most recent call last):" });
   });

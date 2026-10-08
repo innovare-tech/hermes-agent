@@ -13,7 +13,12 @@ export type State = Omit<OpsSnapshot, "account"> & {
   theme: Theme;
   /** "all" ou o id do negócio — filtra todas as telas. */
   biz: string;
+  /** Último aviso (atalho para testes e leitores de tela). */
   toast: { text: string; id: number } | null;
+  /** Avisos visíveis, empilhados no canto. */
+  toasts: { text: string; id: number }[];
+  /** Confirmação aberta (diálogo do Aurora, no lugar do window.confirm). */
+  ask: AskRequest | null;
   /** Passo do assistente de setup (-1 = fechado). */
   onboarding: number;
 };
@@ -34,6 +39,8 @@ let state: State = {
   ...readPrefs(),
   biz: "all",
   toast: null,
+  toasts: [],
+  ask: null,
   onboarding: -1,
   paused: false,
   account: null,
@@ -47,13 +54,14 @@ let state: State = {
   autonomy: [],
   briefing: [],
   last24h: { saved: "", autoReplies: 0 },
-  health: { online: false, uptime: "", items: [], responseTime: "" },
+  health: { online: false, level: "ok", problems: [], uptime: "", items: [], responseTime: "" },
   costs: { month: "", total: 0, limit: null, projection: null, byBusiness: [] },
   watches: [],
   support: { firstResponse: "", resolvedByHermes: "", csat: "", kbUsage: "" },
   kb: [],
   people: [],
   playbooks: [],
+  defaultMode: 1,
 };
 
 const subs = new Set<() => void>();
@@ -89,12 +97,28 @@ export async function loadSessions() {
   setState({ sessions: await chat.sessions() });
 }
 
-let toastTimer: ReturnType<typeof setTimeout> | undefined;
+let toastSeq = 0;
+
+export type AskOptions = { title: string; body?: string; confirm: string; danger?: boolean };
+type AskRequest = AskOptions & { resolve: (ok: boolean) => void };
+
+/** Confirmação no estilo do Aurora: ``if (await ask({...}))``. Esc/Cancelar = false. */
+export function ask(opts: AskOptions): Promise<boolean> {
+  state.ask?.resolve(false);
+  return new Promise((resolve) => setState({ ask: { ...opts, resolve } }));
+}
+
+export function answerAsk(ok: boolean) {
+  const a = state.ask;
+  setState({ ask: null });
+  a?.resolve(ok);
+}
 
 export function toast(text: string) {
-  clearTimeout(toastTimer);
-  setState({ toast: { text, id: Date.now() } });
-  toastTimer = setTimeout(() => setState({ toast: null }), 3200);
+  const t = { text, id: ++toastSeq };
+  // Máximo 3 na tela; cada um some sozinho.
+  setState((s) => ({ toast: t, toasts: [...s.toasts.filter((x) => x.text !== text), t].slice(-3) }));
+  setTimeout(() => setState((s) => ({ toasts: s.toasts.filter((x) => x.id !== t.id), toast: s.toast?.id === t.id ? null : s.toast })), 3600);
 }
 
 export function setPrefs(p: Partial<Pick<State, "dir" | "theme">>) {
@@ -221,6 +245,16 @@ export async function setAutonomy(c: Channel, mode: AutonomyMode) {
   toast(`${c.name} → ${MODES[mode]}`);
 }
 
+export async function setDefaultMode(mode: AutonomyMode) {
+  try {
+    await adapter.setDefaultMode(mode);
+  } catch (e) {
+    return toast(errMsg(e, "Não consegui salvar o padrão"));
+  }
+  setState({ defaultMode: mode });
+  toast(`Canais novos começam em ${MODES[mode]}`);
+}
+
 // ---- Atividade ----
 
 export async function undoActivity(id: string) {
@@ -287,11 +321,11 @@ export const ticketCard = (t: Ticket) =>
 export const ticketReply = (t: Ticket) =>
   actOnBehalf({ business: t.business, kind: "msg", action: `Respondeu ${t.client} no ticket #${t.n}`, why: "pedido seu no painel de suporte.", done: "Resposta enviada para " + t.client, blocked: "Agente pausado — retome para enviar", target: { kind: "ticket", n: t.n, op: "reply" } });
 
-export async function savePerson(p: Omit<Person, "id" | "initials" | "waitingHours"> & { id?: string }) {
+export async function savePerson(p: Omit<Person, "id" | "initials" | "waitingHours"> & { id?: string }, done?: string) {
   try {
     const saved = await adapter.savePerson(p);
     setState((s) => ({ people: s.people.some((x) => x.id === saved.id) ? s.people.map((x) => (x.id === saved.id ? saved : x)) : [...s.people, saved].sort((a, b) => a.name.localeCompare(b.name)) }));
-    toast(p.id ? "Contato atualizado" : `${saved.name} adicionado`);
+    toast(done ?? (p.id ? "Contato atualizado" : `${saved.name} adicionado`));
     return saved;
   } catch (e) {
     toast(errMsg(e, "Não consegui salvar o contato"));

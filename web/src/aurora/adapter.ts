@@ -6,7 +6,7 @@ export type BizId = string;
 export type Business = { id: BizId; name: string; color: string };
 export type Priority = "urgente" | "voce" | "resolve" | "ignorar";
 export type AutonomyMode = 0 | 1 | 2; // Observar · Rascunhar · Autônomo
-export type ActivityKind = "msg" | "cmd" | "pay" | "mem" | "tkt";
+export type ActivityKind = "msg" | "cmd" | "pay" | "mem" | "tkt" | "cfg";
 
 export type Session = {
   id: string;
@@ -14,7 +14,7 @@ export type Session = {
   source: string;
   icon: string;
   when: string;
-  group: "Hoje" | "Ontem" | "Esta semana";
+  group: "Hoje" | "Ontem" | "Esta semana" | "Mais antigas";
   msgs: number;
   snippet: string;
 };
@@ -106,7 +106,22 @@ export type Person = {
   tone: string;
   channels: string;
   pending: string[];
+  /** Identificadores que ligam o contato às mensagens da Caixa. */
+  handles: PersonHandles;
 };
+
+export type PersonHandles = { phone?: string; telegram?: string; email?: string };
+
+/** A mensagem é deste contato? Compara telefone (só dígitos, últimos 8), @telegram e e-mail com o canal e o remetente. */
+export function matchesPerson(item: { channelId: string; from: string }, h: PersonHandles): boolean {
+  const hay = `${item.channelId} ${item.from}`.toLowerCase();
+  const digits = (h.phone ?? "").replace(/\D/g, "");
+  if (digits.length >= 8 && hay.replace(/\D/g, "").includes(digits.slice(-8))) return true;
+  const tg = (h.telegram ?? "").replace(/^@/, "").toLowerCase();
+  if (tg && hay.includes(tg)) return true;
+  const mail = (h.email ?? "").toLowerCase();
+  return !!mail && hay.includes(mail);
+}
 
 export type PlaybookNode = { kind: "trigger" | "action" | "cond" | "end"; text: string; elseText?: string };
 export type Playbook = {
@@ -124,12 +139,22 @@ export type Playbook = {
   deliver: string;
   nextRun: string;
   lastError: string;
+  /** Manual (Executar agora), Horário (schedule) ou Palavra-chave (mensagem recebida). */
+  triggerKind: "manual" | "schedule" | "keyword";
+  /** Palavras separadas por vírgula (gatilho por palavra-chave). */
+  keywords: string;
+  /** Canal que pode disparar ("" = qualquer). */
+  channelId: string;
 };
 
 export type PlaybookDraft = Omit<Playbook, "id" | "runs" | "lastRun" | "nextRun" | "lastError"> & { id?: string };
 
 export type Health = {
   online: boolean;
+  /** ok = tudo certo; warn = funciona mas algo precisa de você (ex.: gateway parado com canal ligado). */
+  level: "ok" | "warn";
+  /** O que precisa de atenção e onde resolver. */
+  problems: { text: string; to: string }[];
   uptime: string;
   /** Gateways/plataformas conectados. */
   items: { name: string; status: "ok" | "warn" | "err"; value: string }[];
@@ -165,6 +190,8 @@ export type OpsSnapshot = {
   kb: KbArticle[];
   people: Person[];
   playbooks: Playbook[];
+  /** Modo aplicado a canais que ainda não falaram com o Hermes. */
+  defaultMode: AutonomyMode;
   paused: boolean;
 };
 
@@ -198,6 +225,7 @@ export interface OpsAdapter {
   /** Reverte uma ação da Atividade quando ela é reversível. */
   undo(activityId: string): Promise<void>;
   setAutonomy(channelId: string, mode: AutonomyMode): Promise<void>;
+  setDefaultMode(mode: AutonomyMode): Promise<void>;
   setChannelBusiness(channelId: string, businessId: BizId | null): Promise<void>;
   saveBusiness(b: { id?: string; name: string; color: string }): Promise<Business>;
   deleteBusiness(id: string): Promise<void>;

@@ -2,7 +2,7 @@ import { PageHeader, spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { ApprovalCard } from "../ops/ApprovalCard";
 import { AutonomySegment } from "../ops/AutonomySegment";
-import { approve, deny, inBiz, setAutonomy, setChannelBusiness, useStore } from "../store";
+import { approve, deny, inBiz, MODES, setAutonomy, setChannelBusiness, setDefaultMode, useStore } from "../store";
 
 export function Approvals() {
   const s = useStore((x) => x);
@@ -44,6 +44,11 @@ export function Approvals() {
             <p style={{ margin: "6px 0 8px", fontSize: 12.5, color: "var(--fg2)", lineHeight: 1.5 }}>
               Observar: só lê. Rascunhar: escreve e espera você. Autônomo: responde sozinho e registra na Atividade.
             </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 0", borderTop: "1px solid var(--line)" }}>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>Canais novos começam em</span>
+              <AutonomySegment label="Modo dos canais novos" mode={s.defaultMode} onPick={setDefaultMode} />
+              <span style={{ fontSize: 11.5, color: "var(--fg3)", lineHeight: 1.45 }}>Vale para conversas e grupos que ainda não falaram com o Hermes. Os canais abaixo não mudam.</span>
+            </div>
             {s.autonomy.filter(f).map((c) => {
               const biz = s.businesses.find((b) => b.id === c.business);
               return (
@@ -65,13 +70,13 @@ export function Approvals() {
                     )}
                     {biz && <span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: biz.color }} />}
                   </span>
-                  <AutonomySegment channel={c} onPick={(m) => setAutonomy(c, m)} />
+                  <AutonomySegment label={`Autonomia em ${c.name}`} mode={c.mode} onPick={(m) => setAutonomy(c, m)} />
                 </div>
               );
             })}
             {s.autonomy.length === 0 && (
               <p style={{ margin: 0, padding: "12px 0", borderTop: "1px solid var(--line)", fontSize: 12.5, lineHeight: 1.55, color: "var(--fg2)" }}>
-                Nenhum canal ainda. Cada conversa ou grupo aparece aqui na primeira mensagem que chegar pelo gateway — novos canais começam em Autônomo (o comportamento atual do Hermes).
+                Nenhum canal ainda. Cada conversa ou grupo aparece aqui na primeira mensagem que chegar pelo gateway e começa em {MODES[s.defaultMode]}.
               </p>
             )}
           </div>

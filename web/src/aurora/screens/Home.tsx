@@ -7,7 +7,7 @@ import { inBiz, useStore } from "../store";
 
 const WAVE = [40, 70, 55, 90, 35, 80, 60, 95, 45, 75, 50, 85, 40, 65];
 const STATUS_COLOR = { ok: "var(--ok)", warn: "var(--warn)", err: "var(--err)" };
-const money = (v: number) => "$" + v.toFixed(2).replace(".", ",");
+const money = (v: number) => "US$ " + v.toFixed(2).replace(".", ",");
 
 /** Lê o briefing em voz alta com a síntese de voz do navegador (pt-BR). */
 function useSpeech(text: string) {
@@ -44,10 +44,10 @@ export function Home() {
   const health = [
     ...s.health.items,
     { name: "Fila de mensagens", status: s.paused ? "warn" : "ok", value: s.paused ? "retida (pausado)" : "0 pendentes" } as const,
-    { name: "Tempo médio de resposta", status: "ok", value: s.health.responseTime } as const,
   ];
   const online = s.health.online && !s.paused;
-  const hColor = s.paused ? "var(--err)" : online ? "var(--ok)" : "var(--warn)";
+  const attention = online && s.health.level === "warn";
+  const hColor = s.paused ? "var(--err)" : !online ? "var(--err)" : attention ? "var(--warn)" : "var(--ok)";
   const c = s.costs;
   const costMax = Math.max(30, ...c.byBusiness.map((x) => x.value));
 
@@ -60,14 +60,14 @@ export function Home() {
           sub={
             s.paused
               ? "O agente está pausado. Ele continua lendo tudo, mas não envia nada nem executa ações até você retomar."
-              : `Hoje o Hermes respondeu ${s.last24h.autoReplies} ${s.last24h.autoReplies === 1 ? "mensagem" : "mensagens"} sozinho e separou ${needs.length + approvals} ${needs.length + approvals === 1 ? "decisão" : "decisões"} para você${s.health.items.some((x) => x.name === "Gateway de mensagens" && x.status !== "ok") ? ". O gateway de mensagens está parado — ligue em Gateways" : ""}.`
+              : `Hoje o Hermes respondeu ${s.last24h.autoReplies} ${s.last24h.autoReplies === 1 ? "mensagem" : "mensagens"} sozinho e separou ${needs.length + approvals} ${needs.length + approvals === 1 ? "decisão" : "decisões"} para você${s.health.problems.length ? ". Atenção: " + s.health.problems[0].text.charAt(0).toLowerCase() + s.health.problems[0].text.slice(1) : ""}.`
           }
         />
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))", gap: 16 }}>
           <div className="au-card" onMouseMove={spot} style={{ padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span className="au-label">Briefing da manhã · {brief[0]?.at ?? "—"}</span>
+              <span className="au-label">Resumo da manhã{brief[0]?.at ? ` · ${brief[0].at}` : ""}</span>
               {speech.can && brief.length > 0 && (
                 <button
                   onClick={speech.toggle}
@@ -87,7 +87,14 @@ export function Home() {
                 </button>
               )}
             </div>
-            {brief.length === 0 && <p style={{ margin: 0, paddingTop: 14, borderTop: "1px solid var(--line)", fontSize: 13.5, lineHeight: 1.6, color: "var(--fg2)" }}>Para receber um briefing toda manhã, crie um agendamento — por exemplo “dias úteis às 7h30, resuma minhas mensagens e pendências e mande no Telegram”.</p>}
+            {brief.length === 0 && (
+              <div style={{ paddingTop: 14, borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--fg2)" }}>Receba toda manhã um resumo das mensagens e pendências.</p>
+                <button className="au-outline" onClick={() => navigate("/cron?q=" + encodeURIComponent("dias úteis às 7h30, resuma minhas mensagens e pendências"))}>
+                  <Icon name="calendar-plus" size={13} /> Criar agendamento
+                </button>
+              </div>
+            )}
             {brief.map((b, i) => (
               <div key={b.business} style={{ display: "grid", gridTemplateColumns: "92px minmax(0,1fr)", gap: 14, paddingTop: 14, borderTop: "1px solid var(--line)", animation: "hblurin .6s both", animationDelay: 150 + i * 120 + "ms" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, alignSelf: "start", paddingTop: 2 }}>
@@ -100,12 +107,12 @@ export function Home() {
           </div>
 
           <div className="au-card" onMouseMove={spot} style={{ padding: 22, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "22px 16px", alignContent: "start" }}>
-            <span className="au-label" style={{ gridColumn: "1/-1" }}>Últimas 24 horas</span>
+            <span className="au-label" style={{ gridColumn: "1/-1" }}>Hoje</span>
             {[
-              { v: String(s.activity.filter((a) => /^\d\d:\d\d$/.test(a.at)).length), l: "ações registradas hoje", c: "var(--acc)" },
-              { v: String(s.last24h.autoReplies), l: "respostas enviadas sozinho", c: "var(--fg)" },
+              { v: String(s.activity.filter((a) => /^\d\d:\d\d$/.test(a.at)).length), l: "ações registradas", c: "var(--acc)" },
+              { v: String(s.last24h.autoReplies), l: "respostas enviadas", c: "var(--fg)" },
               { v: String(needs.length + approvals), l: "decisões esperando você", c: "var(--fg)" },
-              { v: String(alerts), l: "alertas nos grupos", c: "var(--err)" },
+              { v: String(alerts), l: "alertas nos grupos", c: alerts ? "var(--err)" : "var(--fg)" },
             ].map((r, i) => (
               <div key={r.l} style={{ display: "flex", flexDirection: "column", gap: 6, animation: "hpop .7s cubic-bezier(.3,1.4,.5,1) both", animationDelay: 200 + i * 90 + "ms" }}>
                 <span className="au-display" style={{ lineHeight: 1, fontSize: 36, color: r.c }}>{r.v}</span>
@@ -143,9 +150,16 @@ export function Home() {
                 <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: hColor }} />
                 <span style={{ position: "absolute", inset: -6, borderRadius: "50%", border: `2px solid ${hColor}`, animation: "hping 2s ease-out infinite" }} />
               </span>
-              <span className="au-display" style={{ lineHeight: 1, fontSize: 28 }}>{s.paused ? "Pausado" : online ? "Online" : "Offline"}</span>
+              <span className="au-display" style={{ lineHeight: 1, fontSize: 28 }}>{s.paused ? "Pausado" : !online ? "Offline" : attention ? "Atenção" : "Online"}</span>
               <span style={{ marginLeft: "auto", fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)" }}>{s.health.uptime && (s.health.online && /^\d/.test(s.health.uptime) ? "uptime " : "") + s.health.uptime}</span>
             </div>
+            {s.health.problems.map((p) => (
+              <button key={p.text} className="au-need" onClick={() => navigate(p.to)} style={{ alignItems: "center", gap: 10, fontSize: 13, color: "var(--warn)", textAlign: "left" }}>
+                <Icon name="octagon-pause" size={14} color="var(--warn)" />
+                <span style={{ flex: 1 }}>{p.text}</span>
+                <span style={{ color: "var(--acc)", fontSize: 12.5 }}>Resolver →</span>
+              </button>
+            ))}
             {health.map((x) => (
               <div key={x.name} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
                 <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLOR[x.status] }} />
@@ -156,7 +170,7 @@ export function Home() {
           </div>
 
           <div className="au-card" onMouseMove={spot} style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
-            <span className="au-label">Custos · {c.month}</span>
+            <span className="au-label">Custos · {c.month}{s.biz !== "all" ? " · todos os negócios" : ""}</span>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
               <span className="au-display" style={{ lineHeight: 1, fontSize: 36 }}>{money(c.total)}</span>
               {c.limit != null && <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)" }}>de ${c.limit} · limite mensal</span>}

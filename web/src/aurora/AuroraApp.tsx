@@ -1,7 +1,8 @@
-import { useEffect, type MouseEvent } from "react";
+import { useEffect, useRef, type MouseEvent } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router";
-import { Background, PauseBanner, Toast } from "./Chrome";
-import { Onboarding } from "./Onboarding";
+import { AskDialog, Background, PauseBanner, Toast } from "./Chrome";
+import { agent } from "./agent";
+import { ONBOARDED_KEY, Onboarding } from "./Onboarding";
 import { Activity } from "./screens/Activity";
 import { Agents } from "./screens/Agents";
 import { Cron } from "./screens/Cron";
@@ -19,8 +20,8 @@ import { People } from "./screens/People";
 import { Playbooks } from "./screens/Playbooks";
 import { Radar } from "./screens/Radar";
 import { Support } from "./screens/Support";
-import { Sidebar } from "./Sidebar";
-import { loadOps, loadSessions, refreshPaused, toast, useStore } from "./store";
+import { AGENT, OPS, Sidebar } from "./Sidebar";
+import { loadOps, loadSessions, refreshPaused, setState, toast, useStore } from "./store";
 
 // Spotlight que segue o cursor: escreve direto no style, sem re-render.
 const onMove = (e: MouseEvent<HTMLDivElement>) => {
@@ -29,8 +30,13 @@ const onMove = (e: MouseEvent<HTMLDivElement>) => {
 };
 
 // Remonta a cada navegação: "Nova conversa" (ou ⌘K) já em /chat começa do zero.
+/** Cada navegação abre uma Conversa nova (ex.: "Nova conversa" estando em /chat) — exceto quando a própria
+ *  Conversa troca a URL para /chat/<id> ao criar a sessão: remontar ali apagaria a resposta em andamento. */
 function ChatRoute() {
-  return <Chat key={useLocation().key} />;
+  const loc = useLocation();
+  const keep = useRef(loc.key);
+  if (!(loc.state as { created?: boolean } | null)?.created) keep.current = loc.key;
+  return <Chat key={keep.current} />;
 }
 
 function NotFound() {
@@ -40,7 +46,7 @@ function NotFound() {
         <span className="au-label">404</span>
         <h1 className="au-h1">Página não encontrada</h1>
         <p style={{ margin: 0, color: "var(--fg2)", fontSize: 14.5, lineHeight: 1.55 }}>
-          Esse endereço não existe. A interface antiga continua em <a href="?ui=legacy">?ui=legacy</a>.
+          Esse endereço não existe. Use o menu ao lado para voltar.
         </p>
       </div>
     </div>
@@ -52,6 +58,13 @@ export function AuroraApp() {
   const theme = useStore((s) => s.theme);
   const navigate = useNavigate();
 
+  // Título da aba: "Hermes · <tela>".
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const item = [...OPS, ...AGENT].find((n) => (n.to === "/" ? pathname === "/" : pathname.startsWith(n.to)));
+    document.title = item ? `Hermes · ${item.label}` : pathname.startsWith("/support") ? "Hermes · Suporte" : "Hermes";
+  }, [pathname]);
+
   useEffect(() => {
     document.documentElement.dataset.hv = dir;
     document.documentElement.dataset.ht = theme;
@@ -60,6 +73,19 @@ export function AuroraApp() {
   // Carrega uma vez só: recarregar a cada navegação descartaria o que mudou na sessão (pausa, rascunhos…).
   useEffect(() => {
     loadOps().catch(() => toast("Não consegui carregar os dados do agente"));
+    // Primeira vez sem modelo configurado: abre o assistente sozinho (uma vez; reabre por Configurações).
+    agent.settings().then(
+      (st) => {
+        let seen = false;
+        try {
+          seen = localStorage.getItem(ONBOARDED_KEY) === "1";
+        } catch {
+          /* sem storage: decide só pelo modelo */
+        }
+        if (!seen && !(st.model && st.providers.some((p) => p.id === st.provider))) setState({ onboarding: 0 });
+      },
+      () => {},
+    );
     loadSessions().catch(() => toast("Não consegui carregar as sessões"));
     const poll = setInterval(() => refreshPaused().catch(() => {}), 15000);
     return () => clearInterval(poll);
@@ -109,6 +135,7 @@ export function AuroraApp() {
       </div>
       <Onboarding />
       <Toast />
+      <AskDialog />
     </div>
   );
 }

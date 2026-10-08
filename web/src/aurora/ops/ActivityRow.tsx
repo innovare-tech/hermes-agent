@@ -8,6 +8,7 @@ export const ACTIVITY_KIND: Record<ActivityKind, { icon: string; color: string; 
   pay: { icon: "credit-card", color: "var(--warn)", label: "Pagamentos" },
   mem: { icon: "brain", color: "var(--ok)", label: "Memória" },
   tkt: { icon: "life-buoy", color: "var(--fg2)", label: "Tickets" },
+  cfg: { icon: "settings-2", color: "var(--fg2)", label: "Configurações" },
 };
 
 /** Uma linha da auditoria: hora, tipo, o que fez, por quê, negócio e Desfazer quando reversível. */

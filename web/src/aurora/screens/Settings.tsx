@@ -46,11 +46,11 @@ export function Settings() {
 
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
-      <div className="au-page au-page-agent" style={{ maxWidth: 880, padding: "44px 36px 80px", gap: 40 }}>
-        <AgentHeader title="Configurações" sub="Modelo, ambiente e aparência. Sem editar YAML.">
+      <div className="au-page au-page-agent" style={{ gap: 40 }}>
+        <AgentHeader title="Configurações" sub="Modelo, chaves, ambiente e aparência do Hermes.">
           <button className="au-outline" onClick={() => setState({ onboarding: 0 })} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, background: "var(--panel)" }}>
             <Icon name="rocket" size={14} color="var(--acc)" />
-            Assistente de setup
+            Assistente de configuração
           </button>
         </AgentHeader>
 
@@ -58,11 +58,11 @@ export function Settings() {
           <BusinessesEditor />
         </Section>
 
-        <Section title="Chaves de API" sub="Credenciais dos provedores de modelo e das ferramentas, gravadas no .env desta máquina. O valor salvo nunca aparece de volta.">
+        <Section title="Chaves de API" sub="Credenciais dos provedores de modelo e das ferramentas, guardadas só neste servidor. O valor salvo nunca aparece de volta.">
           <ApiKeysEditor onChange={reload} />
         </Section>
 
-        <Section title="Provedor de modelo" sub="Troque quando quiser — nada de lock-in.">
+        <Section title="Provedor de modelo" sub="Qual serviço de IA o Hermes usa para pensar. Dá para trocar quando quiser.">
           {s.modelError ? (
             <p role="alert" style={{ margin: 0, fontSize: 13, color: "var(--warn)", lineHeight: 1.5 }}>
               Não consegui listar os modelos: {s.modelError}
@@ -90,8 +90,8 @@ export function Settings() {
           </div>
         </Section>
 
-        <Section title="Onde os comandos rodam" sub="Backend de terminal usado pelo agente e pelos subagentes.">
-          <div role="radiogroup" aria-label="Backend de terminal" style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: 4, borderRadius: "var(--r)", background: "var(--panel2)", alignSelf: "flex-start" }}>
+        <Section title="Onde os comandos rodam" sub="Onde o Hermes executa comandos e mexe em arquivos quando você pede.">
+          <div role="radiogroup" aria-label="Onde os comandos rodam" style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: 4, borderRadius: "var(--r)", background: "var(--panel2)", alignSelf: "flex-start" }}>
             {s.backends.map((b) => (
               <button key={b.id} role="radio" aria-checked={b.id === s.backend} className="au-seg au-seg-lg" onClick={() => b.id !== s.backend && apply({ backend: b.id }, "Comandos rodam em " + b.name)}>
                 {b.name}
@@ -100,7 +100,7 @@ export function Settings() {
           </div>
         </Section>
 
-        <Section title="Personalidade" sub="Equivalente a /personality.">
+        <Section title="Personalidade" sub="O jeito das respostas: mais curtas, mais técnicas, mais didáticas…">
           <div role="radiogroup" aria-label="Personalidade" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {s.personas.map((p) => (
               <button key={p} role="radio" aria-checked={p === s.persona} className="au-pill" aria-pressed={p === s.persona} onClick={() => p !== s.persona && apply({ persona: p }, "Personalidade: " + p)} style={{ fontSize: 13, padding: "7px 14px" }}>
@@ -117,7 +117,10 @@ export function Settings() {
                 <Icon name={t.icon} size={15} color="var(--fg2)" />
                 <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   <span style={{ fontSize: 13.5, fontWeight: 500 }}>{t.name}</span>
-                  <span style={{ fontSize: 12, color: "var(--fg3)" }}>{t.description}</span>
+                  <span style={{ fontSize: 12, color: "var(--fg3)" }}>
+                    {t.description}
+                    {!t.available && <span style={{ color: "var(--warn)" }}> · indisponível: falta configurar</span>}
+                  </span>
                 </span>
                 <button role="switch" aria-checked={t.enabled} aria-label={`${t.enabled ? "Desabilitar" : "Habilitar"} ${t.name}`} className="au-switch lg" onClick={() => apply({ tool: { id: t.id, enabled: !t.enabled } })}>
                   <span />

@@ -3,7 +3,7 @@ import { spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
 import type { Gateway, GatewayField } from "../agent/types";
-import { toast } from "../store";
+import { ask, toast } from "../store";
 import { AgentHeader } from "./Sessions";
 
 const STATUS_COLOR: Record<Gateway["status"], string> = { conectado: "var(--ok)", pareando: "var(--warn)", desligado: "var(--fg3)", erro: "var(--err)" };
@@ -21,7 +21,7 @@ export function envChanges(fields: GatewayField[], vals: Record<string, string>)
 }
 
 /** Credenciais de um canal: só os campos preenchidos são gravados; segredo salvo nunca volta para a tela. */
-function Setup({ g, onSaved }: { g: Gateway; onSaved: (restart: boolean) => void }) {
+export function GatewaySetup({ g, onSaved }: { g: Gateway; onSaved: (restart: boolean) => void }) {
   const [vals, setVals] = useState<Record<string, string>>(() => Object.fromEntries(g.fields.map((f) => [f.key, f.secret ? "" : f.list ? f.value.split(",").filter(Boolean).join("\n") : f.value])));
   const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState("");
@@ -47,7 +47,7 @@ function Setup({ g, onSaved }: { g: Gateway; onSaved: (restart: boolean) => void
     setBusy("");
   };
   const clear = async () => {
-    if (!window.confirm(`Apagar as credenciais de ${g.name}?`)) return;
+    if (!(await ask({ title: `Apagar as credenciais de ${g.name}?`, body: "O canal para de funcionar até você colar as credenciais de novo.", confirm: "Apagar", danger: true }))) return;
     try {
       await agent.saveGateway(g.id, {}, g.fields.filter((f) => f.isSet).map((f) => f.key));
       onSaved(true);
@@ -56,6 +56,20 @@ function Setup({ g, onSaved }: { g: Gateway; onSaved: (restart: boolean) => void
     }
   };
 
+  if (g.fields.length === 0)
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
+        {g.description && <p style={{ margin: 0, fontSize: 13, color: "var(--fg2)", lineHeight: 1.5 }}>{g.description}</p>}
+        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55 }}>
+          Este canal ainda não pode ser configurado pelo painel. No servidor, rode <code>hermes gateway setup</code> e escolha {g.name}.
+        </p>
+        {g.docsUrl && (
+          <a href={g.docsUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: "var(--acc)" }}>
+            Guia de configuração
+          </a>
+        )}
+      </div>
+    );
   return (
     <form
       onSubmit={(e) => {
@@ -72,9 +86,9 @@ function Setup({ g, onSaved }: { g: Gateway; onSaved: (restart: boolean) => void
             {f.isSet && <span style={{ color: "var(--ok)" }}>· salvo</span>}
           </span>
           {f.list ? (
-            <textarea rows={2} value={vals[f.key]} onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })} placeholder="um por linha" spellCheck={false} />
+            <textarea rows={2} value={vals[f.key]} onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })} placeholder={f.example ? `um por linha — ex.: ${f.example}` : "um por linha"} spellCheck={false} />
           ) : (
-            <input type={f.secret ? "password" : "text"} autoComplete="off" spellCheck={false} value={vals[f.key]} onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })} placeholder={f.secret && f.isSet ? "•••••• salvo — deixe vazio para manter" : f.key} />
+            <input type={f.secret ? "password" : "text"} autoComplete="off" spellCheck={false} value={vals[f.key]} onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })} placeholder={f.secret && f.isSet ? "•••••• salvo — deixe vazio para manter" : f.example ? `ex.: ${f.example}` : ""} />
           )}
           {(f.help || f.url) && (
             <span style={{ fontSize: 11.5, color: "var(--fg3)", lineHeight: 1.45 }}>
@@ -106,6 +120,7 @@ function Setup({ g, onSaved }: { g: Gateway; onSaved: (restart: boolean) => void
         <button type="button" className="au-outline" disabled={!!busy || !g.configured} onClick={runTest} title={g.configured ? undefined : "Salve as credenciais primeiro"}>
           {busy === "test" ? "Testando…" : "Testar conexão"}
         </button>
+        {!g.configured && <span style={{ fontSize: 12, color: "var(--fg3)" }}>Salve as credenciais para poder testar.</span>}
         {g.fields.some((f) => f.isSet) && (
           <button type="button" className="au-outline danger" onClick={clear}>
             Apagar credenciais
@@ -137,7 +152,7 @@ export function Gateways() {
     toast(`${g.name} ${g.enabled ? "desligado" : "ligado"}${data?.summary.running ? " — reinicie o gateway para aplicar" : ""}`);
   };
   const lifecycle = async (action: "start" | "stop" | "restart") => {
-    if (action === "stop" && !window.confirm("Parar o gateway? O Hermes deixa de receber e responder mensagens.")) return;
+    if (action === "stop" && !(await ask({ title: "Parar o gateway?", body: "O Hermes deixa de receber e responder mensagens em todos os canais.", confirm: "Parar", danger: true }))) return;
     setBusy(action);
     try {
       await agent.gatewayAction(action);
@@ -152,14 +167,22 @@ export function Gateways() {
   const needle = q.trim().toLowerCase();
   const items = (data?.items ?? []).filter((g) => !needle || g.name.toLowerCase().includes(needle) || g.id.includes(needle));
   const mine = items.filter((g) => g.configured || g.enabled);
-  const rest = items.filter((g) => !(g.configured || g.enabled));
+  const rest = items.filter((g) => !(g.configured || g.enabled) && g.main);
+  const others = items.filter((g) => !(g.configured || g.enabled) && !g.main);
   const running = !!data?.summary.running;
 
   const card = (g: Gateway, i: number) => {
     const isOpen = open === g.id;
     return (
-      <div key={g.id} className="au-card au-gw" onMouseMove={spot} style={{ animationDelay: i * 35 + "ms", gridColumn: isOpen ? "1 / -1" : undefined }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div
+        key={g.id}
+        className="au-card au-gw"
+        onMouseMove={spot}
+        // Fechado: o cartão inteiro abre. Aberto: só o cabeçalho fecha (cliques no formulário não contam).
+        onClick={(e) => !isOpen && !(e.target as HTMLElement).closest("[role=switch],button") && setOpen(g.id)}
+        style={{ animationDelay: i * 35 + "ms", gridColumn: isOpen ? "1 / -1" : undefined, cursor: isOpen ? undefined : "pointer" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }} onClick={(e) => isOpen && !(e.target as HTMLElement).closest("[role=switch],button") && setOpen(null)}>
           <span className="au-display" style={{ width: 40, height: 40, borderRadius: "var(--r2)", background: "var(--panel2)", display: "grid", placeItems: "center", fontSize: 18, letterSpacing: 0, flex: "none" }}>{g.mono}</span>
           <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: 1 }}>
             <span style={{ fontSize: 14.5, fontWeight: 500 }}>{g.name}</span>
@@ -182,7 +205,7 @@ export function Gateways() {
           </div>
         )}
         {isOpen && (
-          <Setup
+          <GatewaySetup
             g={g}
             onSaved={(restart) => {
               toast(restart && running ? `${g.name} salvo — reinicie o gateway para aplicar` : `${g.name} salvo`);
@@ -197,7 +220,7 @@ export function Gateways() {
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page au-page-agent">
-        <AgentHeader title="Gateways" sub="Conecte os canais onde o Hermes conversa. As credenciais ficam no .env desta máquina.">
+        <AgentHeader title="Gateways" sub="Conecte os canais onde o Hermes conversa. As credenciais ficam guardadas só neste servidor.">
           {data && (
             <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 13px", borderRadius: 999, border: "1px solid var(--line2)", fontFamily: "var(--fm)", fontSize: 11.5, color: "var(--fg2)" }}>
@@ -227,6 +250,17 @@ export function Gateways() {
           <input aria-label="Buscar canal" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar canal (Telegram, WhatsApp…)" style={{ flex: 1, border: 0, outline: 0, background: "transparent", color: "var(--fg)", fontSize: 13.5 }} />
         </div>
 
+        {data && !running && (data.items ?? []).some((g) => g.enabled && g.configured) && (
+          <div role="alert" className="au-card" style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 12, borderColor: "var(--warn)" }}>
+            <Icon name="octagon-pause" size={16} color="var(--warn)" />
+            <span style={{ fontSize: 13.5, lineHeight: 1.5 }}>
+              Há canais ligados, mas o gateway está parado — o Hermes não recebe nem responde mensagens.
+            </span>
+            <button className="au-primary" disabled={!!busy} onClick={() => lifecycle("start")} style={{ marginLeft: "auto" }}>
+              Iniciar gateway
+            </button>
+          </div>
+        )}
         {mine.length > 0 && (
           <>
             <span className="au-label">Seus canais</span>
@@ -240,6 +274,13 @@ export function Gateways() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 14 }}>{rest.map(card)}</div>
           </>
         )}
+        {others.length > 0 && (
+          <details open={!!needle || undefined}>
+            <summary className="au-label" style={{ cursor: "pointer", padding: "4px 0" }}>Outros canais ({others.length})</summary>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 14, marginTop: 12 }}>{others.map(card)}</div>
+          </details>
+        )}
+        {data && needle && items.length === 0 && <p style={{ margin: 0, fontSize: 13.5, color: "var(--fg2)" }}>Nenhum canal com esse nome.</p>}
       </div>
     </div>
   );

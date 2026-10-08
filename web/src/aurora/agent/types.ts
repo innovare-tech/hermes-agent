@@ -7,7 +7,8 @@ export type MemoryTarget = "memory" | "user";
 /** MEMORY.md (notas do agente) e USER.md (perfil de você), entrada por entrada. */
 export type MemoryData = { memory: string[]; user: string[]; limits: Record<MemoryTarget, number>; enabled: Record<MemoryTarget, boolean> };
 
-export type Skill = { name: string; origin: "aprendida" | "hub" | "sua"; description: string; uses: number; version: string; updated: string };
+/** origin: incluída no Hermes, instalada do Hub, ou criada nesta máquina (pelo agente ou por você). */
+export type Skill = { name: string; origin: "incluida" | "hub" | "local"; description: string; uses: number; category: string; enabled: boolean };
 
 export type CronJob = { id: string; title: string; human: string; expr: string; next: string; dest: string; destIcon: string; enabled: boolean; profile?: string };
 export type CronPreview = { human: string; expr: string; dest: string };
@@ -16,7 +17,7 @@ export type Subagent = { id: string; name: string; task: string; pct: number; no
 export type SubagentDone = { task: string; name: string; tokens: string; dur: string };
 
 /** Credencial/ajuste de um canal (vem do catálogo do backend, gravado no .env). */
-export type GatewayField = { key: string; label: string; help: string; url: string | null; secret: boolean; list: boolean; advanced: boolean; isSet: boolean; value: string };
+export type GatewayField = { key: string; label: string; help: string; url: string | null; secret: boolean; list: boolean; advanced: boolean; isSet: boolean; value: string; example?: string };
 export type Gateway = {
   id: string;
   name: string;
@@ -29,6 +30,18 @@ export type Gateway = {
   description: string;
   docsUrl: string;
   fields: GatewayField[];
+  /** Canal principal (aparece antes); os demais ficam em "Outros canais". */
+  main: boolean;
+};
+/** Provedor de modelo no assistente: com chave (lista modelos) ou sem (pede a chave, ou o terminal). */
+export type ProviderOption = {
+  id: string;
+  name: string;
+  connected: boolean;
+  /** Variável do .env para colar a chave; null = autenticação que só o terminal faz (OAuth, nuvem). */
+  keyEnv: string | null;
+  models: string[];
+  current: boolean;
 };
 /** Chave de API do .env (provedores de modelo e ferramentas). */
 export type ApiKey = { key: string; description: string; url: string | null; category: string; isSet: boolean; preview: string; advanced: boolean };
@@ -46,18 +59,22 @@ export type Settings = {
   backend: string;
   personas: string[];
   persona: string;
-  tools: { id: string; name: string; description: string; icon: string; enabled: boolean }[];
+  tools: { id: string; name: string; description: string; icon: string; enabled: boolean; available: boolean }[];
   /** Opções de modelo indisponíveis (o resto da tela segue funcionando). */
   modelError?: string;
 };
 
 export interface AgentAdapter {
   sessions(query: string, source: string): Promise<SessionRow[]>;
+  renameSession(id: string, title: string): Promise<void>;
+  deleteSession(id: string): Promise<void>;
   memory(): Promise<MemoryData>;
   addMemory(target: MemoryTarget, content: string): Promise<MemoryData>;
   editMemory(target: MemoryTarget, entry: string, content: string): Promise<MemoryData>;
   removeMemory(target: MemoryTarget, entry: string): Promise<MemoryData>;
   skills(): Promise<Skill[]>;
+  toggleSkill(name: string, enabled: boolean): Promise<void>;
+  skillContent(name: string): Promise<string>;
   crons(): Promise<CronJob[]>;
   toggleCron(job: CronJob): Promise<void>;
   /** Linguagem natural → prévia (null enquanto não reconhece). */
@@ -71,6 +88,7 @@ export interface AgentAdapter {
   testGateway(id: string): Promise<{ ok: boolean; message: string }>;
   gatewayAction(action: "start" | "stop" | "restart"): Promise<void>;
   apiKeys(): Promise<ApiKey[]>;
+  providerCatalog(refresh?: boolean): Promise<ProviderOption[]>;
   setApiKey(key: string, value: string): Promise<void>;
   deleteApiKey(key: string): Promise<void>;
   logs(): Promise<LogLine[]>;

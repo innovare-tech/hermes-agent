@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { BizTag, PageHeader, spot } from "../Chrome";
+import { humanizeSchedule } from "../agent/cron";
 import { Icon } from "../Icon";
 import { parsePlaybook } from "../ops/playbook";
 import { PlaybookFlow } from "../ops/PlaybookFlow";
 import { PlaybookSettings } from "../ops/PlaybookSettings";
-import { deletePlaybook, inBiz, savePlaybook, useStore } from "../store";
+import { ask, deletePlaybook, inBiz, savePlaybook, toast, useStore } from "../store";
 
 export function Playbooks() {
   const s = useStore((x) => x);
@@ -15,7 +16,7 @@ export function Playbooks() {
 
   const create = async () => {
     const p = parsePlaybook(draft, s.biz === "all" ? "" : s.biz);
-    if (!p) return;
+    if (!p) return toast("Descreva o fluxo — ex.: “Boletos: quando chegar um boleto no e-mail, avise no Telegram”");
     const { id: _local, runs: _r, lastRun: _l, ...data } = p;
     const saved = await savePlaybook(data, "Fluxo salvo");
     if (saved) {
@@ -39,7 +40,7 @@ export function Playbooks() {
             placeholder="ex.: quando um cliente pedir nota fiscal no WhatsApp, gere a NF no sistema e envie o PDF"
             style={{ flex: 1, border: 0, outline: 0, background: "transparent", color: "var(--fg)", fontSize: 14 }}
           />
-          <button className="au-primary" onClick={create} style={{ opacity: draft.trim() ? 1 : 0.45 }}>
+          <button className="au-primary" onClick={create} style={{ opacity: draft.trim() ? 1 : 0.6 }}>
             Criar fluxo
           </button>
         </div>
@@ -77,8 +78,14 @@ export function Playbooks() {
                   {p.schedule && (
                     <span style={{ display: "flex", gap: 6, alignItems: "center", fontFamily: "var(--fm)", fontSize: 10.5, color: p.lastError ? "var(--err)" : "var(--acc)" }}>
                       <Icon name="calendar-clock" size={11} />
-                      {p.schedule}
+                      {humanizeSchedule(p.schedule)}
                       {p.enabled && p.nextRun ? ` · próxima ${p.nextRun}` : ""}
+                    </span>
+                  )}
+                  {p.triggerKind === "keyword" && p.keywords && (
+                    <span style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11.5, color: "var(--acc)" }}>
+                      <Icon name="zap" size={11} />
+                      quando aparecer: {p.keywords}
                     </span>
                   )}
                   <span style={{ display: "flex", gap: 10, alignItems: "center", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>
@@ -98,7 +105,7 @@ export function Playbooks() {
             <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
               <PlaybookFlow key={sel.id} p={sel} />
               <PlaybookSettings key={sel.id + JSON.stringify(sel)} p={sel} />
-              <button className="au-outline danger" onClick={() => window.confirm(`Remover o playbook “${sel.name}”?`) && deletePlaybook(sel.id)} style={{ alignSelf: "flex-end" }}>
+              <button className="au-outline danger" onClick={async () => (await ask({ title: `Remover o playbook “${sel.name}”?`, body: sel.schedule ? "O agendamento dele também é removido." : undefined, confirm: "Remover", danger: true })) && deletePlaybook(sel.id)} style={{ alignSelf: "flex-end" }}>
                 Remover playbook
               </button>
             </div>

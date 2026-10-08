@@ -5,6 +5,7 @@ import { Icon } from "../Icon";
 import { chat } from "../chat";
 import { Composer } from "../chat/Composer";
 import { ContextPanel } from "../chat/ContextPanel";
+import { plural } from "../chat/sources";
 import { Markdown } from "../chat/Markdown";
 import { ToolTimeline } from "../chat/ToolTimeline";
 import { answered, applyEvent, interrupted } from "../chat/turn";
@@ -12,7 +13,10 @@ import type { AgentMessage, ApprovalChoice, Block, ChatMessage, SessionInfo, Sla
 import { ApprovalCard } from "../ops/ApprovalCard";
 import { actOnBehalf, loadSessions, toast, useStore } from "../store";
 
-const BLANK: SessionInfo = { model: "", backend: "local", persona: "padrão", ctxUsed: 0, ctxMax: 0, cost: 0 };
+const BACKEND_LABEL: Record<string, string> = { local: "nesta máquina", docker: "Docker", ssh: "via SSH", modal: "Modal", daytona: "Daytona", singularity: "Singularity", vercel_sandbox: "Vercel Sandbox" };
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
+const BLANK: SessionInfo = { model: "", backend: "local", persona: "padrão", ctxUsed: null, ctxMax: 0, cost: null };
 
 const SUGGESTIONS = [
   { icon: "brain", t: "O que você sabe sobre mim?", d: "Mostra a memória e o perfil que o Hermes guardou" },
@@ -35,9 +39,13 @@ export function Chat() {
   const [insp, setInsp] = useState(wide);
   const [commands, setCommands] = useState<SlashCommand[]>([]);
   const scroller = useRef<HTMLDivElement>(null);
+  // Conversa criada aqui: a URL passa a /chat/<id> sem recarregar o histórico (apagaria a resposta em andamento).
+  const created = useRef<string | null>(null);
 
   // Sidebar/URL trocou de sessão: recarrega o histórico. Sem id = conversa nova.
   useEffect(() => {
+    if (param && param === created.current) return;
+    created.current = null;
     setSid(param ?? null);
     setMessages([]);
     setInfo(BLANK);
@@ -72,11 +80,17 @@ export function Chat() {
   async function send(text: string) {
     if (running) return;
     setRunning(true);
+    // Mensagem na tela antes de criar a sessão: sem piscar a tela vazia ("0 mensagens").
+    const now = Date.now();
+    setMessages((list) => [...list, { id: "u" + now, role: "user", text }, { id: "a" + now, role: "agent", steps: [], text: "", live: true, command: text.startsWith("/") }]);
     try {
-      const id = sid ?? (await chat.create());
+      let id = sid;
+      if (!id) {
+        id = await chat.create();
+        created.current = id;
+        navigate(`/chat/${id}`, { replace: true, state: { created: true } });
+      }
       setSid(id);
-      const now = Date.now();
-      setMessages((list) => [...list, { id: "u" + now, role: "user", text }, { id: "a" + now, role: "agent", steps: [], text: "", live: true }]);
       await chat.send(id, text, (e) => {
         updateLive((m) => applyEvent(m, e));
         if (e.type === "done") {
@@ -124,7 +138,7 @@ export function Chat() {
     } catch (e) {
       return toast(e instanceof Error ? e.message : "Não consegui trocar o modelo");
     }
-    setInfo((i) => ({ ...i, model }));
+    setInfo((i) => ({ ...i, model, provider }));
     toast(sid ? "Modelo desta conversa: " + model : "Modelo padrão: " + model);
   }
 
@@ -144,20 +158,20 @@ export function Chat() {
         <header style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 26px", minHeight: 60, borderBottom: "1px solid var(--line)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
             <span style={{ fontSize: 14.5, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cur?.title ?? "Nova conversa"}</span>
-            <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              sessão {sid ?? "nova"} · {(cur?.source ?? "web").toLowerCase()} · {messages.length} mensagens
+            <span title={sid ? "id: " + sid : undefined} style={{ fontSize: 11.5, color: "var(--fg3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {sid ? `${cur?.source ?? "Web"} · ${plural(cur?.msgs ?? messages.length, "mensagem", "mensagens")}` : "ainda não salva — começa ao enviar"}
             </span>
           </div>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-            <span className="au-chip">
+            <span className="au-chip" title="Onde os comandos do agente rodam (Configurações → Onde os comandos rodam)">
               <Icon name="box" size={12} />
-              {info.backend}
+              {BACKEND_LABEL[info.backend] ?? info.backend}
             </span>
-            <span className="au-chip">
+            <span className="au-chip" title="Personalidade das respostas (Configurações → Personalidade)">
               <Icon name="drama" size={12} />
-              persona: {info.persona}
+              {cap(info.persona === "padrão" || !info.persona ? "Personalidade padrão" : info.persona)}
             </span>
-            <button className="au-iconbtn" title="Contexto" aria-label="Contexto" aria-pressed={insp} onClick={() => setInsp(!insp)}>
+            <button className="au-iconbtn" title="Memória da conversa e custo" aria-label="Memória da conversa e custo" aria-pressed={insp} onClick={() => setInsp(!insp)}>
               <Icon name="panel-right" size={15} />
             </button>
           </div>
@@ -212,7 +226,7 @@ export function Chat() {
           </div>
         </div>
 
-        <Composer running={running} model={info.model || "sem modelo"} commands={commands} onSend={send} onStop={stop} onPickModel={pickModel} initialDraft={search.get("q") ?? ""} />
+        <Composer running={running} model={info.model || "sem modelo"} provider={info.provider} commands={commands} onSend={send} onStop={stop} onPickModel={pickModel} initialDraft={search.get("q") ?? ""} />
       </div>
       {insp && <ContextPanel info={info} onCompress={() => send("/compress")} />}
     </div>
@@ -275,19 +289,23 @@ function AgentBubble({ m, onSend, onCron, onAnswer }: { m: AgentMessage; onSend:
         )}
         {m.text && <Markdown text={m.text} tail={m.live && !running && m.approval?.status !== "pending" ? <span className="au-caret" aria-hidden="true" /> : undefined} />}
         {m.blocks?.map((b, i) => <BlockView key={i} b={b} onCron={onCron} />)}
-        {m.meta && (
+        {!m.live && !!m.text && (
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>
-            <span>{m.meta}</span>
+            {m.meta && <span>{m.meta}</span>}
             <span style={{ display: "flex", gap: 4 }}>
               <button className="au-mini" title="Copiar" aria-label="Copiar" onClick={() => navigator.clipboard.writeText(m.text).then(() => toast("Copiado"), () => {})}>
                 <Icon name="copy" size={12} />
               </button>
-              <button className="au-mini" title="/retry" aria-label="Refazer" onClick={() => onSend("/retry")}>
-                <Icon name="rotate-ccw" size={12} />
-              </button>
-              <button className="au-mini" title="/undo" aria-label="Desfazer" onClick={() => onSend("/undo")}>
-                <Icon name="undo-2" size={12} />
-              </button>
+              {!m.command && (
+                <>
+                  <button className="au-mini" title="Refazer: gera a última resposta de novo" aria-label="Refazer" onClick={() => onSend("/retry")}>
+                    <Icon name="rotate-ccw" size={12} />
+                  </button>
+                  <button className="au-mini" title="Desfazer: apaga a última pergunta e resposta" aria-label="Desfazer" onClick={() => onSend("/undo")}>
+                    <Icon name="undo-2" size={12} />
+                  </button>
+                </>
+              )}
             </span>
             {m.learned && (
               <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, color: "var(--ok)", animation: "hpop .7s .2s cubic-bezier(.3,1.5,.5,1) both" }}>

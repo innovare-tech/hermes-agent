@@ -20,6 +20,42 @@ def _store():
     return store
 
 
+async def _act(action: str, *, kind: str = "cfg", business_id: Optional[str] = None) -> None:
+    """Registra na Atividade (fail-open) — o painel não precisa lembrar de logar."""
+    from hermes_cli.web_routers.ops_activity import log
+
+    await asyncio.to_thread(log, action, kind=kind, business_id=business_id)
+
+
+_MODES = ("Observar", "Rascunhar", "Autônomo")
+_DOW = ("domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado")
+
+
+def _human_schedule(s: str) -> str:
+    """Cron de 5 campos → português para a Atividade ("0 18 * * 5" → "toda sexta às 18:00")."""
+    import re
+
+    m = re.fullmatch(r"(\d+) (\d+) (\*|\d+) \* (\*|[\d,-]+)", s.strip())
+    if not m:
+        return s
+    at = f"{int(m[2]):02d}:{int(m[1]):02d}"
+    if m[3] != "*":
+        return f"todo dia {m[3]} às {at}"
+    if m[4] == "*":
+        return f"todo dia às {at}"
+    if m[4] == "1-5":
+        return f"dias úteis às {at}"
+    if m[4].isdigit() and int(m[4]) < 7:
+        d = int(m[4])
+        return f"{'todo' if d in (0, 6) else 'toda'} {_DOW[d]} às {at}"
+    return s
+
+
+def _clip(t: str, n: int = 60) -> str:
+    t = " ".join(str(t).split())
+    return t if len(t) <= n else t[: n - 1] + "…"
+
+
 async def _run(fn, *args, **kwargs):
     try:
         return await asyncio.to_thread(fn, *args, **kwargs)
@@ -43,17 +79,23 @@ async def list_businesses():
 
 @router.post("/businesses")
 async def create_business(body: BusinessBody):
-    return await _run(_store().save_business, body.name, body.color)
+    b = await _run(_store().save_business, body.name, body.color)
+    await _act(f"Criou o negócio “{b['name']}”", business_id=b["id"])
+    return b
 
 
 @router.put("/businesses/{bid}")
 async def update_business(bid: str, body: BusinessBody):
-    return await _run(_store().save_business, body.name, body.color, bid)
+    b = await _run(_store().save_business, body.name, body.color, bid)
+    await _act(f"Editou o negócio “{b['name']}”", business_id=bid)
+    return b
 
 
 @router.delete("/businesses/{bid}")
 async def delete_business(bid: str):
+    name = next((b["name"] for b in await _run(_store().list_businesses) if b["id"] == bid), bid)
     await _run(_store().delete_business, bid)
+    await _act(f"Removeu o negócio “{name}”")
     return {"ok": True}
 
 
@@ -72,7 +114,29 @@ async def list_channels():
 
 @router.put("/channels/{cid:path}")
 async def update_channel(cid: str, body: ChannelBody):
-    return await _run(_store().update_channel, cid, mode=body.mode, business_id=body.business_id, name=body.name)
+    ch = await _run(_store().update_channel, cid, mode=body.mode, business_id=body.business_id, name=body.name)
+    label = ch.get("name") or cid
+    if body.mode is not None:
+        await _act(f"{label}: autonomia → {_MODES[body.mode]}", business_id=ch.get("business_id"))
+    if body.business_id != "":
+        await _act(f"{label}: negócio alterado", business_id=ch.get("business_id"))
+    return ch
+
+
+class OpsSettings(BaseModel):
+    default_mode: int
+
+
+@router.get("/settings")
+async def get_settings():
+    return {"default_mode": await _run(_store().default_mode)}
+
+
+@router.put("/settings")
+async def put_settings(body: OpsSettings):
+    mode = await _run(_store().set_default_mode, body.default_mode)
+    await _act(f"Canais novos passam a começar em {_MODES[mode]}")
+    return {"default_mode": mode}
 
 
 # ---- caixa de entrada ----
@@ -161,7 +225,7 @@ async def list_activity(limit: int = 300):
 
 @router.post("/activity")
 async def log_activity(body: ActivityBody):
-    if body.kind not in {"msg", "cmd", "pay", "mem", "tkt"}:
+    if body.kind not in {"msg", "cmd", "pay", "mem", "tkt", "cfg"}:
         raise HTTPException(400, "tipo inválido")
     return await _run(_store().log_activity, body.kind, body.action, body.why,
                       business_id=body.business_id, reversible=body.reversible, ref=body.ref)
@@ -190,7 +254,9 @@ async def list_watches():
 
 @router.put("/watches")
 async def set_watches(body: WatchesBody):
-    return await _run(_store().set_watches, body.words)
+    words = await _run(_store().set_watches, body.words)
+    await _act("Palavras vigiadas: " + (", ".join(words) if words else "nenhuma"))
+    return words
 
 
 # ---- pessoas ----
@@ -205,6 +271,7 @@ class PersonBody(BaseModel):
     notes: str = ""
     pending: list[str] = []
     waiting_since: Optional[float] = None
+    handles: dict[str, str] = {}  # phone / telegram / email — liga o contato às mensagens
 
 
 @router.get("/people")
@@ -214,12 +281,16 @@ async def list_people():
 
 @router.put("/people")
 async def save_person(body: PersonBody):
-    return await _run(_store().save_person, body.model_dump())
+    p = await _run(_store().save_person, body.model_dump())
+    await _act(f"{'Editou' if body.id else 'Adicionou'} o contato {p['name']}", business_id=p.get("business_id"))
+    return p
 
 
 @router.delete("/people/{pid}")
 async def delete_person(pid: str):
+    name = next((p["name"] for p in await _run(_store().list_people) if p["id"] == pid), pid)
     await _run(_store().delete_person, pid)
+    await _act(f"Removeu o contato {name}")
     return {"ok": True}
 
 
@@ -234,6 +305,9 @@ class PlaybookBody(BaseModel):
     enabled: bool = True
     schedule: str = ""  # vazio = só manual; senão sintaxe do cron ("every day 9am", "0 9 * * *", "2h")
     deliver: str = "local"  # "local" = só registra; ou "plataforma:chat_id"
+    trigger_kind: str = "manual"  # manual | schedule | keyword
+    keywords: str = ""  # separadas por vírgula (gatilho keyword)
+    channel_id: Optional[str] = None  # restringe o gatilho keyword a um canal
 
 
 def _playbooks():
@@ -257,7 +331,10 @@ async def list_playbooks():
 @router.put("/playbooks")
 async def save_playbook(body: PlaybookBody):
     data = body.model_dump(exclude={"schedule", "deliver"})
-    return await _run(_playbooks().save, data, body.schedule, body.deliver)
+    p = await _run(_playbooks().save, data, body.schedule, body.deliver)
+    when = f" · {_human_schedule(p['schedule'])}" if p.get("schedule") else ""
+    await _act(f"{'Salvou' if body.id else 'Criou'} o playbook “{p['name']}”{when}{'' if p['enabled'] else ' (desligado)'}", business_id=p.get("business_id"))
+    return p
 
 
 @router.post("/playbooks/{pid}/run")
@@ -272,7 +349,9 @@ async def run_playbook(pid: str):
 
 @router.delete("/playbooks/{pid}")
 async def delete_playbook(pid: str):
+    name = next((p["name"] for p in await _run(_store().list_playbooks) if p["id"] == pid), pid)
     await _run(_playbooks().delete, pid)
+    await _act(f"Removeu o playbook “{name}”")
     return {"ok": True}
 
 
@@ -325,7 +404,9 @@ async def get_memory():
 @router.post("/memory")
 async def add_memory(body: MemoryAdd):
     target = _memory_target(body.target)
-    return await _run(_memory_apply, lambda s: s.add(target, body.content))
+    snap = await _run(_memory_apply, lambda s: s.add(target, body.content))
+    await _act(f"Guardou na memória: “{_clip(body.content)}”", kind="mem")
+    return snap
 
 
 @router.put("/memory")
@@ -333,10 +414,14 @@ async def edit_memory(body: MemoryEdit):
     target = _memory_target(body.target)
     if not (body.content or "").strip():
         raise HTTPException(400, "conteúdo vazio — use DELETE para remover")
-    return await _run(_memory_apply, lambda s: s.replace(target, body.entry, body.content, matched_entry=body.entry))
+    snap = await _run(_memory_apply, lambda s: s.replace(target, body.entry, body.content, matched_entry=body.entry))
+    await _act(f"Editou a memória: “{_clip(body.content or '')}”", kind="mem")
+    return snap
 
 
 @router.delete("/memory")
 async def remove_memory(body: MemoryEdit):
     target = _memory_target(body.target)
-    return await _run(_memory_apply, lambda s: s.remove(target, body.entry, matched_entry=body.entry))
+    snap = await _run(_memory_apply, lambda s: s.remove(target, body.entry, matched_entry=body.entry))
+    await _act(f"Esqueceu: “{_clip(body.entry)}”", kind="mem")
+    return snap

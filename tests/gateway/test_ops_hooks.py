@@ -8,6 +8,9 @@ import pytest
 @pytest.fixture(autouse=True)
 def _home(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
+    from ops_center import store
+
+    store.set_default_mode(store.AUTONOMOUS)  # estes testes partem de canais que respondem sozinhos
 
 
 def _msg(text, chat_id="42"):

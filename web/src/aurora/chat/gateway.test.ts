@@ -43,3 +43,29 @@ describe("send", () => {
     expect(events).toEqual([expect.objectContaining({ type: "error", message: expect.stringMatching(/conexão/) })]);
   });
 });
+
+describe("formatação", async () => {
+  const { ptPreview, toolOutput, WEB_COMMANDS } = await import("./gateway");
+  const { sourceLabel, plural } = await import("./sources");
+
+  it("prévia do passo em português", () => {
+    expect(ptPreview("echo um + 2 commands")).toBe("echo um + 2 comandos");
+    expect(ptPreview("ls + 1 command")).toBe("ls + 1 comando");
+  });
+
+  it("saída de terminal legível; JSON qualquer formatado", () => {
+    expect(toolOutput(JSON.stringify({ output: "um\ndois", exit_code: 0, error: null }))).toBe("um\ndois");
+    expect(toolOutput('{"output": "", "exit_code": 2, "error": "falhou"}')).toBe("erro: falhou\ncódigo de saída 2");
+    expect(toolOutput("texto puro")).toBe("texto puro");
+  });
+
+  it("origem e plural para humanos", () => {
+    expect([sourceLabel("tui"), sourceLabel("cli"), sourceLabel("web"), sourceLabel("api_server")]).toEqual(["Terminal", "Terminal", "Web", "API"]);
+    expect([plural(1, "mensagem", "mensagens"), plural(4, "mensagem", "mensagens")]).toEqual(["1 mensagem", "4 mensagens"]);
+  });
+
+  it("menu / sem comandos de terminal", () => {
+    const cmds = WEB_COMMANDS.map(([c]) => c);
+    for (const t of ["/redraw", "/mouse", "/quit", "/prompt", "/statusbar", "/login", "/yolo", "/topup"]) expect(cmds).not.toContain(t);
+  });
+});

@@ -48,3 +48,30 @@ def test_run_now_creates_one_shot_and_counts():
     assert playbooks.list_all() == []
     with pytest.raises(KeyError):
         playbooks.run_now(p["id"])
+
+
+def test_keyword_trigger_respects_mode_channel_and_pause(monkeypatch):
+    from cron import jobs
+    from ops_center import playbooks, store
+
+    kw = {**PB, "name": "Orçamentos", "trigger_kind": "keyword", "keywords": "orcamento, cotação", "enabled": True}
+    p = playbooks.save(kw, "", "telegram:-100")
+    assert p["trigger_kind"] == "keyword" and p["deliver"] == "telegram:-100" and p["cron_job_id"] is None
+
+    assert playbooks.fire_keyword("whatsapp", "55", "Me manda um ORÇAMENTO?", sender="Ana", mode=store.AUTONOMOUS) == ["Orçamentos"]
+    job = [j for j in jobs.list_jobs(include_disabled=True) if "(mensagem)" in j["name"]][-1]
+    assert job["deliver"] == "telegram:-100" and "ORÇAMENTO" in job["prompt"]
+    # Rascunhar: roda, mas só registra; Observar: não roda; sem palavra: não roda
+    playbooks.fire_keyword("whatsapp", "55", "cotação nova", mode=store.DRAFT)
+    assert [j for j in jobs.list_jobs(include_disabled=True) if "(mensagem)" in j["name"]][-1]["deliver"] == "local"
+    assert playbooks.fire_keyword("whatsapp", "55", "orcamento", mode=store.OBSERVE) == []
+    assert playbooks.fire_keyword("whatsapp", "55", "bom dia", mode=store.AUTONOMOUS) == []
+    # restrito a um canal; kill switch bloqueia
+    playbooks.save({**kw, "id": p["id"], "channel_id": "telegram:1"}, "", "local")
+    assert playbooks.fire_keyword("whatsapp", "55", "orcamento", mode=store.AUTONOMOUS) == []
+    monkeypatch.setattr("agent.estop.is_engaged", lambda: True)
+    assert playbooks.fire_keyword("telegram", "1", "orcamento", mode=store.AUTONOMOUS) == []
+    assert "disparado por mensagem de Ana" in store.list_activity()[-1]["action"] or any("disparado" in a["action"] for a in store.list_activity())
+
+    with pytest.raises(ValueError):
+        playbooks.save({**kw, "keywords": " , "}, "", "local")

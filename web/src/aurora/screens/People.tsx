@@ -82,9 +82,11 @@ export function People() {
             sel && (
               <PersonCard
                 p={sel}
-                businessName={s.businesses.find((b) => b.id === sel.business)?.name ?? "—"}
+                businessName={s.businesses.find((b) => b.id === sel.business)?.name ?? ""}
+                inbox={s.inbox}
                 onDraft={() => navigate(`/chat?q=${encodeURIComponent(draftPrompt(sel))}`)}
-                onHistory={() => navigate(`/sessions?q=${encodeURIComponent(sel.name)}`)}
+                onOpenMessage={(id) => navigate(`/inbox?sel=${id}`)}
+                onDone={(pd) => savePerson({ ...sel, pending: sel.pending.filter((x) => x !== pd) }, `Pendência concluída: ${pd}`)}
                 onEdit={() => setEditing(sel.id)}
                 onDelete={() => deletePerson(sel.id)}
               />

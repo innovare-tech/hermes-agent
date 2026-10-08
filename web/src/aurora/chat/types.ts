@@ -31,6 +31,8 @@ export type ChatApproval = {
 
 export type UserMessage = { id: string; role: "user"; text: string };
 export type AgentMessage = {
+  /** Resposta a um comando "/" (sem Refazer/Desfazer). */
+  command?: boolean;
   id: string;
   role: "agent";
   steps: ToolStep[];
@@ -54,18 +56,22 @@ export type ChatEvent =
 
 export type SessionInfo = {
   model: string;
+  /** Provedor escolhido aqui (o backend só informa o modelo). */
+  provider?: string;
   backend: string;
   persona: string;
-  ctxUsed: number;
+  /** null = ainda não informado (conversa reaberta, antes do 1º turno). */
+  ctxUsed: number | null;
   ctxMax: number;
-  cost: number;
+  /** null = o provedor não informa custo (nunca mostrar "$0,00" como se fosse grátis). */
+  cost: number | null;
   /** Só aparecem no painel quando o backend expõe. */
   memories?: string[];
   skill?: { name: string; version: string };
   subagents?: { name: string; dur: string }[];
 };
 
-export type SlashCommand = { cmd: string; desc: string };
+export type SlashCommand = { cmd: string; desc: string; skill?: boolean };
 
 export interface ChatAdapter {
   sessions(): Promise<Session[]>;

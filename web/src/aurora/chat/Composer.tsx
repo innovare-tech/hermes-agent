@@ -6,6 +6,7 @@ import type { SlashCommand } from "./types";
 type Props = {
   running: boolean;
   model: string;
+  provider?: string;
   commands: SlashCommand[];
   onSend: (text: string) => void;
   onStop: () => void;
@@ -14,12 +15,14 @@ type Props = {
   initialDraft?: string;
 };
 
-export function Composer({ running, model, commands, onSend, onStop, onPickModel, initialDraft = "" }: Props) {
+export function Composer({ running, model, provider, commands, onSend, onStop, onPickModel, initialDraft = "" }: Props) {
   const [draft, setDraft] = useState(initialDraft);
   const [picking, setPicking] = useState(false);
   const [pick, setPick] = useState(0);
+  // Menu "/" fechado por Esc/clique fora até o texto mudar.
+  const [hidden, setHidden] = useState(false);
   const hasDraft = draft.trim() !== "";
-  const slash = draft.startsWith("/") && !draft.includes(" ") ? commands.filter((c) => c.cmd.startsWith(draft)) : [];
+  const slash = !hidden && draft.startsWith("/") && !draft.includes(" ") ? commands.filter((c) => c.cmd.startsWith(draft)) : [];
   const sel = Math.min(pick, Math.max(0, slash.length - 1));
 
   const send = () => {
@@ -29,7 +32,10 @@ export function Composer({ running, model, commands, onSend, onStop, onPickModel
   };
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (slash.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    if (slash.length && e.key === "Escape") {
+      e.preventDefault();
+      setHidden(true);
+    } else if (slash.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
       e.preventDefault();
       setPick((sel + (e.key === "ArrowDown" ? 1 : slash.length - 1)) % slash.length);
     } else if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey && slash.length) {
@@ -47,6 +53,7 @@ export function Composer({ running, model, commands, onSend, onStop, onPickModel
         {picking && (
           <ModelPicker
             current={model}
+            currentProvider={provider}
             onClose={() => setPicking(false)}
             onPick={(p, m) => {
               setPicking(false);
@@ -62,8 +69,11 @@ export function Composer({ running, model, commands, onSend, onStop, onPickModel
             style={{ position: "absolute", left: 0, right: 0, bottom: "calc(100% + 10px)", border: "1px solid var(--line2)", borderRadius: "var(--r)", boxShadow: "var(--shadow)", padding: 6, display: "flex", flexDirection: "column", gap: 1, maxHeight: "min(360px, 50vh)", overflow: "auto", animation: "hin .2s ease both", zIndex: 5 }}
           >
             {slash.map((c, i) => (
-              <button key={c.cmd} role="option" aria-selected={i === sel} className="au-slash" ref={i === sel ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined} onClick={() => setDraft(c.cmd + " ")}>
-                <span style={{ fontFamily: "var(--fm)", fontSize: 12.5, color: "var(--acc)" }}>{c.cmd}</span>
+              <button key={c.cmd} role="option" aria-selected={i === sel} className="au-slash" ref={i === sel ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined} onMouseDown={(e) => e.preventDefault()} onClick={() => setDraft(c.cmd + " ")}>
+                <span style={{ fontFamily: "var(--fm)", fontSize: 12.5, color: "var(--acc)", display: "flex", alignItems: "center", gap: 6 }}>
+                  {c.cmd}
+                  {c.skill && <span style={{ fontSize: 9.5, color: "var(--fg3)", letterSpacing: ".06em" }}>SKILL</span>}
+                </span>
                 <span style={{ fontSize: 12.5, color: "var(--fg2)" }}>{c.desc}</span>
               </button>
             ))}
@@ -86,20 +96,17 @@ export function Composer({ running, model, commands, onSend, onStop, onPickModel
             onChange={(e) => {
               setDraft(e.target.value);
               setPick(0);
+              setHidden(false);
             }}
             onKeyDown={onKey}
+            onBlur={() => setHidden(true)}
+            onFocus={() => setHidden(false)}
             rows={2}
             placeholder="Peça algo ao Hermes…   / para comandos"
             style={{ width: "100%", resize: "none", border: 0, outline: 0, background: "transparent", color: "var(--fg)", fontSize: 15, lineHeight: 1.5 }}
           />
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {/* ponytail: anexo e voz ficam visuais até o upload/transcrição entrarem na Conversa */}
-            <button className="au-tool" title="Anexar" aria-label="Anexar">
-              <Icon name="paperclip" size={15} />
-            </button>
-            <button className="au-tool" title="Voz" aria-label="Voz">
-              <Icon name="mic" size={15} />
-            </button>
+            {/* ponytail: sem Anexar/Voz até upload e transcrição existirem na Conversa (botão que não faz nada não aparece) */}
             <button className="au-model" aria-haspopup="dialog" aria-expanded={picking} onClick={() => setPicking(!picking)}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--acc)" }} />
               {model}

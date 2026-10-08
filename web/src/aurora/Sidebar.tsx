@@ -9,7 +9,6 @@ export const OPS: NavItem[] = [
   { to: "/inbox", label: "Caixa de entrada", icon: "inbox" },
   { to: "/approvals", label: "Aprovações", icon: "shield-check" },
   { to: "/radar", label: "Radar de grupos", icon: "radar" },
-  { to: "/support", label: "Suporte", icon: "life-buoy" },
   { to: "/people", label: "Pessoas", icon: "users" },
   { to: "/playbooks", label: "Playbooks", icon: "workflow" },
   { to: "/activity", label: "Atividade", icon: "activity" },
@@ -65,7 +64,7 @@ function NavRow({ item, index, count, hot }: { item: NavItem; index: number; cou
   );
 }
 
-const GROUPS = ["Hoje", "Ontem", "Esta semana"] as const;
+const GROUPS = ["Hoje", "Ontem", "Esta semana", "Mais antigas"] as const;
 
 export function Sidebar() {
   const navigate = useNavigate();
@@ -77,7 +76,7 @@ export function Sidebar() {
         <div className="au-logo" aria-hidden="true">☤</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span className="au-display" style={{ fontSize: 19, lineHeight: 1 }}>Hermes</span>
-          <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>{s.account ? `${s.account.home} · ${s.account.version}` : " "}</span>
+          <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>{s.account?.version || " "}</span>
         </div>
         <span
           role="status"
@@ -91,14 +90,15 @@ export function Sidebar() {
         <button className="au-new" onClick={() => navigate("/chat")}>
           <Icon name="plus" size={15} color="var(--acc)" />
           Nova conversa
-          <span className="au-kbd">⌘K</span>
+          <span className="au-kbd">{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K"}</span>
         </button>
       </div>
 
       <BusinessSwitcher />
 
-      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
-        <nav aria-label="Navegação" style={{ display: "flex", flexDirection: "column", gap: 1, padding: "0 8px 8px" }}>
+      {/* Tela alta: menu fixo e só as conversas rolam. Tela baixa (CSS .au-side-body): tudo rola junto. */}
+      <div className="au-side-body">
+      <nav aria-label="Navegação" className="au-side-nav" style={{ display: "flex", flexDirection: "column", gap: 1, padding: "0 8px 8px" }}>
           <div className="au-label" style={{ padding: "12px 11px 6px" }}>Operação</div>
           {OPS.map((n, i) => (
             <NavRow key={n.to} item={n} index={i} hot count={counts[n.to] ? String(counts[n.to]) : ""} />
@@ -107,9 +107,10 @@ export function Sidebar() {
           {AGENT.map((n, i) => (
             <NavRow key={n.to} item={n} index={i + 8} hot={false} count="" />
           ))}
-        </nav>
+      </nav>
 
-        <div style={{ padding: "0 8px 80px", borderTop: "1px solid var(--line)" }}>
+      <div className="au-side-list" style={{ borderTop: "1px solid var(--line)" }}>
+        <div style={{ padding: "0 8px 16px" }}>
           {GROUPS.filter((g) => s.sessions.some((x) => x.group === g)).map((g) => (
             <div key={g}>
               <div className="au-label" style={{ padding: "14px 11px 6px" }}>{g}</div>
@@ -131,6 +132,7 @@ export function Sidebar() {
             </div>
           ))}
         </div>
+      </div>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderTop: "1px solid var(--line)" }}>
