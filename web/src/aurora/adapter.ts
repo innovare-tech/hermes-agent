@@ -224,7 +224,8 @@ export interface OpsAdapter {
   keep(inboxId: string): Promise<void>;
   /** Reverte uma ação da Atividade quando ela é reversível. */
   undo(activityId: string): Promise<void>;
-  setAutonomy(channelId: string, mode: AutonomyMode): Promise<void>;
+  /** `confirm` é exigido pelo backend ao pôr um grupo em Autônomo. */
+  setAutonomy(channelId: string, mode: AutonomyMode, confirm?: boolean): Promise<void>;
   setDefaultMode(mode: AutonomyMode): Promise<void>;
   setChannelBusiness(channelId: string, businessId: BizId | null): Promise<void>;
   saveBusiness(b: { id?: string; name: string; color: string }): Promise<Business>;

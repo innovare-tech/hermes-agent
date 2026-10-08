@@ -12,9 +12,11 @@ de saída (``gateway/outbound_guard.py``, ``is_muted``) impede o Hermes de envia
 
 from __future__ import annotations
 
+import difflib
 import json
 import sqlite3
 import time
+import unicodedata
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
@@ -77,6 +79,10 @@ CREATE TABLE IF NOT EXISTS approvals (
   decided_by TEXT, decided_by_id TEXT, decided_at REAL, note TEXT, result TEXT
 );
 CREATE INDEX IF NOT EXISTS approvals_status ON approvals(status, at);
+CREATE TABLE IF NOT EXISTS clients (
+  system_client_id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT '',
+  name_norm TEXT NOT NULL DEFAULT '', updated_at REAL NOT NULL DEFAULT 0
+);
 """
 
 
@@ -114,9 +120,14 @@ def _migrate(con: sqlite3.Connection) -> None:
             con.execute(f"ALTER TABLE inbox ADD COLUMN {name} {ddl}")
     cols = {r[1] for r in con.execute("PRAGMA table_info(channels)")}
     for name, ddl in (("client_id", "TEXT"), ("client_name", "TEXT"), ("listen_silence_min", "INTEGER"),
-                      ("listen_max_min", "INTEGER")):
+                      ("listen_max_min", "INTEGER"), ("not_client", "INTEGER NOT NULL DEFAULT 0")):
         if name not in cols:
             con.execute(f"ALTER TABLE channels ADD COLUMN {name} {ddl}")
+    cols = {r[1] for r in con.execute("PRAGMA table_info(clients)")}
+    for name, ddl in (("plan", "TEXT NOT NULL DEFAULT ''"), ("name_norm", "TEXT NOT NULL DEFAULT ''"),
+                      ("updated_at", "REAL NOT NULL DEFAULT 0")):
+        if name not in cols:
+            con.execute(f"ALTER TABLE clients ADD COLUMN {name} {ddl}")
     cols = {r[1] for r in con.execute("PRAGMA table_info(playbooks)")}
     for name, ddl in (("trigger_kind", "TEXT NOT NULL DEFAULT 'manual'"), ("keywords", "TEXT NOT NULL DEFAULT ''"),
                       ("channel_id", "TEXT"), ("deliver", "TEXT NOT NULL DEFAULT 'local'")):
@@ -180,9 +191,12 @@ def set_default_mode(mode: int) -> int:
 
 
 def touch_channel(platform: str, chat_id: str, name: str = "", kind: str = "dm") -> dict:
-    """Registra/atualiza um canal visto pelo gateway e devolve sua política atual."""
+    """Registra/atualiza um canal visto pelo gateway e devolve sua política atual.
+
+    Grupo de WhatsApp novo nasce em Escutar (grupos de clientes: só lê e avisa a equipe); o resto
+    nasce no modo padrão. Canal já registrado mantém o modo."""
     cid = channel_id(platform, chat_id)
-    mode = default_mode()
+    mode = LISTEN if platform == "whatsapp" and kind == "group" else default_mode()
     with connect() as c:
         c.execute(
             "INSERT INTO channels(id, platform, chat_id, name, kind, mode, last_seen) VALUES(?,?,?,?,?,?,?) "
@@ -231,6 +245,221 @@ def update_channel(cid: str, *, mode: Optional[int] = None, business_id: Optiona
     if not row:
         raise KeyError(cid)
     return dict(row)
+
+
+# ---- canais (tela Canais, A2): vínculo com cliente, janela por canal, visão enriquecida ----
+
+SUGGEST_MIN = 0.75  # abaixo disso não sugerimos cliente nenhum
+
+
+def _check_window(silence: int, max_min: int) -> None:
+    if not (1 <= silence <= 60 and 5 <= max_min <= 240):
+        raise ValueError("janela inválida: silêncio 1–60 min, máximo 5–240 min")
+    if max_min <= silence:
+        raise ValueError("janela inválida: o máximo precisa ser maior que o silêncio")
+
+
+def _norm(text: Any) -> str:
+    """Minúsculas, sem acento e com espaços colapsados (busca e semelhança ignoram acento)."""
+    s = unicodedata.normalize("NFKD", str(text or ""))
+    return " ".join("".join(ch for ch in s if not unicodedata.combining(ch)).casefold().split())
+
+
+def _alert_channel_id(cfg: Optional[dict] = None) -> str:
+    """Canal que recebe os avisos do Escutar (``notify_target`` sem o tópico); '' = nenhum configurado."""
+    parts = str((cfg or listen_settings()).get("notify_target") or "").strip().split(":")
+    return f"{parts[0]}:{parts[1]}" if len(parts) >= 2 and parts[0] and parts[1] else ""
+
+
+def _suggest(group_norm: str, clients: list) -> Optional[dict]:
+    # ponytail: varre todos os clientes por canal sem vínculo (difflib); com milhares de clientes e
+    # centenas de grupos, trocar por índice de tokens.
+    best: Optional[tuple] = None
+    for cid, name, norm in clients:
+        if not norm:
+            continue
+        score = 0.8 if len(norm) >= 4 and norm in group_norm else 0.0  # nome do cliente dentro do nome do grupo
+        m = difflib.SequenceMatcher(None, group_norm, norm)
+        if m.real_quick_ratio() >= SUGGEST_MIN and m.quick_ratio() >= SUGGEST_MIN:
+            score = max(score, m.ratio())
+        if score >= SUGGEST_MIN and (best is None or score > best[0]):
+            best = (score, cid, name)
+    return {"clientId": best[1], "name": best[2], "confidence": round(best[0], 2)} if best else None
+
+
+def suggest_client(group_name: str) -> Optional[dict]:
+    """Cliente mais parecido com o nome do grupo (``{clientId, name, confidence}``) ou ``None`` se < 0,75."""
+    with connect() as c:
+        clients = [(r[0], r[1], r[2]) for r in c.execute("SELECT system_client_id, name, name_norm FROM clients")]
+    return _suggest(_norm(group_name), clients)
+
+
+def channels_view() -> list[dict]:
+    """Canais para a tela Canais: as colunas do ``ops.db`` mais vínculo, janela, atividade do dia e sugestão."""
+    cfg = listen_settings()
+    alert_id = _alert_channel_id(cfg)
+    t = time.localtime()
+    midnight = time.mktime((t.tm_year, t.tm_mon, t.tm_mday, 0, 0, 0, 0, 0, -1))
+    with connect() as c:
+        chans = _rows(c.execute("SELECT * FROM channels ORDER BY last_seen DESC"))
+        today = {r[0]: r[1] for r in c.execute(
+            "SELECT channel_id, COUNT(*) FROM inbox WHERE received_at>=? GROUP BY channel_id", (midnight,))}
+        speakers = {r[0]: r[1] for r in c.execute(
+            "SELECT channel_id, COUNT(DISTINCT sender_id) FROM inbox WHERE COALESCE(sender_id,'')<>'' GROUP BY channel_id")}
+        last = {r["channel_id"]: r for r in c.execute(
+            "SELECT channel_id, sender_name, text, received_at FROM inbox WHERE id IN "
+            "(SELECT MAX(id) FROM inbox GROUP BY channel_id)")}
+        alerts: dict[str, dict] = {}
+        for r in c.execute("SELECT id, channel_id, telegram FROM analyses WHERE telegram IS NOT NULL ORDER BY id"):
+            sent = (json.loads(r["telegram"]) or {}).get("sentAt")
+            if sent:
+                alerts[r["channel_id"]] = {"at": sent, "analysisId": r["id"]}
+        clients = [(r[0], r[1], r[2]) for r in c.execute("SELECT system_client_id, name, name_norm FROM clients")]
+    out = []
+    for ch in chans:
+        cid = ch["id"]
+        receives = bool(alert_id) and cid == alert_id
+        section = "team" if receives or ch["platform"] == "telegram" else "group" if ch["kind"] == "group" else "direct"
+        lm = last.get(cid)
+        sil, mx = ch.get("listen_silence_min"), ch.get("listen_max_min")
+        own = sil is not None and mx is not None
+        unlinked = not ch.get("client_id") and not ch.get("not_client")
+        out.append({
+            **ch,
+            "section": section,  # 'group' | 'team' | 'direct' (``kind`` segue o valor cru do ops.db: group/dm)
+            "clientId": ch.get("client_id"),
+            "clientName": ch.get("client_name"),
+            "notClient": bool(ch.get("not_client")),
+            "suggestion": _suggest(_norm(ch["name"]), clients) if unlinked and section == "group" and ch["name"] else None,
+            "members": speakers.get(cid, 0) or None,  # quem já escreveu aqui (o tamanho do grupo o gateway não informa)
+            "todayCount": today.get(cid, 0),
+            "last": {"at": lm["received_at"], "from": lm["sender_name"] or "", "text": lm["text"]} if lm else None,
+            "lastAlert": alerts.get(cid),
+            "window": {"useDefault": not own, "silenceMin": sil if own else cfg["silence_min"],
+                       "maxMin": mx if own else cfg["max_min"]},
+            "problem": None,  # ponytail: o gateway não expõe saúde por canal ainda; preencher quando houver dado real
+            "receivesAlerts": receives,
+            # Só grupo de cliente pede confirmação para o Autônomo (grupo da equipe no Telegram, não).
+            "requiresConfirm": section == "group",
+        })
+    return out
+
+
+def patch_channel(cid: str, patch: dict, *, confirm: bool = False) -> dict:
+    """Aplica o que veio em ``patch`` (chaves ausentes não mudam): ``mode``, ``business_id``, ``name``,
+    ``clientId`` (None desvincula), ``notClient``, ``window`` (None/``{useDefault:true}`` = padrão)."""
+    alert_id = _alert_channel_id()
+    with connect() as c:
+        row = c.execute("SELECT * FROM channels WHERE id=?", (cid,)).fetchone()
+        if not row:
+            raise KeyError(cid)
+        sets: dict[str, Any] = {}
+        if patch.get("mode") is not None:
+            mode = patch["mode"]
+            if mode not in MODES:
+                raise ValueError("modo inválido")
+            if mode == LISTEN and cid == alert_id:
+                raise ValueError("Escutar não vale para o canal que recebe os avisos da equipe")
+            if (mode == AUTONOMOUS and row["mode"] != AUTONOMOUS and row["kind"] == "group" and row["platform"] != "telegram"
+                    and cid != alert_id and not confirm):
+                raise ValueError("Autônomo em grupo responde sozinho para todo mundo: confirme com confirm=true")
+            sets["mode"] = mode
+        if patch.get("business_id", "") != "":
+            sets["business_id"] = patch["business_id"]
+        if patch.get("name") is not None:
+            sets["name"] = patch["name"]
+        if patch.get("notClient") is not None:
+            if patch["notClient"] and patch.get("clientId"):
+                raise ValueError("canal não pode ser “não é cliente” e ter cliente ao mesmo tempo")
+            sets["not_client"] = int(bool(patch["notClient"]))
+            if patch["notClient"]:
+                sets.update(client_id=None, client_name=None)
+        if "clientId" in patch:
+            if patch["clientId"] is None:
+                sets.update(client_id=None, client_name=None)
+            else:
+                cl = c.execute("SELECT name FROM clients WHERE system_client_id=?", (str(patch["clientId"]),)).fetchone()
+                if not cl:
+                    raise ValueError("cliente não encontrado no diretório")
+                sets.update(client_id=str(patch["clientId"]), client_name=cl["name"], not_client=0)
+        if "window" in patch:
+            w = patch["window"]
+            if not w or w.get("useDefault"):
+                sets.update(listen_silence_min=None, listen_max_min=None)
+            else:
+                sil, mx = w.get("silenceMin"), w.get("maxMin")
+                if not all(isinstance(v, int) and not isinstance(v, bool) for v in (sil, mx)):
+                    raise ValueError("janela inválida: informe silenceMin e maxMin em minutos")
+                _check_window(sil, mx)
+                sets.update(listen_silence_min=sil, listen_max_min=mx)
+        if sets:
+            c.execute(f"UPDATE channels SET {', '.join(k + '=?' for k in sets)} WHERE id=?", (*sets.values(), cid))
+    return next(v for v in channels_view() if v["id"] == cid)
+
+
+# ---- diretório de clientes (espelho local; a sincronização com o sistema da Aibiz vem depois) ----
+
+_CLIENTS_SQL = (
+    "SELECT * FROM (SELECT c.system_client_id AS systemClientId, c.name AS name, c.plan AS plan, "
+    "c.name_norm AS name_norm, "
+    "(SELECT COUNT(*) FROM analyses a JOIN channels ch ON ch.id=a.channel_id "
+    " WHERE ch.client_id=c.system_client_id AND a.status='open') AS openAnalyses, "
+    "(SELECT COUNT(*) FROM channels ch WHERE ch.client_id=c.system_client_id) AS channelCount "
+    "FROM clients c) "
+)
+
+
+def _client_row(r: sqlite3.Row) -> dict:
+    d = dict(r)
+    d.pop("name_norm", None)
+    return d
+
+
+def import_clients(items: Any) -> dict:
+    """Upsert por ``systemClientId``. Quem não veio na lista permanece (importação não apaga)."""
+    if not isinstance(items, list):
+        raise ValueError("envie uma lista de clientes")
+    rows = []
+    for i, it in enumerate(items, 1):
+        cid = str((it or {}).get("systemClientId") or "").strip() if isinstance(it, dict) else ""
+        name = str(it.get("name") or "").strip() if isinstance(it, dict) else ""
+        if not cid or not name:
+            raise ValueError(f"cliente #{i}: systemClientId e name são obrigatórios")
+        rows.append((cid, name, str(it.get("plan") or "").strip(), _norm(name), time.time()))
+    with connect() as c:
+        c.executemany(
+            "INSERT INTO clients(system_client_id, name, plan, name_norm, updated_at) VALUES(?,?,?,?,?) "
+            "ON CONFLICT(system_client_id) DO UPDATE SET name=excluded.name, plan=excluded.plan, "
+            "name_norm=excluded.name_norm, updated_at=excluded.updated_at", rows)
+        c.executemany("UPDATE channels SET client_name=? WHERE client_id=?", [(r[1], r[0]) for r in rows])
+        total = c.execute("SELECT COUNT(*) FROM clients").fetchone()[0]
+    return {"imported": len(rows), "total": total}
+
+
+def list_clients(q: str = "", cursor: Optional[str] = None, limit: int = 30) -> dict:
+    """Página do diretório, por nome. Busca sem acento por nome ou ``systemClientId``."""
+    try:
+        offset = int(cursor or 0)
+    except ValueError:
+        offset = -1
+    if offset < 0:
+        raise ValueError("cursor inválido")
+    limit = min(max(int(limit), 1), 100)
+    needle = _norm(q)
+    where = "WHERE instr(name_norm, ?) > 0 OR instr(lower(systemClientId), ?) > 0 " if needle else ""
+    args = (needle, needle) if needle else ()
+    with connect() as c:
+        total = c.execute(f"SELECT COUNT(*) FROM ({_CLIENTS_SQL}{where})", args).fetchone()[0]
+        rows = c.execute(f"{_CLIENTS_SQL}{where}ORDER BY name_norm, systemClientId LIMIT ? OFFSET ?", (*args, limit + 1, offset)).fetchall()
+    return {"items": [_client_row(r) for r in rows[:limit]], "total": total,
+            "nextCursor": str(offset + limit) if len(rows) > limit else None}
+
+
+def clients_with_analyses() -> dict:
+    """Clientes com análise aberta (``status='open'``), os com mais análises primeiro."""
+    with connect() as c:
+        rows = c.execute(f"{_CLIENTS_SQL}WHERE openAnalyses > 0 ORDER BY openAnalyses DESC, name_norm").fetchall()
+    return {"items": [_client_row(r) for r in rows], "total": len(rows), "nextCursor": None}
 
 
 # ---- caixa de entrada ----
@@ -446,8 +675,7 @@ def set_listen_settings(patch: dict) -> dict:
     merged = {**cur, **{k: v for k, v in patch.items() if k in LISTEN_DEFAULTS and k != "triage"}}
     if isinstance(patch.get("triage"), dict):
         merged["triage"] = {**cur["triage"], **patch["triage"]}
-    if not (1 <= int(merged["silence_min"]) <= 60 and 5 <= int(merged["max_min"]) <= 240):
-        raise ValueError("janela inválida: silêncio 1–60 min, máximo 5–240 min")
+    _check_window(int(merged["silence_min"]), int(merged["max_min"]))
     if not 0.5 <= float(merged["min_confidence"]) <= 0.95:
         raise ValueError("confiança mínima entre 50% e 95%")
     set_meta("listen", merged)

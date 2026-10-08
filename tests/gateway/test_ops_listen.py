@@ -38,7 +38,9 @@ def test_capture_before_auth_only_for_listen_groups():
     from gateway import ops_hooks
     from ops_center import store
 
-    assert ops_hooks.listen_capture(*_event("oi", chat_id="9@g.us")) is False  # grupo novo: modo padrão
+    assert ops_hooks.listen_capture(*_event("oi", chat_id="9@g.us")) is True  # grupo de WhatsApp novo nasce em Escutar
+    store.update_channel("whatsapp:9@g.us", mode=store.DRAFT)
+    assert ops_hooks.listen_capture(*_event("oi", chat_id="9@g.us")) is False  # outro modo: fluxo normal
     assert ops_hooks.listen_capture(*_event("oi", chat_id="55@s.whatsapp.net", chat_type="dm")) is False
 
     _listen()
@@ -47,7 +49,8 @@ def test_capture_before_auth_only_for_listen_groups():
     items = [i for i in store.list_inbox(include_done=True) if i["channel_id"] == f"whatsapp:{GROUP}"]
     assert items == []  # Escutar não pede decisão na caixa
     with store.connect() as c:
-        rows = [dict(r) for r in c.execute("SELECT text, status, media FROM inbox ORDER BY id")]
+        rows = [dict(r) for r in c.execute("SELECT text, status, media FROM inbox WHERE channel_id=? ORDER BY id",
+                                           (f"whatsapp:{GROUP}",))]
     assert [r["status"] for r in rows] == ["listen", "listen"]
     assert rows[1]["text"] == "[áudio]" and json.loads(rows[1]["media"])[0]["path"] == "/c/v.ogg"
 

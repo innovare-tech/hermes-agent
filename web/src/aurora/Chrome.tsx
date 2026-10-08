@@ -82,6 +82,18 @@ export function Toast() {
             <span style={t.sub ? { fontSize: 13.5, fontWeight: 600 } : undefined}>{t.text}</span>
             {t.sub && <span style={{ fontSize: 12.5, color: "var(--fg2)", lineHeight: 1.4 }}>{t.sub}</span>}
           </span>
+          {t.action && (
+            <button
+              className="au-undo"
+              style={{ pointerEvents: "auto", marginLeft: 6 }}
+              onClick={() => {
+                dismissToast(t.id);
+                t.action?.run();
+              }}
+            >
+              <Icon name="undo-2" size={12} /> {t.action.label}
+            </button>
+          )}
           {t.sub && (
             <button className="au-mini" title="Fechar" aria-label="Fechar aviso" onClick={() => dismissToast(t.id)} style={{ flex: "none", width: 24, height: 24 }}>
               <Icon name="x" size={13} />

@@ -8,7 +8,9 @@ import { ProblemBar, ProfileHeader, useCurrentProfile } from "./ProfileChrome";
 import { accentVars } from "./profileLogic";
 import { bootProfiles, loadKeys, refreshProfiles } from "./profiles";
 import { Activity } from "./screens/Activity";
+import { Analyses } from "./screens/Analyses";
 import { Agents } from "./screens/Agents";
+import { Channels } from "./screens/Channels";
 import { Cron } from "./screens/Cron";
 import { Gateways } from "./screens/Gateways";
 import { Logs } from "./screens/Logs";
@@ -146,9 +148,11 @@ export function AuroraApp() {
             <Routes key={profileId}>
               <Route path="/" element={<Home />} />
               <Route path="/inbox" element={<Inbox />} />
+              <Route path="/analises" element={<Analyses />} />
               <Route path="/approvals" element={<Approvals />} />
               <Route path="/activity" element={<Activity />} />
               <Route path="/radar" element={<Radar />} />
+              <Route path="/channels" element={<Channels />} />
               <Route path="/support" element={<Support />} />
               <Route path="/people" element={<People />} />
               <Route path="/playbooks" element={<Playbooks />} />

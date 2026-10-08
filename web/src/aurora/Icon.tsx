@@ -37,6 +37,7 @@ import {
   Receipt,
   RotateCcw,
   RotateCw,
+  ScanSearch,
   ScrollText,
   Search,
   Send,
@@ -104,6 +105,11 @@ import {
   TriangleAlert,
   Unplug,
   User,
+  Clock,
+  Ear,
+  Link2,
+  Minus,
+  Unlink,
   type LucideIcon,
 } from "lucide-react";
 
@@ -145,6 +151,7 @@ const ICONS: Record<string, LucideIcon> = {
   receipt: Receipt,
   "rotate-ccw": RotateCcw,
   "rotate-cw": RotateCw,
+  "scan-search": ScanSearch,
   "scroll-text": ScrollText,
   search: Search,
   send: Send,
@@ -212,6 +219,11 @@ const ICONS: Record<string, LucideIcon> = {
   "triangle-alert": TriangleAlert,
   "unplug": Unplug,
   "user": User,
+  clock: Clock,
+  ear: Ear,
+  "link-2": Link2,
+  minus: Minus,
+  unlink: Unlink,
 };
 
 export function Icon({ name, size = 16, color, className }: { name: string; size?: number; color?: string; className?: string }) {
