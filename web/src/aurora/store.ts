@@ -16,8 +16,8 @@ export type State = Omit<OpsSnapshot, "account"> & {
   biz: string;
   /** Último aviso (atalho para testes e leitores de tela). */
   toast: { text: string; id: number } | null;
-  /** Avisos visíveis, empilhados no canto. `sub` = linha de apoio (aviso de troca de perfil etc.). */
-  toasts: { text: string; sub?: string; id: number }[];
+  /** Avisos visíveis, empilhados no canto. `sub` = linha de apoio; `action` = botão (ex.: "Desfazer"). */
+  toasts: { text: string; sub?: string; id: number; action?: { label: string; run: () => void } }[];
   /** Confirmação aberta (diálogo do Aurora, no lugar do window.confirm). */
   ask: AskRequest | null;
   /** Passo do assistente de setup (-1 = fechado). */
@@ -168,11 +168,17 @@ export function dismissToast(id: number) {
   setState((s) => ({ toasts: s.toasts.filter((x) => x.id !== id), toast: s.toast?.id === id ? null : s.toast }));
 }
 
-export function toast(text: string, sub?: string, ms = 3600) {
-  const t = { text, sub, id: ++toastSeq };
+export type ToastOpts = { sub?: string; undo?: () => void; action?: { label: string; run: () => void }; ms?: number };
+
+/** ``toast(texto)``, ``toast(texto, linhaDeApoio, ms?)`` ou ``toast(texto, {sub, undo, action, ms})``.
+ *  Com botão (``undo``/``action``) o aviso fica 6 s; senão 3,6 s. Máximo 3 na tela. */
+export function toast(text: string, opts?: string | ToastOpts, legacyMs?: number) {
+  const o: ToastOpts = typeof opts === "string" ? { sub: opts, ms: legacyMs } : { ...(opts ?? {}) };
+  const action = o.action ?? (o.undo ? { label: "Desfazer", run: o.undo } : undefined);
+  const t = { text, sub: o.sub, id: ++toastSeq, action };
   // Máximo 3 na tela; cada um some sozinho (ou no X).
   setState((s) => ({ toast: t, toasts: [...s.toasts.filter((x) => x.text !== text), t].slice(-3) }));
-  setTimeout(() => dismissToast(t.id), ms);
+  setTimeout(() => dismissToast(t.id), o.ms ?? (action ? 6000 : 3600));
 }
 
 export function setPrefs(p: Partial<Pick<State, "dir" | "theme">>) {
@@ -289,10 +295,13 @@ export async function deny(x: Approval) {
 }
 
 export async function setAutonomy(c: Channel, mode: AutonomyMode) {
+  // Grupo em Autônomo responde sozinho para todo mundo: o backend só aceita com confirmação explícita.
+  const confirm = mode === 2 && c.mode !== 2 && c.kind === "group";
+  if (confirm && !(await ask({ title: `Deixar o Hermes responder sozinho em “${c.name}”?`, body: "Ele vai responder para todas as pessoas do grupo, sem você revisar antes.", confirm: "Sim, responder sozinho" }))) return;
   try {
-    await adapter.setAutonomy(c.id, mode);
-  } catch {
-    toast("Não consegui salvar a autonomia");
+    await adapter.setAutonomy(c.id, mode, confirm);
+  } catch (e) {
+    toast(errMsg(e, "Não consegui salvar a autonomia"));
     return;
   }
   setState((s) => ({ autonomy: s.autonomy.map((y) => (y.id === c.id ? { ...y, mode } : y)) }));

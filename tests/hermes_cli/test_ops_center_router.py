@@ -175,3 +175,44 @@ def test_listen_settings_route(client):
     out = client.put("/api/ops/listen", json={"silence_min": 10, "notify_target": "telegram:-100:7"}).json()
     assert out["silence_min"] == 10 and out["notify_target"] == "telegram:-100:7"
     assert client.put("/api/ops/listen", json={"max_min": 1000}).status_code == 400
+
+
+def test_channels_a2_contract_and_clients_directory(client):
+    from ops_center import store
+
+    imp = client.post("/api/clients/import", json=[
+        {"systemClientId": "c-sol", "name": "Padaria Sol", "plan": "Pro"},
+        {"systemClientId": "c-lumen", "name": "Lumen Contábil", "plan": "Basic"},
+    ])
+    assert imp.status_code == 200 and imp.json() == {"imported": 2, "total": 2}
+    assert client.post("/api/clients/import", json=[{"systemClientId": "x"}]).status_code == 400
+    page = client.get("/api/clients", params={"q": "contabil"}).json()
+    assert [c["systemClientId"] for c in page["items"]] == ["c-lumen"] and page["total"] == 1 and page["nextCursor"] is None
+    assert client.get("/api/clients", params={"cursor": "zzz"}).status_code == 400
+    assert client.get("/api/clients/with-analyses").json() == {"items": [], "total": 0, "nextCursor": None}
+
+    store.touch_channel("whatsapp", "g1", "Padaria Sol - Suporte", "group")
+    ch = client.get("/api/ops/channels").json()[0]
+    assert ch["section"] == "group" and ch["suggestion"]["clientId"] == "c-sol" and ch["requiresConfirm"] is True
+
+    # vínculo, janela por canal, "não é cliente" — PATCH e PUT são o mesmo contrato
+    r = client.patch("/api/ops/channels/whatsapp:g1", json={"clientId": "c-sol", "window": {"silenceMin": 8, "maxMin": 40}})
+    assert r.status_code == 200
+    assert (r.json()["clientName"], r.json()["window"]) == ("Padaria Sol", {"useDefault": False, "silenceMin": 8, "maxMin": 40})
+    assert client.get("/api/clients").json()["items"][1]["channelCount"] == 1
+    assert client.patch("/api/ops/channels/whatsapp:g1", json={"window": {"silenceMin": 0, "maxMin": 40}}).status_code == 400
+    assert client.patch("/api/ops/channels/whatsapp:g1", json={"clientId": "nope"}).status_code == 400
+    r = client.put("/api/ops/channels/whatsapp:g1", json={"clientId": None, "notClient": True, "window": None})
+    assert (r.json()["clientId"], r.json()["notClient"], r.json()["window"]["useDefault"]) == (None, True, True)
+
+    # Autônomo em grupo pede confirm; Escutar é aceito; canal de avisos não escuta
+    r = client.patch("/api/ops/channels/whatsapp:g1", json={"mode": 2})
+    assert r.status_code == 400 and "confirm" in r.json()["detail"]
+    assert client.patch("/api/ops/channels/whatsapp:g1", json={"mode": 3}).json()["mode"] == 3
+    assert client.patch("/api/ops/channels/whatsapp:g1", json={"mode": 2, "confirm": True}).json()["mode"] == 2
+    store.touch_channel("telegram", "-100", "Equipe Aibiz", "group")
+    client.put("/api/ops/listen", json={"notify_target": "telegram:-100:45"})
+    assert client.patch("/api/ops/channels/telegram:-100", json={"mode": 3}).status_code == 400
+    assert client.patch("/api/ops/channels/nope:1", json={"notClient": True}).status_code == 404
+    acts = [a["action"] for a in client.get("/api/ops/activity").json()]
+    assert any("vinculado ao cliente Padaria Sol" in a for a in acts) and any("janela de análise" in a for a in acts)

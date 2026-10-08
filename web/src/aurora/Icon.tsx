@@ -104,6 +104,11 @@ import {
   TriangleAlert,
   Unplug,
   User,
+  Clock,
+  Ear,
+  Link2,
+  Minus,
+  Unlink,
   type LucideIcon,
 } from "lucide-react";
 
@@ -212,6 +217,11 @@ const ICONS: Record<string, LucideIcon> = {
   "triangle-alert": TriangleAlert,
   "unplug": Unplug,
   "user": User,
+  clock: Clock,
+  ear: Ear,
+  "link-2": Link2,
+  minus: Minus,
+  unlink: Unlink,
 };
 
 export function Icon({ name, size = 16, color, className }: { name: string; size?: number; color?: string; className?: string }) {
