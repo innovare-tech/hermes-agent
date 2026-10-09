@@ -154,7 +154,7 @@ export const clock = (ts: number) => {
 };
 
 /** Quantos dias de calendário separam `ts` de `now` (0 = hoje, 1 = ontem). */
-function dayGap(ts: number, now: number): number {
+export function dayGap(ts: number, now: number): number {
   const a = new Date(ts * 1000);
   const b = new Date(now * 1000);
   return Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime() - new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime()) / 86400000);

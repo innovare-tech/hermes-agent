@@ -21,7 +21,9 @@ export type Profile = {
   issueKind?: "gateway" | "channel";
   canPause: boolean;
   /** Quem pausou: só este perfil, ou o "Pausar tudo" (aí não dá para retomar só ele). */
-  pausedBy: "profile" | "all" | null;
+  pausedBy: "profile" | "all" | "copilot_revoked" | null;
+  /** Só nos perfis `cli-` do Copiloto. */
+  copilot?: { status: "active" | "revoked"; plan: string; systemClientId: string } | null;
   usageToday: { msgs: number; costUsd: number };
 };
 
@@ -121,10 +123,18 @@ export const STATUS = {
   ok: { label: "Rodando", tone: "var(--ok)", icon: "circle-check" },
   paused: { label: "Pausado", tone: "var(--fg2)", icon: "circle-pause" },
   err: { label: "Com problema", tone: "var(--err)", icon: "triangle-alert" },
+  revoked: { label: "Revogado", tone: "var(--fg2)", icon: "ban" },
 } as const;
 
+/** Cliente do Copiloto com o acesso revogado: o backend o pausa com `pausedBy: "copilot_revoked"`. */
+export const isRevoked = (p: Pick<Profile, "pausedBy" | "copilot">) => p.pausedBy === "copilot_revoked" || p.copilot?.status === "revoked";
+
+/** Chave de `STATUS` do perfil: revogado vale mais que "pausado". */
+export const statusKey = (p: Pick<Profile, "status" | "pausedBy" | "copilot">): keyof typeof STATUS => (isRevoked(p) ? "revoked" : p.status);
+
 /** Linha de status do gatilho do seletor. */
-export function triggerStatus(p: Pick<Profile, "status">) {
+export function triggerStatus(p: Pick<Profile, "status" | "pausedBy" | "copilot">) {
+  if (isRevoked(p)) return { label: "Copiloto revogado", tone: "var(--fg3)", pulse: false };
   return p.status === "err" ? { label: "Com problema", tone: "var(--err)", pulse: false } : p.status === "paused" ? { label: "Pausado", tone: "var(--fg3)", pulse: false } : { label: "Hermes · rodando", tone: "var(--ok)", pulse: true };
 }
 
@@ -158,6 +168,7 @@ export function problemCopy(p: Profile) {
 /** Subtítulo da linha no seletor: o problema em vermelho, "Pausado", ou a descrição (id para clientes do Copiloto). */
 export function rowSubtitle(p: Profile) {
   if (p.status === "err") return { text: issueShort(p), tone: "var(--err)" };
+  if (isRevoked(p)) return { text: "Revogado", tone: "var(--fg3)" };
   if (p.status === "paused") return { text: "Pausado", tone: "var(--fg3)" };
   return { text: p.group ? p.id : p.desc || "Sem descrição", tone: "var(--fg3)" };
 }
@@ -165,15 +176,17 @@ export function rowSubtitle(p: Profile) {
 /** Detalhe do status na lista de Configurações › Perfis. */
 export function statusDetail(p: Profile) {
   if (p.status === "err") return issueShort(p);
+  if (isRevoked(p)) return "Copiloto revogado";
   if (p.status === "paused") return p.pausedBy === "all" ? "Pausado por “Pausar tudo”" : "Pausado por você";
   return p.channels.length ? "Respondendo normalmente" : "Sem canais conectados";
 }
 
-/** Resumo do grupo recolhido ("1 com problema · 1 pausado" / "Todos rodando"). */
+/** Resumo do grupo recolhido ("1 com problema · 1 pausado · 1 revogado" / "Todos rodando"). */
 export function clientSummary(clients: Profile[]) {
-  const er = clients.filter((p) => p.status === "err").length;
-  const pa = clients.filter((p) => p.status === "paused").length;
-  return [er && `${er} com problema`, pa && `${pa} pausado${pa > 1 ? "s" : ""}`].filter(Boolean).join(" · ") || "Todos rodando";
+  const rv = clients.filter(isRevoked).length;
+  const er = clients.filter((p) => !isRevoked(p) && p.status === "err").length;
+  const pa = clients.filter((p) => !isRevoked(p) && p.status === "paused").length;
+  return [er && `${er} com problema`, pa && `${pa} pausado${pa > 1 ? "s" : ""}`, rv && `${rv} revogado${rv > 1 ? "s" : ""}`].filter(Boolean).join(" · ") || "Todos rodando";
 }
 
 export const money = (usd: number) => "US$ " + usd.toFixed(2).replace(".", ",");
@@ -219,7 +232,7 @@ export function createdSub(from: Profile | undefined, c: CopyOptions) {
 /** Por que um item do menu está desligado — escrito embaixo dele, nunca só cinza. "" = liberado. */
 export function menuReasons(p: Profile) {
   return {
-    pause: p.pausedBy === "all" ? "Está pausado pelo “Pausar tudo”. Retome por lá." : !p.canPause ? `${p.name} só pausa pelo “Pausar tudo”.` : "",
+    pause: isRevoked(p) ? "O acesso do Copiloto foi revogado. Reative em Clientes do Copiloto." : p.pausedBy === "all" ? "Está pausado pelo “Pausar tudo”. Retome por lá." : !p.canPause ? `${p.name} só pausa pelo “Pausar tudo”.` : "",
     remove: p.isDefault ? "É o perfil padrão. Torne outro perfil padrão antes de apagar este." : p.id === "default" ? "É o perfil principal do Hermes e não pode ser apagado." : "",
   };
 }

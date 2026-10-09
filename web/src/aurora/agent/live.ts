@@ -191,7 +191,7 @@ export const liveAgent: AgentAdapter = {
       api.getModelOptions({}).catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : "";
         modelError = /restart required/i.test(msg)
-          ? "O Hermes foi atualizado nesta máquina e o painel ainda roda a versão anterior. Reinicie o painel (hermes dashboard) para carregar a nova."
+          ? "O painel foi atualizado e precisa reiniciar para carregar a versão nova. Reinicie o Hermes."
           : msg || "indisponível";
         return { providers: [], provider: "", model: "" } as unknown as Awaited<ReturnType<typeof api.getModelOptions>>;
       }),

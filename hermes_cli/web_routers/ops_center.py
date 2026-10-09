@@ -863,9 +863,107 @@ async def incident_action(iid: int, body: Optional[WhoBody] = None):
     return out
 
 
+# ---- Copiloto do Gestor (A8): clientes, chaves, plano, consumo e auditoria (perfil que administra) ----
+
+copilot_router = APIRouter(prefix="/api/copilot")
+aibiz_router = APIRouter(prefix="/api/aibiz")
+
+
+def _copilot():
+    from ops_center import copilot
+
+    return copilot
+
+
+@copilot_router.get("/clients")
+async def copilot_clients(q: str = "", status: str = "", plan: str = "", cursor: Optional[str] = None, limit: int = 20):
+    return await _run(_copilot().list_clients, q, status, plan, cursor, max(1, min(int(limit), 50)))
+
+
+@copilot_router.get("/clients/{sid}")
+async def copilot_client(sid: str):
+    return await _run(_copilot().get, sid)
+
+
+@copilot_router.get("/clients/{sid}/audit")
+async def copilot_audit(sid: str, cursor: Optional[str] = None):
+    return await _run(_copilot().audit, sid, cursor)
+
+
+class CopilotCreate(BaseModel):
+    systemClientId: str
+    plan: str = "starter"
+
+
+@copilot_router.post("/clients")
+async def copilot_create(body: CopilotCreate):
+    out = await _run(_copilot().create, body.systemClientId, body.plan, "painel")
+    await _act(f"Copiloto criado para {out['client']['name']} (plano {body.plan})")
+    return out
+
+
+class RotateBody(BaseModel):
+    graceHours: int = 0
+
+
+@copilot_router.post("/clients/{sid}/rotate-key")
+async def copilot_rotate(sid: str, body: Optional[RotateBody] = None):
+    out = await _run(_copilot().rotate_key, sid, (body or RotateBody()).graceHours)
+    await _act(f"Copiloto: chave rotacionada ({out['client']['name']})")
+    return out
+
+
+class RevokeBody(BaseModel):
+    confirm: str
+    reason: str = ""
+
+
+@copilot_router.post("/clients/{sid}/revoke")
+async def copilot_revoke(sid: str, body: RevokeBody):
+    out = await _run(_copilot().revoke, sid, body.confirm, "painel", body.reason)
+    await _act(f"Copiloto revogado: {out['name']}")
+    return out
+
+
+@copilot_router.post("/clients/{sid}/reactivate")
+async def copilot_reactivate(sid: str):
+    out = await _run(_copilot().reactivate, sid)
+    await _act(f"Copiloto reativado: {out['client']['name']}")
+    return out
+
+
+class PlanBody(BaseModel):
+    plan: str
+
+
+@copilot_router.patch("/clients/{sid}")
+async def copilot_plan(sid: str, body: PlanBody):
+    out = await _run(_copilot().set_plan, sid, body.plan)
+    await _act(f"Copiloto: {out['name']} mudou para o plano {body.plan}")
+    return out
+
+
+@copilot_router.get("/settings")
+async def copilot_settings():
+    c = _copilot()
+    return await _run(lambda: {**c.settings(), "catalog": c.CATALOG, "planLabels": {k: v["label"] for k, v in c.PLANS.items()}})
+
+
+@copilot_router.put("/settings")
+async def copilot_save_settings(body: dict[str, Any]):
+    return await _run(_copilot().save_settings, body)
+
+
+@aibiz_router.get("/clients")
+async def aibiz_clients(q: str = "", cursor: Optional[str] = None):
+    return await _run(_copilot().aibiz_clients, q, cursor)
+
+
 # ``router`` é o que o servidor monta: /api/ops/*, /api/clients/*, /api/health/* e /api/incidents, com o escopo de perfil.
 router = APIRouter(dependencies=[Depends(_capture_profile)])
 router.include_router(ops)
 router.include_router(clients_router)
 router.include_router(health_router)
 router.include_router(incidents_router)
+router.include_router(copilot_router)
+router.include_router(aibiz_router)

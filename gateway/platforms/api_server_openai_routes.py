@@ -738,6 +738,9 @@ class OpenAICompatRoutesMixin:
             # id from a header-less client is NOT: delegate_task keeps its forced-sync fallback
             # there — the wake would hard-fail or land in history that client never reloads.
             session_history_delivery=("1" if provided_session_id else ""))
+        if isinstance(body.get("author"), dict):  # opcional: quem perguntou (ex.: gestor no Aibiz Manager)
+            from gateway.platforms.api_server import _request_turn_author
+            run_kwargs["turn_author"] = _request_turn_author(body)
         # This is presentation only. The ordinary API-key/session authorization
         # above still applies; it grants no internal ingress or control authority.
         if provided_session_id and body.get("hermes_notification_category") == "diagnostic":
@@ -1136,6 +1139,9 @@ class OpenAICompatRoutesMixin:
             ephemeral_system_prompt=instructions, session_id=session_id,
             gateway_session_key=gateway_session_key, bind_declared_conversation=_declared_selected,
             **agent_overrides, route=route, relay_metadata=relay_metadata)
+        if isinstance(body.get("author"), dict):  # opcional: quem perguntou (ex.: gestor no Aibiz Manager)
+            from gateway.platforms.api_server import _request_turn_author
+            run_kwargs["turn_author"] = _request_turn_author(body)
         if stream:
             _stream_q = ThreadSafeAsyncQueue()
 

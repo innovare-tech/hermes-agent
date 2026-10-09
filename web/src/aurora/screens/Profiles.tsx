@@ -1,9 +1,9 @@
 // Configurações › Perfis: todos os perfis do Hermes, com canais, modelo, status e uso de hoje; criar, clonar,
 // editar, pausar, tornar padrão e apagar. Trocar de perfil só muda o que o painel mostra: os outros continuam rodando.
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { Icon } from "../Icon";
-import { clientSummary, hexOf, menuReasons, money, splitProfiles, STATUS, statusDetail, usageBar, usageTotals, type Profile } from "../profileLogic";
+import { clientSummary, hexOf, isRevoked, menuReasons, money, splitProfiles, STATUS, statusDetail, statusKey, usageBar, usageTotals, type Profile } from "../profileLogic";
 import { channelMeta, makeDefault, refreshProfiles, setProfilePaused, switchProfile } from "../profiles";
 import { ask, setState, useStore } from "../store";
 
@@ -11,7 +11,7 @@ const COLS = "au-prow";
 
 function Menu({ p, current, onClose }: { p: Profile; current: boolean; onClose: () => void }) {
   const why = menuReasons(p);
-  const paused = p.status === "paused";
+  const paused = p.status === "paused" && !isRevoked(p);
   const item = (label: string, icon: string, run: () => void, o: { danger?: boolean; reason?: string } = {}) => (
     <button key={label} role="menuitem" aria-disabled={!!o.reason} className={"au-mitem" + (o.danger ? " danger" : "")} onClick={() => !o.reason && (onClose(), run())}>
       <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
@@ -41,13 +41,15 @@ function Menu({ p, current, onClose }: { p: Profile; current: boolean; onClose: 
   );
 }
 
-function Row({ p, theme, max, index, indent, current, menuOpen, onMenu }: { p: Profile; theme: "dark" | "light"; max: number; index: number; indent: boolean; current: boolean; menuOpen: boolean; onMenu: () => void }) {
-  const st = STATUS[p.status];
+function Row({ p, theme, max, index, indent, current, target, menuOpen, onMenu }: { p: Profile; theme: "dark" | "light"; max: number; index: number; indent: boolean; current: boolean; target: boolean; menuOpen: boolean; onMenu: () => void }) {
+  const st = STATUS[statusKey(p)];
   const hex = hexOf(p.color, theme);
   return (
     <div
       className={COLS}
-      style={{ position: "relative", zIndex: menuOpen ? 10 : undefined, padding: `14px 16px 14px ${indent ? 40 : 16}px`, borderTop: "1px solid var(--line)", background: current ? "var(--accSoft)" : p.status === "err" ? "color-mix(in oklab,var(--err) 6%,transparent)" : "transparent", animation: "hblurin .5s both", animationDelay: index * 40 + "ms" }}
+      data-pid={p.id}
+      aria-current={target ? "location" : undefined}
+      style={{ position: "relative", boxShadow: target ? "inset 3px 0 0 var(--acc)" : undefined, zIndex: menuOpen ? 10 : undefined, padding: `14px 16px 14px ${indent ? 40 : 16}px`, borderTop: "1px solid var(--line)", background: current || target ? "var(--accSoft)" : p.status === "err" ? "color-mix(in oklab,var(--err) 6%,transparent)" : "transparent", animation: "hblurin .5s both", animationDelay: index * 40 + "ms" }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
         <span style={{ width: 34, height: 34, flex: "none", borderRadius: 10, background: hex, color: "var(--accFg)", display: "grid", placeItems: "center" }}>
@@ -105,8 +107,16 @@ export function ProfilesPanel() {
   const id = useStore((s) => s.profileId);
   const theme = useStore((s) => s.theme);
   const [menu, setMenu] = useState<string | null>(null);
-  const [grp, setGrp] = useState(false);
+  // `?perfil=<id>` (link do Copiloto): abre o grupo, destaca a linha e rola até ela.
+  const target = useSearchParams()[0].get("perfil");
+  const [picked, setGrp] = useState<boolean | null>(null); // null: ninguém mexeu, o grupo abre sozinho se o link aponta para ele
   const box = useRef<HTMLDivElement>(null);
+  const inGroup = !!target && profiles.some((p) => p.id === target && p.group);
+  const grp = picked ?? inGroup;
+  useEffect(() => {
+    if (status !== "ready" || !target || (inGroup && !grp)) return;
+    [...(box.current?.querySelectorAll<HTMLElement>("[data-pid]") ?? [])].find((el) => el.dataset.pid === target)?.scrollIntoView?.({ block: "center" });
+  }, [status, target, inGroup, grp]);
 
   // Números frescos (status e uso de hoje) ao abrir a tela.
   useEffect(() => {
@@ -128,7 +138,7 @@ export function ProfilesPanel() {
   const { top, clients } = splitProfiles(profiles);
   const max = Math.max(1, ...profiles.map((p) => p.usageToday.msgs));
   const sum = usageTotals(clients);
-  const row = (p: Profile, i: number, indent: boolean) => <Row key={p.id} p={p} theme={theme} max={max} index={i} indent={indent} current={p.id === id} menuOpen={menu === p.id} onMenu={() => setMenu(menu === p.id ? null : p.id)} />;
+  const row = (p: Profile, i: number, indent: boolean) => <Row key={p.id} p={p} theme={theme} max={max} index={i} indent={indent} current={p.id === id} target={p.id === target} menuOpen={menu === p.id} onMenu={() => setMenu(menu === p.id ? null : p.id)} />;
   const onlyOne = status === "ready" && profiles.filter((p) => !p.group).length <= 1 && clients.length === 0;
   const only = profiles[0];
 
@@ -200,7 +210,7 @@ export function ProfilesPanel() {
               <span>Perfil</span>
               <span>Canais</span>
               <span>Modelo</span>
-              <span>Status</span>
+              <span>Situação</span>
               <span>Uso hoje</span>
               <span />
             </div>

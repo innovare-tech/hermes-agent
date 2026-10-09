@@ -4,7 +4,7 @@ import { errorMessage } from "@/lib/api-error";
 import { toast } from "../store";
 import { useCurrentProfile } from "../ProfileChrome";
 import {
-  changedTasks, eff, limitsChanged, modelsApi, testLine, toBody, toCfg, TASKS,
+  changedTasks, eff, isRestartRequired, limitsChanged, modelsApi, testLine, toBody, toCfg, TASKS,
   type Cfg, type Limits, type LimitsCfg, type Provider, type Routing, type Spend,
 } from "./api";
 import { refreshModelsHealth, setModelsProblem } from "./health";
@@ -22,6 +22,7 @@ export function ModelsScreen() {
   const profile = useCurrentProfile();
   const [data, setData] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState(false);
+  const [restart, setRestart] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [provs, setProvs] = useState<Provider[]>([]);
   const [cfg, setCfg] = useState<Cfg | null>(null);
@@ -48,8 +49,11 @@ export function ModelsScreen() {
       setLim(l);
       setSavedLim(l);
       setFailed(false);
-    } catch {
-      if (alive.current) setFailed(true);
+      setRestart(false);
+    } catch (e) {
+      if (!alive.current) return;
+      setFailed(true);
+      setRestart(isRestartRequired(e));
     }
   }, []);
 
@@ -198,8 +202,10 @@ export function ModelsScreen() {
           <span style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: "color-mix(in oklab,var(--err) 14%,transparent)", color: "var(--err)" }}>
             <MIcon name="cloud-off" size={19} />
           </span>
-          <span style={{ fontSize: 16, fontWeight: 600 }}>Não consegui carregar a configuração de modelos</span>
-          <span style={{ fontSize: 13.5, color: "var(--fg2)", lineHeight: 1.55, maxWidth: 580 }}>O Hermes continua usando os modelos que já estavam salvos. Só esta tela não carregou.</span>
+          <span style={{ fontSize: 16, fontWeight: 600 }}>{restart ? "O painel precisa reiniciar" : "Não consegui carregar a configuração de modelos"}</span>
+          <span style={{ fontSize: 13.5, color: "var(--fg2)", lineHeight: 1.55, maxWidth: 580 }}>
+            {restart ? "O painel foi atualizado e precisa reiniciar para carregar a versão nova. Reinicie o Hermes." : "O Hermes continua usando os modelos que já estavam salvos. Só esta tela não carregou."}
+          </span>
           <button className="au-primary" onClick={retry} disabled={retrying}>
             <MIcon name="rotate-cw" size={14} spin={retrying} />
             Tentar de novo

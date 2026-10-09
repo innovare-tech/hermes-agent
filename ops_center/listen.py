@@ -336,6 +336,9 @@ def start(stop: threading.Event, homes: Callable[[], Iterable[Any]]) -> threadin
                         from ops_center import notify
 
                         notify.tick()  # Avisos: solta o que ficou no silêncio e manda o resumo diário na hora
+                        from ops_center import copilot
+
+                        copilot.purge_revoked()  # Copiloto: memória de revogados some depois de 30 dias
                 except Exception:
                     logger.exception("ops_center: ciclo do Escutar falhou em %s", home)
 

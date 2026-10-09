@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   accentVars,
   clientSummary,
+  isRevoked,
+  STATUS,
+  statusKey,
   createdSub,
   deleteItems,
   hexOf,
@@ -120,6 +123,22 @@ describe("status", () => {
     expect(statusDetail(mk("a", { status: "paused", pausedBy: "profile" }))).toBe("Pausado por você");
     expect(statusDetail(mk("a"))).toBe("Sem canais conectados");
     expect(statusDetail(mk("a", { channels: ["telegram"] }))).toBe("Respondendo normalmente");
+  });
+
+  it("Copiloto revogado aparece como Revogado, nunca como Rodando nem Pausado, e o resumo do grupo conta", () => {
+    const rev = mk("cli-x", { group: "copiloto", status: "paused", pausedBy: "copilot_revoked", copilot: { status: "revoked", plan: "pro", systemClientId: "x" } });
+    expect(isRevoked(rev)).toBe(true);
+    expect(isRevoked(mk("a", { status: "paused", pausedBy: "profile" }))).toBe(false);
+    expect(statusKey(rev)).toBe("revoked");
+    expect(STATUS[statusKey(rev)].label).toBe("Revogado");
+    expect(statusKey(mk("a", { status: "paused" }))).toBe("paused");
+    expect(statusDetail(rev)).toBe("Copiloto revogado");
+    expect(rowSubtitle(rev).text).toBe("Revogado");
+    expect(triggerStatus(rev).label).toBe("Copiloto revogado");
+    expect(menuReasons(rev).pause).toMatch(/revogado/);
+    expect(clientSummary([mk("a"), rev])).toBe("1 revogado");
+    expect(clientSummary([mk("a", { status: "paused" }), rev, mk("b", { status: "err" })])).toBe("1 com problema · 1 pausado · 1 revogado");
+    expect(clientSummary([mk("a"), mk("b")])).toBe("Todos rodando");
   });
 
   it("resumo do grupo e texto da faixa de problema", () => {
