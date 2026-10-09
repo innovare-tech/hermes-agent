@@ -4,7 +4,7 @@ import { AskDialog, Background, PauseBanner, Toast } from "./Chrome";
 import { agent } from "./agent";
 import { ONBOARDED_KEY, Onboarding } from "./Onboarding";
 import { ProfileDialogs } from "./ProfileDialogs";
-import { ProblemBar, ProfileHeader, useCurrentProfile } from "./ProfileChrome";
+import { PageSkeleton, ProblemBar, ProfileHeader, useCurrentProfile } from "./ProfileChrome";
 import { accentVars } from "./profileLogic";
 import { bootProfiles, loadKeys, refreshProfiles } from "./profiles";
 import { Activity } from "./screens/Activity";
@@ -27,7 +27,7 @@ import { Playbooks } from "./screens/Playbooks";
 import { Radar } from "./screens/Radar";
 import { Support } from "./screens/Support";
 import { AGENT, OPS, Sidebar } from "./Sidebar";
-import { loadOps, loadSessions, refreshPaused, setState, toast, useStore } from "./store";
+import { loadOps, loadSessions, refreshActionRequests, refreshPaused, setState, toast, useStore } from "./store";
 
 // Spotlight que segue o cursor: escreve direto no style, sem re-render.
 const onMove = (e: MouseEvent<HTMLDivElement>) => {
@@ -105,7 +105,10 @@ export function AuroraApp() {
         loadSessions().catch(() => toast("Não consegui carregar as sessões"));
         loadKeys();
       });
-    const poll = setInterval(() => refreshPaused().catch(() => {}), 15000);
+    const poll = setInterval(() => {
+      refreshPaused().catch(() => {});
+      refreshActionRequests();
+    }, 15000);
     // Status dos perfis (um com problema aparece na faixa do seletor): a cada 30 s, com a aba à vista.
     const profilesPoll = setInterval(() => document.visibilityState === "visible" && refreshProfiles(), 30000);
     return () => {
@@ -144,6 +147,7 @@ export function AuroraApp() {
             <ProfileHeader />
             <PauseBanner />
             <ProblemBar />
+            {!booted && <PageSkeleton />}
             {booted && (
             <Routes key={profileId}>
               <Route path="/" element={<Home />} />

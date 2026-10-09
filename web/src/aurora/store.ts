@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { adapter, type Approval, type AutonomyMode, type BizId, type Channel, type InboxItem, type OnBehalf, type OpsSnapshot, type Person, type Playbook, type PlaybookDraft, type Session, type Ticket } from "./adapter";
 import { chat } from "./chat";
+import { permissionsApi, type ApprovalRow } from "./permissions/model";
 import type { Profile, ProfileDialog } from "./profileLogic";
 
 /** Aviso na tela; `action` desenha um botão (ex.: Desfazer) e dura mais. */
@@ -16,6 +17,8 @@ export type State = Omit<OpsSnapshot, "account"> & {
   theme: Theme;
   /** "all" ou o id do negócio — filtra todas as telas. */
   biz: string;
+  /** Pedidos de ação (escrita) das Permissões que aguardam decisão; somam no contador de Aprovações. */
+  actionRequests: ApprovalRow[];
   /** Último aviso (atalho para testes e leitores de tela). */
   toast: { text: string; id: number } | null;
   /** Avisos visíveis, empilhados no canto. `sub` = linha de apoio; `action` = botão (ex.: "Desfazer"). */
@@ -54,6 +57,7 @@ let state: State = {
   theme: "dark",
   ...readPrefs(),
   biz: "all",
+  actionRequests: [],
   toast: null,
   toasts: [],
   ask: null,
@@ -118,6 +122,7 @@ export const EMPTY_OPS: Partial<State> = {
   businesses: [],
   inbox: [],
   approvals: [],
+  actionRequests: [],
   radar: [],
   tickets: [],
   activity: [],
@@ -141,12 +146,38 @@ export async function loadOps() {
   const pid = state.profileId;
   const snap = await adapter.load();
   if (state.profileId === pid) setState(snap);
+  refreshActionRequests();
+}
+
+/** Pedidos de ação pendentes (Permissões). Falha em silêncio: o contador só some até a próxima leitura. */
+export async function refreshActionRequests() {
+  const pid = state.profileId;
+  try {
+    const actionRequests = await permissionsApi.pending();
+    if (state.profileId === pid) setState({ actionRequests });
+  } catch {
+    /* mantém o que já está na tela */
+  }
 }
 
 export async function loadSessions() {
   const pid = state.profileId;
   const sessions = await chat.sessions();
   if (state.profileId === pid) setState({ sessions });
+}
+
+/** Decide um pedido de ação pelo painel. Conflito (já decidido no Telegram, expirou…) mostra o motivo do servidor. */
+export async function decideActionRequest(r: ApprovalRow, approve: boolean): Promise<boolean> {
+  try {
+    await permissionsApi.decide(r.id, approve);
+    setState((s) => ({ actionRequests: s.actionRequests.filter((x) => x.id !== r.id) }));
+    toast(approve ? "Pedido aprovado" : "Pedido negado", approve ? "O Hermes executa agora; o resultado aparece no histórico de Permissões." : "O Hermes avisa quem pediu que não vai executar.");
+    return true;
+  } catch (e) {
+    toast(errMsg(e, "Não consegui registrar a decisão"));
+    refreshActionRequests(); // pode ter sido decidido em outro lugar: mostra o estado de verdade
+    return false;
+  }
 }
 
 let toastSeq = 0;

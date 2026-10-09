@@ -16,8 +16,10 @@ export const useCurrentProfile = (): Profile | undefined => {
 
 /** Migalha do topo: "Configurações  /  Perfis", "Caixa de entrada"… */
 export function crumbFor(pathname: string) {
+  if (pathname.startsWith("/settings/modelos")) return "Configurações  /  Modelos";
   if (pathname.startsWith("/settings/avisos")) return "Configurações  /  Avisos";
   if (pathname.startsWith("/settings/perfis")) return "Configurações  /  Perfis";
+  if (pathname.startsWith("/settings/permissoes")) return "Configurações  /  Permissões";
   if (pathname.startsWith("/settings/aparencia")) return "Configurações  /  Aparência";
   if (pathname.startsWith("/chat")) return "Conversa";
   if (pathname.startsWith("/support")) return "Suporte";
@@ -82,6 +84,20 @@ export function ProblemBar() {
 }
 
 /** Início enquanto os dados do perfil novo chegam: esqueleto de KPIs e do feed. */
+/** Esqueleto genérico de página (o painel ainda está abrindo ou a tela espera os dados): nunca tela em branco. */
+export function PageSkeleton({ label = "Carregando…" }: { label?: string }) {
+  return (
+    <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+      <div className="au-page" role="status" aria-busy="true" aria-label={label}>
+        <span style={{ fontSize: 13, color: "var(--fg2)" }}>{label}</span>
+        <div className="au-skel" style={{ height: 44, maxWidth: 420 }} />
+        <div className="au-skel" style={{ height: 120 }} />
+        <div className="au-skel" style={{ height: 220 }} />
+      </div>
+    </div>
+  );
+}
+
 export function HomeSkeleton() {
   const cur = useCurrentProfile();
   return (

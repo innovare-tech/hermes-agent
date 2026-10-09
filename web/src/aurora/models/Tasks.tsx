@@ -1,7 +1,7 @@
 // Modelos › Quem faz o quê: tabela de tarefas, seletor de modelo (popover), painel da Triagem e avisos por linha.
 import { useEffect, useMemo, useState } from "react";
 import {
-  CAPS, LACKS, MIN_CONF, NEED, TASKS, costPerK, eff, findModel, findProvider, modelMeta, modelOk, providerColor, usdOrDash,
+  CAPS, LACKS, MIN_CONF, NEED, SOON_HINT, TASKS, costPerK, eff, findModel, findProvider, modelMeta, modelOk, providerColor, usdOrDash,
   type Cap, type Cfg, type ModelEntry, type Provider, type TaskDef, type TaskId, type TaskMeta,
 } from "./api";
 import { MIcon } from "./icons";
@@ -146,6 +146,11 @@ function Row({ t, provs, cfg, metas, open, q, setQ, toggleOpen, close, edit, onF
               {t.label}
               {t.root && <span style={{ padding: "1px 7px", borderRadius: 999, background: "var(--acc)", color: "var(--accFg)", fontSize: 10.5, fontWeight: 700 }}>padrão</span>}
               {t.jev && <span style={{ padding: "1px 7px", borderRadius: 999, border: "1px solid var(--line2)", fontFamily: "var(--fm)", fontSize: 10, color: "var(--fg2)" }}>JEV</span>}
+              {t.soon && (
+                <span tabIndex={0} title={SOON_HINT} aria-label={`em breve. ${SOON_HINT}`} style={{ padding: "1px 7px", borderRadius: 999, border: "1px dashed var(--line2)", fontSize: 10.5, fontWeight: 500, color: "var(--fg2)", cursor: "help" }}>
+                  em breve
+                </span>
+              )}
             </span>
             <span style={{ fontSize: 12, color: "var(--fg2)", lineHeight: 1.45, textWrap: "pretty" }}>{t.desc}</span>
           </div>

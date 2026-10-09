@@ -111,7 +111,19 @@ export function Settings() {
       </div>
     );
   }
-  if (!s) return <div style={{ flex: 1 }} />;
+  if (!s)
+    return (
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div className="au-page au-page-agent" style={{ gap: 22 }}>
+          <SettingsTabs tab={tab} />
+          <div role="status" aria-busy="true" aria-label="Carregando as configurações" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <span style={{ fontSize: 13, color: "var(--fg2)" }}>Carregando as configurações…</span>
+            <div className="au-skel" style={{ height: 96 }} />
+            <div className="au-skel" style={{ height: 180 }} />
+          </div>
+        </div>
+      </div>
+    );
   const prov = s.providers.find((p) => p.id === s.provider) ?? s.providers[0];
   const apply = (patch: Parameters<typeof agent.saveSettings>[0], done?: string) => applySetting(s, setS, patch, done);
 
