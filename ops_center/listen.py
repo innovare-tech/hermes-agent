@@ -313,6 +313,9 @@ def start(stop: threading.Event, homes: Callable[[], Iterable[Any]]) -> threadin
                         from ops_center import spend_guard
 
                         spend_guard.maybe_check(str(home))  # limites de gasto (antes, para valer já neste ciclo)
+                        from ops_center import clients_sync
+
+                        clients_sync.maybe_sync()  # diretório de clientes do banco do negócio (a cada 6 h)
                         process_due()
                         from ops_center import notify
 

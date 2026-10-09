@@ -233,6 +233,8 @@ exa = ["exa-py==2.10.2"]
 firecrawl = ["firecrawl-py==4.17.0"]
 parallel-web = ["parallel-web==0.4.2"]
 ddgs = ["ddgs==9.16.0"]
+# Central de Operações: diretório de clientes lido do MongoDB do negócio (só leitura).
+mongo = ["pymongo==4.18.2; python_version >= '3.14'"]
 # Image generation backends
 fal = ["fal-client==0.13.1"]
 # Edge TTS — default TTS provider but still optional (users can pick

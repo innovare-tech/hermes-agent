@@ -27,6 +27,7 @@ import {
   type Filters,
 } from "../channels/model";
 import "../channels/channels.css";
+import { fetchJSON } from "@/lib/api";
 import { setState, toast } from "../store";
 
 const errMsg = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
@@ -252,7 +253,8 @@ export function Channels() {
                   Limpar filtros
                 </button>
               )}
-              <button className="au-outline" style={{ marginLeft: "auto" }} onClick={() => setDefaultDialog(true)} disabled={!def}>
+              <SyncClientsButton onDone={() => reload(true)} />
+              <button className="au-outline" onClick={() => setDefaultDialog(true)} disabled={!def}>
                 <Icon name="clock" size={13} /> Janela de análise padrão
               </button>
             </div>
@@ -392,5 +394,26 @@ function ErrorState({ onRetry, onGateways }: { onRetry: () => void; onGateways: 
         </button>
       </div>
     </div>
+  );
+}
+
+/** Lê o diretório de clientes do banco do negócio (só leitura) para vincular grupos e mostrar o cliente nos avisos. */
+function SyncClientsButton({ onDone }: { onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const out = await fetchJSON<{ imported: number; total: number }>("/api/clients/sync", { method: "POST" });
+      toast(`${out.total} clientes no diretório`, { sub: `${out.imported} lidos do banco agora. As sugestões de vínculo já usam a lista nova.` });
+      onDone();
+    } catch (e) {
+      toast(e instanceof Error && e.message ? e.message : "Não consegui sincronizar os clientes");
+    }
+    setBusy(false);
+  };
+  return (
+    <button className="au-outline" style={{ marginLeft: "auto" }} disabled={busy} onClick={run} title="Lê os clientes do banco do negócio (só leitura); também roda sozinho a cada 6 horas">
+      <Icon name="refresh-cw" size={13} /> {busy ? "Sincronizando…" : "Sincronizar clientes"}
+    </button>
   );
 }

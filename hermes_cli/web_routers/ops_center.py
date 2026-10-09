@@ -660,6 +660,25 @@ async def import_clients(body: list[dict[str, Any]]):
     return out
 
 
+@clients_router.get("/sync")
+async def clients_sync_status():
+    from ops_center import clients_sync
+
+    return await _run(clients_sync.status)
+
+
+@clients_router.post("/sync")
+async def clients_sync_now(body: Optional[dict] = None):
+    """Lê o diretório do banco do negócio (só leitura). ``body`` opcional ajusta banco/coleção/variável."""
+    from ops_center import clients_sync
+
+    if body:
+        await _run(clients_sync.set_source, body)
+    out = await _run(clients_sync.sync)
+    await _act(f"Clientes sincronizados do banco: {out['imported']} lidos, {out['total']} no diretório")
+    return out
+
+
 # ``router`` é o que o servidor monta: /api/ops/* e /api/clients/*, ambos com o escopo de perfil.
 router = APIRouter(dependencies=[Depends(_capture_profile)])
 router.include_router(ops)
