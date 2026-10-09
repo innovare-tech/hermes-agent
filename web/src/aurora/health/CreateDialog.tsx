@@ -8,8 +8,8 @@ import { freqLabel } from "./model";
 
 const EXAMPLES = [
   "Avise se o bot da Padaria Sol ficar mais de 10 min sem mandar mensagem em horário comercial",
-  "Avise se o disco da VPS1 passar de 85%",
-  "Avise se a fila de e-mails passar de 20 mensagens em 1 hora",
+  "Avise se o disco da vps1 ficar cheio",
+  "Avise se as mensagens ignoradas pelo socket passarem de 500 no dia",
 ];
 
 const soft = (c: string, p: number) => `color-mix(in oklab,${c} ${p}%,transparent)`;

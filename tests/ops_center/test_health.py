@@ -185,3 +185,16 @@ def test_pem_accepts_base64_and_escaped_newlines():
     assert _pem(pem.replace("\n", "\n")) == pem + "\n" and _pem("") == ""
     with pytest.raises(ValueError):
         _pem("não é base64 !!")
+
+
+def test_investigate_pending_runs_in_background_once(h, monkeypatch):
+    c = _check(h)
+    h.results += [{"status": "error", "text": "x"}] * 2
+    h.run_check(c["id"])
+    h.run_check(c["id"])
+    seen = []
+    monkeypatch.setattr(h, "investigate", lambda iid: (seen.append(iid), (_ for _ in ()).throw(RuntimeError("boom"))))
+    t = h.investigate_pending(wait=True)
+    assert t is not None and len(seen) == 1
+    assert h.list_incidents()[0]["investigating"] is False  # quebrou: não tenta de novo a cada ciclo
+    assert h.investigate_pending(wait=True) is None

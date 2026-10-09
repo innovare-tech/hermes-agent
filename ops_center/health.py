@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import time
 import uuid
 from typing import Any, Callable, Optional
@@ -363,7 +364,9 @@ def request_action(iid: int, by: str) -> dict:
 
 INVESTIGATE_PROMPT = """Você é o plantonista de infraestrutura da equipe. Uma verificação de saúde abriu um incidente
 (dados abaixo). Investigue com comandos e ferramentas SÓ DE LEITURA (nada que altere servidor, banco ou cluster):
-confirme o problema, procure a causa e descarte hipóteses. Seja breve.
+confirme o problema, procure a causa e descarte hipóteses. Seja breve: no máximo 6 comandos. Se a máquina onde você
+roda não tem acesso ao alvo (sem ssh/kubectl/mongosh configurado), não procure mais: diga isso numa linha da timeline
+e responda com o que os dados do incidente já mostram.
 
 Responda SOMENTE com um objeto JSON, em português do Brasil, sem texto fora dele:
 {"timeline": [{"result": "problem|signal|ruled_out", "text": "o que você olhou e o que achou, com o termo técnico explicado (ex.: OOMKilled = o processo foi morto por falta de memória)"}],
@@ -381,8 +384,17 @@ def _run_investigation(context: str, cfg: dict) -> str:
     job = {"id": f"ops-health-{int(time.time() * 1000)}", "name": "Saúde · investigação", "prompt": INVESTIGATE_PROMPT,
            "enabled_toolsets": list(cfg.get("toolsets") or ["terminal"]), "deliver": "local",
            "repeat": {"times": 1, "completed": 0}}
-    with as_origin("health_probe"):  # escrita bloqueada pelo guardrails, qualquer que seja a matriz
-        ok, _doc, final, error = run_job(job, extra_prompt=context)
+    cancel = threading.Event()  # teto de tempo: um turno que se perde não consome a cota inteira
+    timer = threading.Timer(INVESTIGATE_BUDGET_S, cancel.set)
+    timer.daemon = True
+    timer.start()
+    try:
+        with as_origin("health_probe"):  # escrita bloqueada pelo guardrails, qualquer que seja a matriz
+            ok, _doc, final, error = run_job(job, extra_prompt=context, cancel_event=cancel)
+    finally:
+        timer.cancel()
+    if cancel.is_set():
+        raise TimeoutError(f"a investigação passou de {INVESTIGATE_BUDGET_S // 60} min e foi interrompida")
     if not ok or not (final or "").strip():
         raise RuntimeError(error or "a investigação não devolveu resposta")
     return final
@@ -394,7 +406,6 @@ def _public_params(p: dict) -> dict:
 
 def investigate(iid: int, *, run: Callable[[str, dict], str] = _run_investigation) -> dict:
     d = _inc(iid)
-    _save_inc(iid, investigated=1)
     try:
         c = _get(d["check_id"]) if d["check_id"] else None
     except KeyError:
@@ -409,7 +420,7 @@ def investigate(iid: int, *, run: Callable[[str, dict], str] = _run_investigatio
         data = json.loads(m.group(0)) if m else {}
     except Exception as e:  # noqa: BLE001
         logger.warning("ops_center: investigação do INC-%s falhou: %s", iid, type(e).__name__)
-        _save_inc(iid, timeline=_event(_inc(iid), "signal", f"Não consegui investigar sozinho ({_why(e)})."))
+        _save_inc(iid, investigated=1, timeline=_event(_inc(iid), "signal", f"Não consegui investigar sozinho ({_why(e)})."))
         return _api_incident(_inc(iid))
     d = _inc(iid)
     tl = d["timeline"]
@@ -426,7 +437,7 @@ def investigate(iid: int, *, run: Callable[[str, dict], str] = _run_investigatio
         cmd = str(sa["command"]).strip()[:2000]
         if not guardrails.hard_deny(cmd):
             action = {"label": str(sa.get("label") or "Aplicar a correção")[:80], "command": cmd, "needsApproval": True}
-    cols: dict[str, Any] = {"timeline": tl, "hypothesis": str(data.get("hypothesis") or "")[:1000] or None,
+    cols: dict[str, Any] = {"investigated": 1, "timeline": tl, "hypothesis": str(data.get("hypothesis") or "")[:1000] or None,
                             "suggested_action": action}
     if data.get("impact") and not d["impact"]:
         cols["impact"] = str(data["impact"])[:160]
@@ -438,14 +449,38 @@ def investigate(iid: int, *, run: Callable[[str, dict], str] = _run_investigatio
     return _api_incident(_inc(iid))
 
 
-def investigate_pending() -> None:
+INVESTIGATE_BUDGET_S = 180
+_investigating = threading.Lock()
+
+
+def investigate_pending(*, wait: bool = False) -> Optional[threading.Thread]:
+    """Investiga os incidentes novos numa thread (as verificações seguem rodando), uma investigação por vez.
+
+    ponytail: uma thread global para todos os perfis — dezenas de incidentes por hora já é crise; fila se precisar."""
     with store.connect() as c:
         ids = [r[0] for r in c.execute("SELECT id FROM incidents WHERE status='open' AND investigated=0")]
-    for iid in ids:
+    if not ids or not _investigating.acquire(blocking=False):
+        return None
+
+    def _work() -> None:
         try:
-            investigate(iid)
-        except Exception:
-            logger.exception("ops_center: investigação do INC-%s quebrou", iid)
+            for iid in ids:
+                try:
+                    investigate(iid)
+                except Exception:
+                    logger.exception("ops_center: investigação do INC-%s quebrou", iid)
+                    _save_inc(iid, investigated=1)  # nunca re-tentar a cada ciclo (cada tentativa é um turno pago)
+        finally:
+            _investigating.release()
+
+    import contextvars
+
+    ctx = contextvars.copy_context()  # mesmo perfil (home, segredos, terminal) do ciclo que chamou
+    t = threading.Thread(target=ctx.run, args=(_work,), name="ops-health-investigate", daemon=True)
+    t.start()
+    if wait:
+        t.join()
+    return t
 
 
 # ---- configuração e visão geral ----

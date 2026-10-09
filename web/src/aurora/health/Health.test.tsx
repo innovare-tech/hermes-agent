@@ -236,7 +236,7 @@ describe("Saúde", () => {
     await click(create());
     await flush();
     const post = calls.find((c) => c.url === "/api/health/checks" && c.method === "POST");
-    expect(post?.body).toMatchObject({ text: "Avise se o disco da VPS1 passar de 85%", interval: 900, parsed: { groupLabel: "Servidores", spec: { kind: "ssh" } } });
+    expect(post?.body).toMatchObject({ text: "Avise se o disco da vps1 ficar cheio", interval: 900, parsed: { groupLabel: "Servidores", spec: { kind: "ssh" } } });
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(container.textContent).toContain("Aguardando a primeira execução");
     expect(container.querySelector(".hl-row.fresh")?.textContent).toContain("Disco da VPS1");

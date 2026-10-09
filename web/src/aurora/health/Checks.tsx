@@ -81,7 +81,10 @@ export function ChecksGroups({ checks, now, busy, freshIds, onRun }: { checks: C
   return (
     <>
       {GROUPS.map((g) => {
-        const rows = sortChecks(checks.filter((c) => c.group === g.key));
+        // Problemas primeiro, depois a recém-criada (fica visível mesmo com o corte dos 6 bots), depois o resto.
+        const sorted = sortChecks(checks.filter((c) => c.group === g.key));
+        const bad = (c: Check) => c.status === "error" || c.status === "warn";
+        const rows = [...sorted.filter(bad), ...sorted.filter((c) => !bad(c) && freshIds.has(c.id)), ...sorted.filter((c) => !bad(c) && !freshIds.has(c.id))];
         if (!rows.length) return null;
         const counts = countStatuses(rows);
         const worst = worstStatus(rows.map((r) => r.status));
