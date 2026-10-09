@@ -2,7 +2,7 @@
 import { fetchJSON } from "@/lib/api";
 import { ApiError } from "@/lib/api-error";
 
-export type Status = "ok" | "warn" | "error" | "pending";
+export type Status = "ok" | "warn" | "error" | "pending" | "paused";
 export type GroupKey = "servers" | "mongo" | "whatsapp_bots" | "k8s" | "dead_letters" | "services";
 export type Severity = "critical" | "warning";
 
@@ -123,6 +123,8 @@ export const healthApi = {
   ack: (id: number) => fetchJSON<Incident>(`/api/incidents/${id}/ack`, j("POST", {})),
   resolve: (id: number, note: string) => fetchJSON<{ incident: Incident; stillFailing: boolean }>(`/api/incidents/${id}/resolve`, j("POST", { note })),
   action: (id: number) => fetchJSON<Incident>(`/api/incidents/${id}/action`, j("POST", {})),
+  setPaused: (id: string, paused: boolean) => fetchJSON<Check>(`/api/health/checks/${encodeURIComponent(id)}`, j("PATCH", { paused })),
+  remove: (id: string) => fetchJSON<{ ok: boolean }>(`/api/health/checks/${encodeURIComponent(id)}`, j("DELETE")),
 };
 
 /** Texto para o usuário: o `detail` em português do backend (400/404/409) ou o texto de reserva. */

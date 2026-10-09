@@ -8,9 +8,10 @@ export const STATUS: Record<Status, { color: string; label: string }> = {
   warn: { color: "var(--warn)", label: "Atenção" },
   error: { color: "var(--err)", label: "Com problema" },
   pending: { color: "var(--fg3)", label: "Aguardando a primeira execução" },
+  paused: { color: "var(--fg3)", label: "Pausada" },
 };
 
-const RANK: Record<Status, number> = { error: 0, warn: 1, pending: 2, ok: 3 };
+const RANK: Record<Status, number> = { error: 0, warn: 1, pending: 2, ok: 3, paused: 4 };
 
 /** Problemas primeiro (erro, atenção, aguardando, ok); dentro de cada nível, a ordem que veio (já por grupo e nome). */
 export function sortChecks<T extends Pick<Check, "status">>(rows: T[]): T[] {
@@ -37,10 +38,10 @@ export const GROUPS: GroupDef[] = [
   { key: "services", label: "Microserviços", desc: "Cada serviço responde ao “você está bem?” (health)", icon: "network" },
 ];
 
-export type Counts = { error: number; warn: number; pending: number; ok: number };
+export type Counts = { error: number; warn: number; pending: number; ok: number; paused: number };
 
 export function countStatuses(rows: Pick<Check, "status">[]): Counts {
-  const c: Counts = { error: 0, warn: 0, pending: 0, ok: 0 };
+  const c: Counts = { error: 0, warn: 0, pending: 0, ok: 0, paused: 0 };
   for (const r of rows) c[r.status] += 1;
   return c;
 }
@@ -54,12 +55,13 @@ export function groupPills(c: Counts): Pill[] {
   if (c.warn) out.push({ status: "warn", label: `${c.warn} atenção` });
   if (c.pending) out.push({ status: "pending", label: `${c.pending} aguardando` });
   if (c.ok) out.push({ status: "ok", label: `${c.ok} ok` });
+  if (c.paused) out.push({ status: "paused", label: `${c.paused} pausada${c.paused > 1 ? "s" : ""}` });
   return out;
 }
 
 /** "2 com problema · 1 em atenção · 40 normais" (ou só "43 normais"). */
 export function checksSummary(c: Counts): string {
-  return [c.error && `${c.error} com problema`, c.warn && `${c.warn} em atenção`, c.pending && `${c.pending} aguardando`, c.ok && `${c.ok} normais`].filter(Boolean).join(" · ");
+  return [c.error && `${c.error} com problema`, c.warn && `${c.warn} em atenção`, c.pending && `${c.pending} aguardando`, c.ok && `${c.ok} normais`, c.paused && `${c.paused} pausada${c.paused > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
 }
 
 /** Borda do grupo pelo pior status: vermelho, âmbar ou a linha neutra. */

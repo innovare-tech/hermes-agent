@@ -48,7 +48,7 @@ def _check_row(r: Any) -> dict:
 def _api_check(d: dict) -> dict:
     res = d["result"] or {}
     return {"id": d["id"], "group": d["grp"], "name": d["name"], "detail": d["detail"], "kind": d["kind"],
-            "status": d["status"], "severity": d["severity"], "intervalSec": d["interval_sec"],
+            "status": "paused" if d.get("paused") else d["status"], "paused": bool(d.get("paused")), "severity": d["severity"], "intervalSec": d["interval_sec"],
             "result": {k: res[k] for k in ("text", "metrics") if k in res}, "lastRunAt": d["last_run_at"],
             "history": d["history"], "historyLabel": d["history_label"], "clientId": d["client_id"],
             "sourceText": d["source_text"], "createdAt": d["created_at"]}
@@ -67,7 +67,7 @@ def list_checks() -> list[dict]:
     with store.connect() as c:
         rows = [_check_row(r) for r in c.execute("SELECT * FROM health_checks")]
     rank = {"error": 0, "warn": 1, "pending": 2, "ok": 3}
-    rows.sort(key=lambda d: (rank.get(d["status"], 4), GROUPS.index(d["grp"]) if d["grp"] in GROUPS else 9,
+    rows.sort(key=lambda d: (5 if d.get("paused") else rank.get(d["status"], 4), GROUPS.index(d["grp"]) if d["grp"] in GROUPS else 9,
                              d["name"].lower()))
     return [_api_check(d) for d in rows]
 
@@ -111,9 +111,17 @@ def update_check(cid: str, patch: dict) -> dict:
         sets["name"] = str(patch["name"]).strip()[:120]
     if "params" in patch and isinstance(patch["params"], dict):
         sets["params"] = json.dumps({**cur["params"], **patch["params"]})
+    if "paused" in patch and bool(patch["paused"]) != bool(cur.get("paused")):
+        # Pausar fecha o incidente aberto (ninguém mais é chamado); retomar roda no próximo ciclo, do zero.
+        sets.update({"paused": 1, "fails": 0} if patch["paused"] else {"paused": 0, "fails": 0, "last_run_at": None})
     if sets:
         with store.connect() as c:
             c.execute(f"UPDATE health_checks SET {', '.join(f'{k}=?' for k in sets)} WHERE id=?", (*sets.values(), cid))
+    if sets.get("paused"):
+        with store.connect() as c:
+            r = c.execute("SELECT id FROM incidents WHERE check_id=? AND status='open'", (cid,)).fetchone()
+        if r:
+            resolve(r[0], "Hermes", "verificação pausada no painel")
     return _api_check(_get(cid))
 
 
@@ -149,6 +157,8 @@ def run_check(cid: str, *, now: Optional[float] = None) -> dict:
     """Roda já (botão "Rodar agora" e o ticker). Grava o resultado e move o incidente ligado."""
     now = time.time() if now is None else now
     c = _get(cid)
+    if c.get("paused"):
+        raise ValueError("verificação pausada: retome para rodar")
     try:
         res = RUNNERS[c["kind"]](c["params"], c["result"] or {})
     except Exception as e:  # noqa: BLE001 — a falha de checar também é um resultado (e pode ser o incidente)
@@ -178,7 +188,8 @@ def tick(now: Optional[float] = None, *, investigate: bool = True) -> list[str]:
     now = time.time() if now is None else now
     with store.connect() as c:
         rows = [_check_row(r) for r in c.execute(
-            "SELECT * FROM health_checks WHERE last_run_at IS NULL OR last_run_at + interval_sec <= ?", (now,))]
+            "SELECT * FROM health_checks WHERE paused=0 AND (last_run_at IS NULL OR last_run_at + interval_sec <= ?)",
+            (now,))]
     ran = []
     for d in rows:
         if not _within(d["params"].get("only"), now):
@@ -589,7 +600,7 @@ def overview(now: Optional[float] = None) -> dict:
     with store.connect() as c:
         crit = c.execute("SELECT started_at, resolved_at FROM incidents WHERE severity='critical' AND "
                          "(resolved_at IS NULL OR resolved_at > ?)", (start,)).fetchall()
-        bots = c.execute("SELECT status FROM health_checks WHERE grp='whatsapp_bots'").fetchall()
+        bots = c.execute("SELECT status FROM health_checks WHERE grp='whatsapp_bots' AND paused=0").fetchall()
         last_run = c.execute("SELECT MAX(last_run_at) FROM health_checks").fetchone()[0]
         last = c.execute("SELECT * FROM incidents WHERE status!='open' ORDER BY resolved_at DESC LIMIT 1").fetchone()
         total = c.execute("SELECT COUNT(*) FROM health_checks").fetchone()[0]

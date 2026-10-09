@@ -198,3 +198,18 @@ def test_investigate_pending_runs_in_background_once(h, monkeypatch):
     assert t is not None and len(seen) == 1
     assert h.list_incidents()[0]["investigating"] is False  # quebrou: não tenta de novo a cada ciclo
     assert h.investigate_pending(wait=True) is None
+
+
+def test_pause_closes_incident_and_stops_running(h):
+    c = _check(h)
+    h.results += [{"status": "error", "text": "x"}] * 2
+    h.run_check(c["id"])
+    h.run_check(c["id"])
+    assert len(h.list_incidents()) == 1
+    out = h.update_check(c["id"], {"paused": True})
+    assert out["status"] == "paused" and h.list_incidents() == []
+    assert h.tick(investigate=False) == []
+    with pytest.raises(ValueError):
+        h.run_check(c["id"])
+    back = h.update_check(c["id"], {"paused": False})
+    assert back["status"] == "error" and back["lastRunAt"] is None

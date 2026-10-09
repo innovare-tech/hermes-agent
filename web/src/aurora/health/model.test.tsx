@@ -30,6 +30,9 @@ describe("ordem e pior status", () => {
     const c = countStatuses([chk("a", "error"), chk("b", "warn"), chk("c", "ok"), chk("d", "ok")]);
     expect(groupPills(c).map((p) => p.label)).toEqual(["1 com problema", "1 atenção", "2 ok"]);
     expect(groupPills(countStatuses([chk("a", "ok")])).map((p) => p.label)).toEqual(["1 ok"]);
+    const p = countStatuses([chk("a", "paused"), chk("b", "paused"), chk("c", "error")]);
+    expect(groupPills(p).map((x) => x.label)).toEqual(["1 com problema", "2 pausadas"]);
+    expect(worstStatus(["paused", "ok"])).toBe("ok"); // pausada nunca pinta o grupo
     expect(checksSummary(c)).toBe("1 com problema · 1 em atenção · 2 normais");
     expect(checksSummary(countStatuses([chk("a", "ok"), chk("b", "ok")]))).toBe("2 normais");
   });

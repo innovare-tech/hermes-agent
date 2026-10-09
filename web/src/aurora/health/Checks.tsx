@@ -1,6 +1,6 @@
 // Verificações: seis grupos recolhíveis (borda pelo pior status) e, em cada um, as linhas com medidores, frequência,
 // sparkline e "Rodar agora". Os bots mostram 6 linhas, sempre incluindo todas as que têm problema.
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Icon } from "../Icon";
 import type { Check } from "./api";
 import { HIcon } from "./icons";
@@ -22,10 +22,19 @@ function Spark({ c }: { c: Check }) {
   );
 }
 
-function Row({ c, now, busy, fresh, onRun }: { c: Check; now: number; busy: boolean; fresh: boolean; onRun: () => void }) {
+export type RowActions = { onRun: (c: Check) => void; onPause: (c: Check, paused: boolean) => void; onRemove: (c: Check) => void };
+
+function Row({ c, now, busy, fresh, actions }: { c: Check; now: number; busy: boolean; fresh: boolean; actions: RowActions }) {
+  const [confirm, setConfirm] = useState(false);
+  useEffect(() => {
+    if (!confirm) return;
+    const t = setTimeout(() => setConfirm(false), 4000);
+    return () => clearTimeout(t);
+  }, [confirm]);
   const st = STATUS[c.status];
-  const bars = meters(c.result.metrics);
-  const text = c.status === "pending" && !c.result.text ? "Aguardando a primeira execução" : (c.result.text ?? "");
+  const bars = c.status === "paused" ? [] : meters(c.result.metrics);
+  const text =
+    c.status === "paused" ? "Pausada: não roda nem abre incidente" : c.status === "pending" && !c.result.text ? "Aguardando a primeira execução" : (c.result.text ?? "");
   const textColor = c.status === "error" ? "var(--err)" : c.status === "warn" ? "var(--warn)" : "var(--fg2)";
   return (
     <div className={"hl-row" + (c.status === "error" ? " bad" : "") + (fresh ? " fresh" : "")}>
@@ -62,17 +71,34 @@ function Row({ c, now, busy, fresh, onRun }: { c: Check; now: number; busy: bool
       </span>
       <Spark c={c} />
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-        <button className="hl-run" disabled={busy} onClick={onRun} aria-label={`Rodar agora: ${c.name}`}>
-          <Icon name={busy ? "loader-circle" : "play"} size={12} className={busy ? "au-spin" : undefined} />
-          {busy ? "Rodando…" : "Rodar agora"}
-        </button>
+        {c.status === "paused" ? (
+          <button className="hl-run" disabled={busy} onClick={() => actions.onPause(c, false)} aria-label={`Retomar: ${c.name}`}>
+            <Icon name="play" size={12} />
+            Retomar
+          </button>
+        ) : (
+          <button className="hl-run" disabled={busy} onClick={() => actions.onRun(c)} aria-label={`Rodar agora: ${c.name}`}>
+            <Icon name={busy ? "loader-circle" : "play"} size={12} className={busy ? "au-spin" : undefined} />
+            {busy ? "Rodando…" : "Rodar agora"}
+          </button>
+        )}
+        <span className="hl-rowacts">
+          {c.status !== "paused" && (
+            <button className="hl-link" disabled={busy} onClick={() => actions.onPause(c, true)} aria-label={`Pausar: ${c.name}`} title="Para de rodar e de chamar a equipe (ex.: número banido, canal desativado)">
+              Pausar
+            </button>
+          )}
+          <button className={"hl-link" + (confirm ? " danger" : "")} disabled={busy} onClick={() => (confirm ? actions.onRemove(c) : setConfirm(true))} aria-label={confirm ? `Confirmar remoção: ${c.name}` : `Remover: ${c.name}`}>
+            {confirm ? "Remover mesmo?" : "Remover"}
+          </button>
+        </span>
         <span style={{ fontSize: 10.5, color: "var(--fg3)" }}>{c.lastRunAt ? agoLabel(now - c.lastRunAt) : "nunca rodou"}</span>
       </div>
     </div>
   );
 }
 
-export function ChecksGroups({ checks, now, busy, freshIds, onRun }: { checks: Check[]; now: number; busy: Set<string>; freshIds: Set<string>; onRun: (c: Check) => void }) {
+export function ChecksGroups({ checks, now, busy, freshIds, actions }: { checks: Check[]; now: number; busy: Set<string>; freshIds: Set<string>; actions: RowActions }) {
   const uid = useId();
   // Grupo com a verificação recém-criada abre sozinho, mesmo que o usuário o tenha recolhido.
   const [closed, setClosed] = useState<Record<string, boolean>>({});
@@ -115,7 +141,7 @@ export function ChecksGroups({ checks, now, busy, freshIds, onRun }: { checks: C
             {open && (
               <div id={panel}>
                 {shown.map((c) => (
-                  <Row key={c.id} c={c} now={now} busy={busy.has(c.id)} fresh={freshIds.has(c.id)} onRun={() => onRun(c)} />
+                  <Row key={c.id} c={c} now={now} busy={busy.has(c.id)} fresh={freshIds.has(c.id)} actions={actions} />
                 ))}
                 {toggle && (
                   <button className="hl-more" onClick={() => setAll((z) => ({ ...z, [g.key]: !z[g.key] }))}>

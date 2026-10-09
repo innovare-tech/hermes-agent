@@ -108,6 +108,34 @@ export function Health() {
     }
   };
 
+  const pause = async (c: Check, paused: boolean) => {
+    setRunning((s) => new Set(s).add(c.id));
+    try {
+      const next = await healthApi.setPaused(c.id, paused);
+      setChecks((cs) => cs && cs.map((x) => (x.id === next.id ? next : x)));
+      toast(paused ? `“${c.name}” pausada` : `“${c.name}” retomada`, paused ? "Não roda nem chama a equipe; um incidente aberto dela foi fechado." : "Roda no próximo ciclo (até 30 s).");
+      load(true);
+    } catch (e) {
+      toast(errText(e, `Não consegui ${paused ? "pausar" : "retomar"} “${c.name}”`));
+    } finally {
+      setRunning((s) => {
+        const n = new Set(s);
+        n.delete(c.id);
+        return n;
+      });
+    }
+  };
+
+  const remove = async (c: Check) => {
+    try {
+      await healthApi.remove(c.id);
+      setChecks((cs) => cs && cs.filter((x) => x.id !== c.id));
+      toast(`“${c.name}” removida`);
+    } catch (e) {
+      toast(errText(e, `Não consegui remover “${c.name}”`));
+    }
+  };
+
   const busyOf = (id: number, p: IncidentBusy) => setIncBusy((b) => ({ ...b, [id]: { ...b[id], ...p } }));
   const swap = (next: Incident) => {
     incsRef.current = incsRef.current.map((x) => (x.id === next.id ? next : x));
@@ -259,7 +287,7 @@ export function Health() {
                 <h2 className="hl-h2">Verificações</h2>
                 <span style={{ fontSize: 12.5, color: "var(--fg2)" }}>{checksSummary(counts)}</span>
               </div>
-              <ChecksGroups checks={checks ?? []} now={now} busy={running} freshIds={fresh} onRun={run} />
+              <ChecksGroups checks={checks ?? []} now={now} busy={running} freshIds={fresh} actions={{ onRun: run, onPause: pause, onRemove: remove }} />
             </section>
           </>
         )}
