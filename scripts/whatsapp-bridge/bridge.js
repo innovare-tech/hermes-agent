@@ -1112,6 +1112,8 @@ app.get('/group/:id/participants', async (req, res) => {
     const metadata = await sock.groupMetadata(chatId);
     const people = (metadata.participants || []).slice(0, 300);
     const withTimeout = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), ms))]);
+    // O próprio número do Hermes (ex.: o de suporte) aparece como "este número", não como uma pessoa.
+    const me = String(sock.user?.id || '').replace(/:\d+@/, '@').replace(/@.*/, '');
     const participants = await Promise.all(people.map(async (p) => {
       const rawId = String(p.id || '');
       const lidNum = rawId.endsWith('@lid') ? rawId.replace(/@.*/, '') : '';
@@ -1124,6 +1126,7 @@ app.get('/group/:id/participants', async (req, res) => {
       return {
         id: rawId, jid, phone, lid: lidNum ? rawId : (p.lid || ''),
         admin: p.admin || null, name: p.name || p.notify || p.verifiedName || '', photo,
+        self: Boolean(me && phone && phone === me),
       };
     }));
     res.json({ name: metadata.subject || '', size: (metadata.participants || []).length, participants });

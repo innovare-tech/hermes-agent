@@ -264,11 +264,17 @@ def ops_participants_verb(runner: Any) -> Callable[..., dict]:
             if adapter is None or not hasattr(adapter, "group_participants"):
                 return {"ok": False, "error": f"o {platform} deste perfil não lista participantes"}
             loop = getattr(runner, "_gateway_loop", None)
+            # A sessão HTTP do adaptador fica presa ao laço em que ele conectou; agendar em outro laço pendura.
+            session_loop = getattr(getattr(adapter, "_http_session", None), "_loop", None)
+            if session_loop is not None and session_loop is not loop:
+                logger.info("ops_center: adaptador %s/%s vive noutro laço; usando o dele", platform, profile)
+                loop = session_loop
             if loop is None:
                 return {"ok": False, "error": "o gateway ainda está iniciando"}
             data = asyncio.run_coroutine_threadsafe(adapter.group_participants(chat_id), loop).result(45)
             return {"ok": True, **(data or {})}
         except Exception as e:  # noqa: BLE001 — o motivo vai para a tela
-            return {"ok": False, "error": str(e)[:300]}
+            logger.warning("ops_center: participantes de %s:%s falharam", platform, chat_id, exc_info=True)
+            return {"ok": False, "error": (f"{type(e).__name__}: {e}" if str(e) else type(e).__name__)[:300]}
 
     return _handler
