@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import * as QRCode from "qrcode";
+import { fetchJSON, getManagementProfile } from "@/lib/api";
 import { spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
@@ -18,6 +20,126 @@ export function envChanges(fields: GatewayField[], vals: Record<string, string>)
     if (f.secret ? out : out !== f.value.trim()) env[f.key] = out;
   }
   return env;
+}
+
+type WaPairing = { pairing_id: string; status: string; qr_payload?: string | null; error?: string | null; account_name?: string | null; account_phone?: string | null };
+
+/** WhatsApp por QR code, sem terminal: o painel sobe a ponte, mostra o QR e grava a sessão no perfil atual. */
+function WhatsAppPairing({ onDone }: { onDone: () => void }) {
+  const [p, setP] = useState<WaPairing | null>(null);
+  const [qr, setQr] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const profile = getManagementProfile();
+
+  useEffect(() => {
+    if (!p?.qr_payload) return;
+    let live = true;
+    QRCode.toDataURL(p.qr_payload, { margin: 1, width: 260 }).then((url) => live && setQr(url)).catch(() => live && setErr("Não consegui desenhar o QR code."));
+    return () => {
+      live = false;
+    };
+  }, [p?.qr_payload]);
+
+  useEffect(() => {
+    if (!p || ["connected", "error", "expired", "cancelled"].includes(p.status)) return;
+    const t = setInterval(async () => {
+      try {
+        setP(await fetchJSON<WaPairing>(`/api/messaging/whatsapp/onboarding/${p.pairing_id}`));
+      } catch (e) {
+        setErr(errMsg(e, "O QR code expirou. Gere outro."));
+        setP(null);
+      }
+    }, 2000);
+    return () => clearInterval(t);
+  }, [p]);
+
+  const start = async () => {
+    setErr("");
+    setQr("");
+    setBusy(true);
+    try {
+      setP(await fetchJSON<WaPairing>("/api/messaging/whatsapp/onboarding/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "bot", profile }) }));
+    } catch (e) {
+      setErr(errMsg(e, "Não consegui iniciar o pareamento."));
+    }
+    setBusy(false);
+  };
+  const finish = async () => {
+    if (!p) return;
+    setBusy(true);
+    try {
+      await fetchJSON(`/api/messaging/whatsapp/onboarding/${p.pairing_id}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "bot", profile }) });
+      toast("WhatsApp conectado", { sub: "O gateway liga o WhatsApp deste perfil em até 30 segundos." });
+      setP(null);
+      onDone();
+    } catch (e) {
+      setErr(errMsg(e, "Não consegui salvar a sessão do WhatsApp."));
+    }
+    setBusy(false);
+  };
+  const cancel = async () => {
+    if (p) await fetchJSON(`/api/messaging/whatsapp/onboarding/${p.pairing_id}`, { method: "DELETE" }).catch(() => undefined);
+    setP(null);
+    setQr("");
+  };
+
+  const connected = p?.status === "connected";
+  const failed = p && ["error", "expired"].includes(p.status) ? p.error || "O pareamento não terminou. Gere outro QR code." : "";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 14, borderRadius: "var(--r2)", border: "1px solid var(--line2)", background: "var(--panel2)" }}>
+      <strong style={{ fontSize: 13.5 }}>Conectar o número pelo QR code</strong>
+      {!p && (
+        <>
+          <span style={{ fontSize: 12.5, color: "var(--fg2)", lineHeight: 1.5 }}>
+            O número entra como um aparelho conectado; o celular continua funcionando normalmente. Use o celular do número que o Hermes vai usar.
+          </span>
+          <button type="button" className="au-primary" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={start}>
+            {busy ? "Preparando…" : "Gerar QR code"}
+          </button>
+        </>
+      )}
+      {p && !connected && !failed && (
+        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ width: 260, height: 260, borderRadius: 12, background: "#fff", display: "grid", placeItems: "center" }}>
+            {qr ? <img src={qr} alt="QR code para conectar o WhatsApp" width={260} height={260} /> : <span style={{ fontSize: 12.5, color: "#555" }}>Preparando a ponte do WhatsApp…</span>}
+          </div>
+          <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.8, color: "var(--fg2)" }}>
+            <li>No celular do número, abra o WhatsApp.</li>
+            <li>
+              <b>Configurações › Aparelhos conectados › Conectar aparelho</b>.
+            </li>
+            <li>Aponte a câmera para o QR code ao lado.</li>
+            <li>Espere a confirmação aqui.</li>
+          </ol>
+          <button type="button" className="au-outline" onClick={cancel} style={{ alignSelf: "flex-end" }}>
+            Cancelar
+          </button>
+        </div>
+      )}
+      {connected && (
+        <>
+          <span role="status" style={{ fontSize: 13, color: "var(--ok)" }}>
+            ✓ Conectado{p?.account_name ? ` como ${p.account_name}` : ""}
+            {p?.account_phone ? ` (${p.account_phone})` : ""}.
+          </span>
+          <button type="button" className="au-primary" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={finish}>
+            {busy ? "Salvando…" : "Concluir e ligar"}
+          </button>
+        </>
+      )}
+      {failed && (
+        <button type="button" className="au-outline" style={{ alignSelf: "flex-start" }} onClick={start}>
+          Gerar outro QR code
+        </button>
+      )}
+      {(err || failed) && (
+        <span role="alert" style={{ fontSize: 12.5, color: "var(--err)" }}>
+          {err || failed}
+        </span>
+      )}
+    </div>
+  );
 }
 
 /** Credenciais de um canal: só os campos preenchidos são gravados; segredo salvo nunca volta para a tela. */
@@ -79,6 +201,7 @@ export function GatewaySetup({ g, onSaved }: { g: Gateway; onSaved: (restart: bo
       style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 12, borderTop: "1px solid var(--line)" }}
     >
       {g.description && <p style={{ margin: 0, fontSize: 13, color: "var(--fg2)", lineHeight: 1.5 }}>{g.description}</p>}
+      {g.id === "whatsapp" && <WhatsAppPairing onDone={() => onSaved(false)} />}
       {fields.map((f) => (
         <label key={f.key} className="au-field">
           <span className="au-label" style={{ display: "flex", gap: 6 }}>

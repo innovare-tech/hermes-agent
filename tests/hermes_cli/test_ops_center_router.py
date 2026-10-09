@@ -78,7 +78,7 @@ def test_reply_sends_marks_sent_and_respects_pause(client, monkeypatch):
     assert client.post(f"/api/ops/inbox/{item}/reply", json={"text": " "}).status_code == 400
     r = client.post(f"/api/ops/inbox/{item}/reply", json={"text": "Olá!"})
     assert r.status_code == 200 and r.json()["status"] == "sent" and r.json()["draft"] == "Olá!"
-    assert sent == [("telegram", "-100", "Olá!")]
+    assert sent == [("telegram", "-100", "Olá!", None)]
 
     monkeypatch.setattr("agent.estop.is_engaged", lambda: True)
     assert client.post(f"/api/ops/inbox/{item}/reply", json={"text": "de novo"}).status_code == 409
@@ -96,7 +96,7 @@ def test_reply_sends_marks_sent_and_respects_pause(client, monkeypatch):
 def test_default_mode_for_new_channels(client):
     assert client.get("/api/ops/settings").json() == {"default_mode": 1}  # Rascunhar de fábrica
     assert client.put("/api/ops/settings", json={"default_mode": 0}).json() == {"default_mode": 0}
-    assert client.put("/api/ops/settings", json={"default_mode": 3}).status_code == 400
+    assert client.put("/api/ops/settings", json={"default_mode": 9}).status_code == 400
 
 
 def test_config_actions_land_in_activity(client):
@@ -133,3 +133,157 @@ def test_human_schedule_in_activity():
     assert _human_schedule("0 18 * * 5") == "toda sexta às 18:00"
     assert _human_schedule("30 7 * * 1-5") == "dias úteis às 07:30"
     assert _human_schedule("every 2h") == "every 2h"
+
+
+def test_profile_query_scopes_ops_data(client, tmp_path):
+    """?profile=aibiz lê e grava no ops.db da Aibiz; o perfil padrão não vê nada."""
+    from hermes_cli.profiles import _get_profiles_root, create_profile
+
+    root = _get_profiles_root()
+    assert tmp_path in root.parents  # nunca tocar o ~/.hermes real
+    create_profile("aibiz", no_skills=True)
+    b = client.post("/api/ops/businesses?profile=aibiz", json={"name": "Aibiz"}).json()
+    assert client.get("/api/ops/businesses?profile=aibiz").json() == [b]
+    assert client.get("/api/ops/businesses").json() == []
+    assert (root / "aibiz" / "ops.db").exists()
+    assert client.get("/api/ops/businesses?profile=naoexiste").status_code == 404
+    acts = client.get("/api/ops/activity?profile=aibiz").json()
+    assert any("Aibiz" in a["action"] for a in acts) and client.get("/api/ops/activity").json() == []
+
+
+def test_profile_pause_is_local_and_never_lifts_global(client):
+    from agent.estop import engage, is_engaged
+    from hermes_cli.profiles import create_profile, get_profile_dir
+
+    # padrão = raiz: só pausa pelo "Pausar tudo"
+    assert client.get("/api/ops/pause").json() == {"paused": False, "can_pause": False}
+    assert client.put("/api/ops/pause", json={"paused": True}).status_code == 400
+
+    create_profile("aibiz", no_skills=True)
+    assert client.put("/api/ops/pause?profile=aibiz", json={"paused": True}).json() == {"paused": True, "can_pause": True}
+    assert (get_profile_dir("aibiz") / "ESTOP").exists()
+    assert not is_engaged()  # o padrão segue rodando
+
+    engage(reason="pausa geral")  # "Pausar tudo"
+    client.put("/api/ops/pause?profile=aibiz", json={"paused": False})
+    assert not (get_profile_dir("aibiz") / "ESTOP").exists()
+    assert is_engaged()  # retomar o perfil não levanta a pausa global
+
+
+def test_listen_settings_route(client):
+    assert client.get("/api/ops/listen").json()["max_min"] == 30
+    out = client.put("/api/ops/listen", json={"silence_min": 10, "notify_target": "telegram:-100:7"}).json()
+    assert out["silence_min"] == 10 and out["notify_target"] == "telegram:-100:7"
+    assert client.put("/api/ops/listen", json={"max_min": 1000}).status_code == 400
+
+
+def test_permissions_and_approvals_routes(client, monkeypatch):
+    perms = client.get("/api/ops/permissions").json()
+    assert perms["enabled"] is False and "whatsapp_group" in perms["origins"]
+    assert any(h["label"] == "Apagar banco ou tabela" for h in perms["hardDeny"])
+    bad = client.put("/api/ops/permissions", json={"matrix": {"db.write": {"whatsapp_group": "allow"}}})
+    assert bad.status_code == 400 and "nunca alteram" in bad.json()["detail"]
+    ok = client.put("/api/ops/permissions", json={"enabled": True, "approvalTarget": "telegram:-100:3"}).json()
+    assert ok["enabled"] and ok["approvalTarget"] == "telegram:-100:3"
+
+    from ops_center import guardrails, store
+
+    aid = store.add_approval(origin="telegram_team", requested_by="Ivair", requested_by_id="11", summary="Mudar cluster",
+                             command="kubectl scale deploy/x --replicas=2", tool="terminal",
+                             args={"command": "kubectl scale deploy/x --replicas=2"}, status="pending",
+                             expires_at=10**12)
+    ran = []
+    monkeypatch.setattr(guardrails, "execute_and_announce", lambda i: ran.append(i) or "ok")
+    assert client.get("/api/ops/approvals", params={"status": "pending"}).json()[0]["id"] == aid
+    out = client.post(f"/api/ops/approvals/{aid}/decide", json={"approve": True}).json()
+    assert out["status"] == "approved" and out["decided_by"] == "Você (painel)"
+    assert client.post(f"/api/ops/approvals/{aid}/decide", json={"approve": False}).status_code == 409
+
+
+def test_permissions_list_mcp_connectors_from_schema_cache(client, tmp_path):
+    import yaml
+
+    from tools.mcp_schema_cache import config_fingerprint, write_cache_entry
+
+    home = tmp_path / ".hermes"
+    home.mkdir(exist_ok=True)
+    gh = {"command": "npx", "args": ["gh-mcp"]}
+    (home / "config.yaml").write_text(yaml.safe_dump({"mcp_servers": {
+        "github": gh, "linear": {"url": "https://x.test/mcp"}, "off": {"url": "https://y.test", "enabled": False}}}), encoding="utf-8")
+    write_cache_entry("github", config_fingerprint(gh), tools=[
+        {"name": "get_issue", "description": "Lê uma issue", "annotations": {"readOnlyHint": True}},
+        {"name": "create-pr", "description": "", "annotations": {"readOnlyHint": False}},
+        {"name": "sem_dica", "annotations": {}}])
+    perms = client.get("/api/ops/permissions").json()
+    mcp = {a["key"]: a for a in perms["actions"] if a["group"].startswith("mcp:")}
+    assert mcp["mcp.github.get_issue"]["writes"] is False and mcp["mcp.github.get_issue"]["description"] == "Lê uma issue"
+    assert mcp["mcp.github.create_pr"]["writes"] is True and mcp["mcp.github.create_pr"]["label"] == "create-pr"
+    assert mcp["mcp.github.sem_dica"]["writes"] is True  # sem readOnlyHint = altera
+    servers = {s["id"]: s for s in perms["mcpServers"]}
+    assert servers["github"] == {"id": "github", "label": "github", "discovered": True, "tools": 3}
+    assert servers["linear"]["discovered"] is False and servers["linear"]["tools"] == 0 and "off" not in servers
+    # regra salva de ferramenta que o cache não conhece continua na matriz
+    client.put("/api/ops/permissions", json={"matrix": {"mcp.asaas.refund": {"telegram_team": "approve"}}})
+    perms = client.get("/api/ops/permissions").json()
+    assert any(a["key"] == "mcp.asaas.refund" and a["writes"] for a in perms["actions"])
+    assert any(s["id"] == "asaas" for s in perms["mcpServers"])
+
+
+def test_channels_a2_contract_and_clients_directory(client):
+    from ops_center import store
+
+    imp = client.post("/api/clients/import", json=[
+        {"systemClientId": "c-sol", "name": "Padaria Sol", "plan": "Pro"},
+        {"systemClientId": "c-lumen", "name": "Lumen Contábil", "plan": "Basic"},
+    ])
+    assert imp.status_code == 200 and imp.json() == {"imported": 2, "total": 2}
+    assert client.post("/api/clients/import", json=[{"systemClientId": "x"}]).status_code == 400
+    page = client.get("/api/clients", params={"q": "contabil"}).json()
+    assert [c["systemClientId"] for c in page["items"]] == ["c-lumen"] and page["total"] == 1 and page["nextCursor"] is None
+    assert client.get("/api/clients", params={"cursor": "zzz"}).status_code == 400
+    assert client.get("/api/clients/with-analyses").json() == {"items": [], "total": 0, "nextCursor": None}
+
+    store.touch_channel("whatsapp", "g1", "Padaria Sol - Suporte", "group")
+    ch = client.get("/api/ops/channels").json()[0]
+    assert ch["section"] == "group" and ch["suggestion"]["clientId"] == "c-sol" and ch["requiresConfirm"] is True
+
+    # vínculo, janela por canal, "não é cliente" — PATCH e PUT são o mesmo contrato
+    r = client.patch("/api/ops/channels/whatsapp:g1", json={"clientId": "c-sol", "window": {"silenceMin": 8, "maxMin": 40}})
+    assert r.status_code == 200
+    assert (r.json()["clientName"], r.json()["window"]) == ("Padaria Sol", {"useDefault": False, "silenceMin": 8, "maxMin": 40})
+    assert client.get("/api/clients").json()["items"][1]["channelCount"] == 1
+    assert client.patch("/api/ops/channels/whatsapp:g1", json={"window": {"silenceMin": 0, "maxMin": 40}}).status_code == 400
+    assert client.patch("/api/ops/channels/whatsapp:g1", json={"clientId": "nope"}).status_code == 400
+    r = client.put("/api/ops/channels/whatsapp:g1", json={"clientId": None, "notClient": True, "window": None})
+    assert (r.json()["clientId"], r.json()["notClient"], r.json()["window"]["useDefault"]) == (None, True, True)
+
+    # Autônomo em grupo pede confirm; Escutar é aceito; canal de avisos não escuta
+    r = client.patch("/api/ops/channels/whatsapp:g1", json={"mode": 2})
+    assert r.status_code == 400 and "confirm" in r.json()["detail"]
+    assert client.patch("/api/ops/channels/whatsapp:g1", json={"mode": 3}).json()["mode"] == 3
+    assert client.patch("/api/ops/channels/whatsapp:g1", json={"mode": 2, "confirm": True}).json()["mode"] == 2
+    store.touch_channel("telegram", "-100", "Equipe Aibiz", "group")
+    client.put("/api/ops/listen", json={"notify_target": "telegram:-100:45"})
+    assert client.patch("/api/ops/channels/telegram:-100", json={"mode": 3}).status_code == 400
+    assert client.patch("/api/ops/channels/nope:1", json={"notClient": True}).status_code == 404
+    acts = [a["action"] for a in client.get("/api/ops/activity").json()]
+    assert any("vinculado ao cliente Padaria Sol" in a for a in acts) and any("janela de análise" in a for a in acts)
+
+
+def test_team_and_group_participants(client, monkeypatch):
+    from ops_center import store
+
+    out = client.post("/api/ops/team", json={"id": "554989235817@s.whatsapp.net", "name": "Kelvin", "aliases": ["1438@lid"]}).json()
+    assert out["id"] == "554989235817" and out["aliases"] == ["1438@lid"]
+    assert [m["id"] for m in client.get("/api/ops/team").json()] == ["554989235817"]
+    store.touch_channel("whatsapp", "g1@g.us", "Padaria", "group")
+    answer = {"ok": True, "name": "Padaria", "size": 2, "participants": [
+        {"id": "1438@lid", "jid": "554989235817@s.whatsapp.net", "phone": "554989235817", "lid": "1438@lid", "admin": "admin", "name": "", "photo": None},
+        {"id": "999@lid", "jid": "999@lid", "phone": "", "lid": "999@lid", "admin": None, "name": "Cliente", "photo": "https://pps.whatsapp.net/x"}]}
+    monkeypatch.setattr("gateway.control_socket.query_gateway_control", lambda *a, **k: answer)
+    p = client.get("/api/ops/channels/whatsapp:g1@g.us/participants").json()
+    assert [(x["key"], x["team"]) for x in p["participants"]] == [("554989235817", True), ("999@lid", False)]
+    monkeypatch.setattr("gateway.control_socket.query_gateway_control", lambda *a, **k: None)
+    assert client.get("/api/ops/channels/whatsapp:g1@g.us/participants").status_code == 400
+    assert client.delete("/api/ops/team/554989235817").json() == {"ok": True}
+    assert client.get("/api/ops/team").json() == []

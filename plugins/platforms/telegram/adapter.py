@@ -4247,6 +4247,69 @@ class TelegramAdapter(TelegramHeldInboundMixin, BasePlatformAdapter):
             "send_exec_approval", prompt.chat_id, prompt.metadata, build, parse_mode=ParseMode.HTML,
             thread_id=self._metadata_thread_id(prompt.metadata), reply_to_mode=self._reply_to_mode)
 
+    async def send_ops_approval(
+        self, chat_id: str, text: str, approval_id: int, metadata: Optional[Dict[str, Any]] = None) -> SendResult:
+        """Pedido de aprovação das Permissões (``ops_center.guardrails``): Aprovar / Negar. ``text`` já em HTML."""
+        def build():
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ Aprovar", callback_data=f"oa:y:{int(approval_id)}"),
+                InlineKeyboardButton("❌ Negar", callback_data=f"oa:n:{int(approval_id)}")]])
+            return text, keyboard, None
+        return await self._send_prompt(
+            "send_ops_approval", chat_id, metadata, build, parse_mode=ParseMode.HTML,
+            thread_id=self._metadata_thread_id(metadata), reply_to_mode=self._reply_to_mode)
+
+    async def _handle_ops_approval_callback(self, query, data: str, cb: Dict[str, Any]) -> None:
+        """``oa:<y|n>:<id>`` — decide um pedido das Permissões; aprovado, executa a chamada exata e responde."""
+        parts = data.split(":", 2)
+        if len(parts) != 3 or parts[1] not in ("y", "n") or not parts[2].isdigit():
+            return
+        if not await self._callback_authorized(query, cb, _unauthorized()):
+            return
+        approve, approval_id = parts[1] == "y", int(parts[2])
+        user = query.from_user
+        by, by_id = getattr(user, "first_name", None) or "?", str(getattr(user, "id", "") or "")
+        from gateway.outbound_guard import _adapter_home
+
+        home = _adapter_home(self)
+
+        def _decide() -> dict:
+            from gateway.ops_hooks import _home
+            from ops_center import guardrails
+
+            with _home(home):
+                return guardrails.decide(approval_id, approve, by, by_id)
+
+        out = await asyncio.to_thread(_decide)
+        if not out.get("ok"):
+            await query.answer(text=str(out.get("error") or "não deu")[:_TOAST_LIMIT], show_alert=True)
+            return
+        a = out["approval"]
+        when = time.strftime("%H:%M")
+        verdict = f"✅ Aprovado por {_html.escape(by)} às {when}. Executando…" if approve else \
+            f"❌ Negado por {_html.escape(by)} às {when}."
+        await query.answer(text=("Aprovado" if approve else "Negado"))
+        body = f"<b>{_html.escape(a.get('summary') or '')}</b>\n<pre>{_html.escape((a.get('command') or '')[:3000])}</pre>\n{verdict}"
+        with contextlib.suppress(Exception):
+            await query.edit_message_text(body, parse_mode=ParseMode.HTML, reply_markup=None)
+        if not approve:
+            return
+
+        def _run() -> str:
+            from ops_center import guardrails
+
+            if home:
+                from gateway.run import _profile_runtime_scope
+
+                with _profile_runtime_scope(home):
+                    return guardrails.execute_approved(approval_id)
+            return guardrails.execute_approved(approval_id)
+
+        result = await asyncio.to_thread(_run)
+        if cb["chat_id"] is not None:
+            meta = {"thread_id": cb["thread_id"]} if cb["thread_id"] is not None else None
+            await self.send(str(cb["chat_id"]), f"Resultado do pedido #{approval_id}:\n{result[:3500]}", metadata=meta)
+
     async def send_slash_confirm(
         self, chat_id: str, title: str, message: str, session_key: str, confirm_id: str,
         metadata: Optional[Dict[str, Any]] = None) -> SendResult:
@@ -4702,6 +4765,7 @@ class TelegramAdapter(TelegramHeldInboundMixin, BasePlatformAdapter):
                 return
         for prefix, handler in (
             ("gt:", self._handle_gmail_triage_callback), ("ea:", self._handle_exec_approval_callback),
+            ("oa:", self._handle_ops_approval_callback),
             ("sc:", self._handle_slash_confirm_callback), ("cl:", self._handle_clarify_callback),
             ("update_prompt:", self._handle_update_prompt_callback)):
             if data.startswith(prefix):

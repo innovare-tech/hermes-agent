@@ -14,6 +14,15 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | 04 Verdade | 👀 | — | R4: V4.1/V4.2 ❌ → corrigidos |
 | 05 Promessas | 👀 | — | — |
 | 06 Acabamento | 👀 | — | — |
+| 07 Perfis (A1) | 🧪 | — | P7.1–P7.10 implementados; testes ✅; falta QA no Chrome |
+| 08 Blindagem (1.1) | 🧪 | — | testes B8.1–B8.5 ✅; B8.6 precisa do número real |
+| 09 Escutar (1.2) | 🧪 | — | testes E9.1–E9.6 ✅; E9.7 precisa de número, Jev e Telegram reais |
+| 10 Permissões (1.7) | 🧪 | — | backend + testes G10.1–G10.6 ✅; tela A6 a fazer; G10.7 no Telegram real |
+| A2 Canais (1.3) | 🧪 | — | tela + diretório de clientes, testes ✅; conferir contra o protótipo no Chrome |
+| A3 Análises (1.4) | 🧪 | — | tela + /api/analyses, testes ✅; QA no Chrome |
+| A6 Permissões (tela) | 🧪 | — | matriz, conectores MCP, histórico e pendentes; testes ✅; QA no Chrome |
+| A4 Avisos (1.5) | 🧪 | — | rotas por nível, silêncio, resumo diário (tick no ticker), teste real; QA + Telegram real |
+| A5 Modelos (1.6) | 🧪 | — | provedores, quem faz o quê, triagem Jev, gasto e limites; análise dos grupos usa o modelo escolhido; QA no Chrome |
 
 ## Já entregue antes dos specs
 - 🏁 PRs #1–#8: telas Aurora, sem mocks, ops_center, gateway com autonomia, playbooks com horário.
@@ -134,6 +143,9 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | A6.10 Cabeçalho da barra lateral | ✅ | R3 07/10 |
 
 ## Diário
+- **08/10/2026** — Fase 1.7 (spec 10): permissões por origem no núcleo, sempre bloqueado, aprovação por botão no Telegram com execução da chamada exata. Regressão: mesmas 163 falhas de ambiente antes e depois.
+- **08/10/2026** — Fase 1.2 (spec 09): captura antes da autorização, lote por janela, triagem Jev, análise silenciosa via cron e aviso à equipe.
+- **08/10/2026** — Fase 1.1 (spec 08): trava de saída por canal (`gateway/outbound_guard.py`), modo Escutar no ops.db, mídia sem legenda registrada, comandos não rodam em canal mudo. Spec 07 (Perfis) em implementação.
 - **07/10/2026** — R6 (final): todos os critérios testados ✅. Pendentes: C1.17 (contagem precisa de backend), P2.10 com canal ligado e E5.8 com mensagem real (precisam de credencial de canal). Aguardando validação do dono.
 - **07/10/2026** — R5: 21✅ 2❌ (V4.12, E5.12) → corrigidos. Gatilho por palavra-chave (E5.7/E5.8), avisos graves no Painel (V4.5) e escopo de custo (V4.8) implementados.
 - **07/10/2026** — R4: 13✅ 5❌ (skill na Atividade, Desfazer, textos de canais, clique no cartão, jargão) → corrigidos. Logs, Pessoas, Sessões, Agendamentos, Subagentes implementados.

@@ -1,7 +1,7 @@
 // Peças globais do shell: fundo atmosférico, Toast, PanicButton, faixa de pausa e helpers de página.
 import { useEffect, type MouseEvent, type ReactNode } from "react";
 import { Icon } from "./Icon";
-import { answerAsk, ask, togglePause, useStore } from "./store";
+import { answerAsk, ask, dismissToast, togglePause, useStore } from "./store";
 
 /** Spotlight que segue o cursor dentro do cartão (`.au-card`). */
 export const spot = (e: MouseEvent<HTMLElement>) => {
@@ -53,7 +53,7 @@ export function Background() {
         <div className="au-abs" style={{ opacity: 0.08, mixBlendMode: "overlay", backgroundImage: GRAIN }} />
       </div>
       <div className="au-abs" style={{ overflow: "hidden", opacity: "var(--blobO)", transition: "opacity .6s" }}>
-        <div className="au-orb" style={{ width: "60vw", height: "60vw", right: "-15vw", top: "-25vw", background: "radial-gradient(circle,rgba(140,120,255,.28),transparent 62%)", animation: "hdrift 22s ease-in-out infinite" }} />
+        <div className="au-orb" style={{ width: "60vw", height: "60vw", right: "-15vw", top: "-25vw", background: "radial-gradient(circle,var(--accGlow,rgba(140,120,255,.28)),transparent 62%)", animation: "hdrift 22s ease-in-out infinite" }} />
         <div className="au-orb" style={{ width: "50vw", height: "50vw", left: "10vw", bottom: "-30vw", background: "radial-gradient(circle,rgba(70,210,190,.18),transparent 62%)", animation: "hdrift 28s ease-in-out infinite reverse" }} />
       </div>
     </>
@@ -71,14 +71,34 @@ export function Toast() {
   return (
     <div role="status" aria-live="polite" style={{ position: "absolute", right: 24, bottom: 24, zIndex: 70, pointerEvents: "none", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
       {list.map((t) => (
-        <div key={t.id} className="au-toast">
-          <span style={{ position: "relative", width: 26, height: 26, borderRadius: "50%", background: "var(--acc)", color: "var(--accFg)", display: "grid", placeItems: "center" }}>
+        <div key={t.id} className="au-toast" style={t.sub ? { alignItems: "flex-start", borderRadius: "var(--r2)", padding: "10px 10px 10px 10px", pointerEvents: "auto" } : { pointerEvents: "auto" }}>
+          <span style={{ position: "relative", width: 26, height: 26, flex: "none", borderRadius: "50%", background: "var(--acc)", color: "var(--accFg)", display: "grid", placeItems: "center" }}>
             <Icon name="sparkles" size={13} />
             {BITS.map((b, i) => (
               <span key={i} className="au-bit" style={{ ["--bx" as string]: b.x, ["--by" as string]: b.y, animationDelay: b.d }} />
             ))}
           </span>
-          <span>{t.text}</span>
+          <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, paddingTop: t.sub ? 1 : 0 }}>
+            <span style={t.sub ? { fontSize: 13.5, fontWeight: 600 } : undefined}>{t.text}</span>
+            {t.sub && <span style={{ fontSize: 12.5, color: "var(--fg2)", lineHeight: 1.4 }}>{t.sub}</span>}
+          </span>
+          {t.action && (
+            <button
+              className="au-undo"
+              style={{ pointerEvents: "auto", marginLeft: 6 }}
+              onClick={() => {
+                dismissToast(t.id);
+                t.action?.run();
+              }}
+            >
+              <Icon name="undo-2" size={12} /> {t.action.label}
+            </button>
+          )}
+          {t.sub && (
+            <button className="au-mini" title="Fechar" aria-label="Fechar aviso" onClick={() => dismissToast(t.id)} style={{ flex: "none", width: 24, height: 24 }}>
+              <Icon name="x" size={13} />
+            </button>
+          )}
         </div>
       ))}
     </div>

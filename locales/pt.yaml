@@ -113,14 +113,14 @@ gateway:
     still_running: "⏳ Tarefa em segundo plano ainda em execução"
     recent_output: "{header}\n\nSaída recente:\n```\n{output}\n```"
   btw:
-    usage: "Uso: /btw <pergunta>\nExemplo: /btw em que ficheiro estava aquele erro?\n\nResponde a uma pergunta rápida sobre esta conversa sem a interromper. Para uma tarefa independente em segundo plano, usa /bg <prompt>."
-    no_history: "Ainda não há conversa — envia a tua pergunta como mensagem normal."
+    usage: "Uso: /btw <pergunta>\nExemplo: /btw em qual arquivo estava aquele erro?\n\nResponde a uma pergunta rápida sobre esta conversa sem a interromper. Para uma tarefa independente em segundo plano, usa /bg <prompt>."
+    no_history: "Ainda não há conversa — envie a sua pergunta como mensagem normal."
     no_provider: "❌ Não é possível responder: nenhuma credencial de fornecedor configurada."
     started: "💬 Pergunta à parte: \"{preview}\"\nA responder a partir de um instantâneo desta conversa — o trabalho atual continua."
     answer: "💬 /btw: \"{preview}\"\n\n{answer}"
     failed: "❌ /btw falhou: \"{preview}\"\n{error}"
   branch:
-    db_unavailable: "Base de dados de sessões indisponível."
+    db_unavailable: "Banco de dados de sessões indisponível."
     no_conversation: "Não há conversa para ramificar — envia uma mensagem primeiro."
     create_failed: "Falha ao criar ramo: {error}"
     switch_failed: "Ramo criado, mas não foi possível mudar para ele."
@@ -146,7 +146,7 @@ gateway:
     focus_line: "Foco: \"{topic}\""
     summary_failed: "⚠️ Falha ao gerar o resumo ({error}). {count} mensagem(ns) histórica(s) foram removidas e substituídas por um marcador; o contexto anterior já não pode ser recuperado. Considera verificar a configuração do modelo auxiliary.compression."
     aborted: "⚠️ Compressão abortada ({error}). Nenhuma mensagem foi removida — a conversa está inalterada. Executa /compress para tentar de novo, /reset para uma sessão nova, ou verifica a configuração do modelo auxiliary.compression."
-    aux_failed: "ℹ️ O modelo de compressão configurado `{model}` falhou ({error}). Recuperado com o teu modelo principal — o contexto está intacto — mas talvez queiras verificar `auxiliary.compression.model` em config.yaml."
+    aux_failed: "ℹ️ O modelo de compressão configurado `{model}` falhou ({error}). Recuperado com o seu modelo principal — o contexto está intacto — mas talvez queiras verificar `auxiliary.compression.model` em config.yaml."
     turnhold_deferred: "ℹ️ Compressão de contexto adiada — o resumo ainda está em transmissão. Continuando sem compressão neste turno."
     failed: "Compressão falhou: {error}"
     hygiene_timeout: "⚠️ Encurtar o histórico da conversa demorou demais, então pulei essa etapa e mantive tudo como está. Execute /compress para tentar novamente ou /new para começar do zero."
@@ -216,13 +216,13 @@ gateway:
     no_output: "(sem saída)"
     wake:
       completed: "completed"
-      gave_up: "gave up (retries exhausted)"
-      crashed: "crashed (worker exited); dispatcher will retry"
-      timed_out: "timed out; dispatcher will retry"
+      gave_up: "desistiu (tentativas esgotadas)"
+      crashed: "falhou (o executor parou); o despachante vai tentar de novo"
+      timed_out: "excedeu o tempo; o despachante vai tentar de novo"
       blocked: "blocked; needs attention"
-      review_requested: "handed off for review; the implementation is done"
-      changes_requested: "review requested changes (BLOCK); implementation is not approved"
-      block_loop_detected: "routed to triage after repeated blocks; orchestration attention needed"
+      review_requested: "enviada para revisão; a implementação está pronta"
+      changes_requested: "a revisão pediu mudanças (BLOQUEIO); a implementação não foi aprovada"
+      block_loop_detected: "enviada para triagem após bloqueios repetidos; precisa de atenção da orquestração"
       status_default: "status changed"
       status_joiner: ", "
       message: "[kanban] Task {task_id} {status}.\nTitle: {title}\nAssignee: @{assignee}\nBoard: {board}\n\nCheck the result or decide the next step."
@@ -326,13 +326,13 @@ gateway:
     in_progress: "⏳ O reinício do gateway já está em curso..."
     restarting: "♻ A reiniciar o gateway. Se não fores notificado em 60 segundos, reinicia a partir da consola com `hermes gateway restart`."
   resume:
-    db_unavailable: "Base de dados de sessões indisponível."
+    db_unavailable: "Banco de dados de sessões indisponível."
     parse_error: "⚠️ Could not parse `/resume` arguments: {error}. Use quotes around titles with spaces, for example: `/resume \"Project A Plan\"`."
     matrix_no_named_sessions: "No named sessions found for this Matrix room. Use `/title My Session` to name the current room session, `/resume --all` to list all Matrix sessions, or `/resume --cross-room <session name>` to explicitly cross room boundaries."
     matrix_blocked_no_origin: "⚠️ /resume do Matrix bloqueado: esta sessão com nome não tem uma sala de origem registada, por isso o Hermes não a retoma dentro da sala atual por padrão. Usa `/resume --cross-room {name}` se quiseres mesmo atravessar os limites da sala."
     matrix_blocked_other_room: "⚠️ /resume do Matrix bloqueado: essa sessão pertence a outra sala do Matrix ({room}). Usa `/resume --cross-room {name}` se quiseres mesmo retomá-la aqui."
     matrix_cross_room_success: "⚠️ Cross-room resume: resumed **{title}** inside Matrix room **{room}**. Future messages in this room will use that transcript until `/reset` or another `/resume`.{msg_part}"
-    blocked_not_owner: "⚠️ /resume bloqueado: '**{name}**' pertence a outro utilizador ou chat. Só podes retomar sessões deste chat."
+    blocked_not_owner: "⚠️ /resume bloqueado: '**{name}**' pertence a outro usuário ou chat. Só podes retomar sessões deste chat."
     no_named_sessions: "Não foram encontradas sessões com nome.\nUsa `/title A minha sessão` para nomear a sessão atual e depois `/resume A minha sessão` para voltar a ela."
     all_requires_admin: "_Nota: `--all` (listagem entre conversas) requer um administrador configurado; mostram-se apenas as sessões desta conversa._"
     list_header: "📋 **Sessões com nome**\n"
@@ -450,7 +450,7 @@ gateway:
     no_active: "Não há nenhuma tarefa ativa para parar."
     force_stopped_pending: "⚡ Interrupção forçada. O agente ainda estava iniciando — sessão desbloqueada."
   title:
-    db_unavailable: "Base de dados de sessões indisponível."
+    db_unavailable: "Banco de dados de sessões indisponível."
     warn_prefix: "⚠️ {error}"
     empty_after_clean: "⚠️ O título está vazio após a limpeza. Usa caracteres imprimíveis."
     set_to: "✏️ Título da sessão definido: **{title}**"
@@ -459,14 +459,33 @@ gateway:
     current_no_title: "📌 Sessão: `{session_id}`\nSem título. Uso: `/title O meu nome de sessão`"
   topic:
     not_telegram_dm: "O comando /topic só está disponível em chats privados do Telegram."
-    no_session_db: "Base de dados de sessões indisponível."
-    unauthorized: "Não tens autorização para usar /topic neste bot."
-    restore_needs_topic: "Para restaurar uma sessão, cria ou abre primeiro um topic do Telegram, depois envia /topic <session-id> dentro desse topic. Para criar um novo topic, abre All Messages e envia qualquer mensagem aí."
-    topics_disabled: "Os topics do Telegram ainda não estão ativados para este bot.\n\nComo ativá-los:\n1. Abre @BotFather.\n2. Escolhe o teu bot.\n3. Abre Bot Settings → Threads Settings.\n4. Ativa Threaded Mode e garante que os utilizadores podem criar novas threads.\n\nDepois envia /topic novamente."
-    topics_user_disallowed: "Os topics do Telegram estão ativados, mas os utilizadores não podem criá-los.\n\nAbre @BotFather → escolhe o teu bot → Bot Settings → Threads Settings, depois desativa 'Disallow users to create new threads'.\n\nDepois envia /topic novamente."
-    enable_failed: "Falha ao ativar o modo topic do Telegram: {error}"
-    bound_status: "Este topic está associado a:\nSessão: {label}\nID: {session_id}\n\nUsa /new para substituir este topic por uma sessão nova.\nPara trabalho paralelo, abre All Messages e envia uma mensagem aí para criar outro topic."
-    thread_ready: "Os topics multi-sessão do Telegram estão ativados.\n\nEste topic será usado como uma sessão independente do Hermes. Usa /new para substituir a sessão atual deste topic. Para trabalho paralelo, abre All Messages e envia uma mensagem aí para criar outro topic."
+    no_session_db: "Banco de dados de sessões indisponível."
+    unauthorized: "Você não tem autorização para usar /topic neste bot."
+    restore_needs_topic: "Para restaurar uma sessão, crie ou abra primeiro um tópico do Telegram e depois envie /topic <session-id> dentro dele. Para criar um tópico novo, abra All Messages e envie qualquer mensagem lá."
+    topics_disabled: "Os tópicos do Telegram ainda não estão ativados para este bot.
+
+Como ativar:
+1. Abra o @BotFather.
+2. Escolha o seu bot.
+3. Abra Bot Settings → Threads Settings.
+4. Ative o Threaded Mode e confirme que os usuários podem criar novas threads.
+
+Depois envie /topic de novo."
+    topics_user_disallowed: "Os tópicos do Telegram estão ativados, mas os usuários não podem criá-los.
+
+Abra o @BotFather → escolha o seu bot → Bot Settings → Threads Settings e desative 'Disallow users to create new threads'.
+
+Depois envie /topic de novo."
+    enable_failed: "Não consegui ativar o modo de tópicos do Telegram: {error}"
+    bound_status: "Este tópico está ligado a:
+Sessão: {label}
+ID: {session_id}
+
+Use /new para trocar por uma sessão nova.
+Para trabalhar em paralelo, abra All Messages e envie uma mensagem lá para criar outro tópico."
+    thread_ready: "Os tópicos multissessão do Telegram estão ativados.
+
+Este tópico será uma sessão independente do Hermes. Use /new para trocar a sessão atual deste tópico. Para trabalhar em paralelo, abra All Messages e envie uma mensagem lá para criar outro tópico."
     untitled_session: "Sessão sem título"
     restore_step_1: "1. Crie ou abra um tópico. Para criar um novo, abra All Messages e envie qualquer mensagem lá."
     restore_step_2: "2. Envie /topic <session-id> dentro desse tópico."
@@ -589,8 +608,8 @@ gateway:
     disabled: "⚠️ Modo YOLO **DESATIVADO** nesta sessão — comandos perigosos exigirão aprovação."
     enabled: "⚡ Modo YOLO **ATIVADO** nesta sessão — todos os comandos são aprovados automaticamente. Usa com precaução."
   shared:
-    session_db_unavailable: "Base de dados de sessões indisponível."
-    session_db_unavailable_prefix: "Base de dados de sessões indisponível"
+    session_db_unavailable: "Banco de dados de sessões indisponível."
+    session_db_unavailable_prefix: "Banco de dados de sessões indisponível"
     session_not_found: "Sessão não encontrada na base de dados."
     warn_passthrough: "⚠️ {error}"
     unknown_error: "erro desconhecido"
@@ -1698,7 +1717,7 @@ cli:
     total_spendable: "Total disponível para gastar: ${amount}"
     one_time_setup: "! Configuração única"
     allow_remote_spending_title: "Permitir Gastos Remotos"
-    allow_remote_spending_detail: "Abre o navegador para autorizar este terminal."
+    allow_remote_spending_detail: "Abra o navegador para autorizar este terminal."
     choice_allow_remote_spending: "Permitir Gastos Remotos"
     desc_allow_remote_spending: "abrir o navegador para autorizar"
     choice_not_now: "Agora não"

@@ -745,8 +745,13 @@ class WhatsAppAdapter(WhatsAppBehaviorMixin, BasePlatformAdapter):
         if not self._bridge_process:
             print(f"[{self.name}] Disconnecting (external bridge left running)")
         else:
+            # No Windows o taskkill "gentil" (sem /F) falha no processo do Node; a falha não pode pular o
+            # encerramento forçado, senão a ponte fica órfã na porta e o próximo gateway não conecta.
             try:
                 self._terminate_bridge(force=False)
+            except Exception as e:
+                print(f"[{self.name}] Graceful bridge stop failed ({e}); forcing")
+            try:
                 await asyncio.sleep(1)
                 if self._bridge_process.poll() is None:
                     self._terminate_bridge(force=True)
@@ -876,6 +881,18 @@ class WhatsAppAdapter(WhatsAppBehaviorMixin, BasePlatformAdapter):
     async def send_document(self, chat_id: str, file_path: str, caption: Optional[str] = None, file_name: Optional[str] = None,
                             reply_to: Optional[str] = None, **kwargs) -> SendResult:
         return await self._send_media_to_bridge(chat_id, file_path, "document", caption, file_name or os.path.basename(file_path))
+
+    async def group_participants(self, chat_id: str) -> dict:
+        """Participantes de um grupo (id, número, admin, nome, foto) — só leitura, para o painel."""
+        from urllib.parse import quote
+
+        if await self._bridge_unavailable():
+            raise RuntimeError("a ponte do WhatsApp não está conectada")
+        async with self._bridge_req("get", f"group/{quote(to_whatsapp_jid(chat_id), safe='')}/participants", 40) as resp:
+            data = await resp.json(content_type=None)
+            if resp.status != 200:
+                raise RuntimeError(str((data or {}).get("error") or f"ponte respondeu {resp.status}"))
+            return data
 
     async def send_typing(self, chat_id: str, metadata=None) -> None:
         if await self._bridge_unavailable():

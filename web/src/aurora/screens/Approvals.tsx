@@ -1,8 +1,9 @@
 import { PageHeader, spot } from "../Chrome";
 import { Icon } from "../Icon";
+import { ActionRequestCard } from "../ops/ActionRequestCard";
 import { ApprovalCard } from "../ops/ApprovalCard";
 import { AutonomySegment } from "../ops/AutonomySegment";
-import { approve, deny, inBiz, MODES, setAutonomy, setChannelBusiness, setDefaultMode, useStore } from "../store";
+import { approve, decideActionRequest, deny, inBiz, MODES, setAutonomy, setChannelBusiness, setDefaultMode, useStore } from "../store";
 
 export function Approvals() {
   const s = useStore((x) => x);
@@ -14,6 +15,19 @@ export function Approvals() {
         <PageHeader title="Aprovações" sub="O que o Hermes quer fazer e precisa do seu ok. Ajuste ao lado o quanto ele pode agir sozinho em cada canal." />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 20, alignItems: "start" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+            {s.actionRequests.length > 0 && (
+              <section aria-label="Pedidos de ação" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <span className="au-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  Pedidos de ação
+                  <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)" }}>{s.actionRequests.length}</span>
+                </span>
+                <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: "var(--fg2)" }}>O Hermes quer alterar algo e as Permissões pedem o seu ok. O comando abaixo é exatamente o que vai rodar.</p>
+                {s.actionRequests.map((r, i) => (
+                  <ActionRequestCard key={r.id} r={r} onDecide={decideActionRequest} delay={i * 60} />
+                ))}
+              </section>
+            )}
+            {s.actionRequests.length > 0 && list.length > 0 && <span className="au-label">Rascunhos de resposta</span>}
             {list.map((x, i) => (
               <ApprovalCard
                 key={x.id}
@@ -30,7 +44,7 @@ export function Approvals() {
                 delay={i * 60}
               />
             ))}
-            {list.length === 0 && (
+            {list.length === 0 && s.actionRequests.length === 0 && (
               <div className="au-card" onMouseMove={spot} style={{ padding: 48, display: "flex", flexDirection: "column", alignItems: "center", gap: 10, animation: "hpop .6s cubic-bezier(.3,1.4,.5,1) both" }}>
                 <Icon name="shield-check" size={30} color="var(--ok)" />
                 <span style={{ fontSize: 14.5, fontWeight: 600 }}>Nada pendente</span>

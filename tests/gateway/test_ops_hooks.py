@@ -23,7 +23,9 @@ def test_record_skips_commands_and_follows_channel_mode():
     from gateway import ops_hooks
     from ops_center import store
 
-    assert ops_hooks.record(*_msg("/status")) is None
+    cmd = ops_hooks.record(*_msg("/status"))
+    assert cmd["command"] and cmd["item_id"] is None and not ops_hooks.mutes_turn(cmd)
+    assert store.list_inbox() == []
     ops = ops_hooks.record(*_msg("oi"))
     assert ops["mode"] == ops_hooks.AUTONOMOUS and ops["sender"] == "Ana"
 
@@ -58,3 +60,27 @@ def test_ops_send_verb_validates_and_honors_pause(monkeypatch):
     monkeypatch.setattr("agent.estop.is_engaged", lambda: False)
     monkeypatch.setattr(ops_hooks, "send_text", lambda p, c, t: {"message_id": "99"})
     assert handler({"platform": "telegram", "chat_id": "1", "text": "oi"}) == {"sent": True, "message_id": "99"}
+
+
+def test_record_lands_in_the_channel_profile_home(tmp_path):
+    """Multiplexado: a mensagem do perfil B vai para o ops.db de B, nunca para o do padrão."""
+    from gateway import ops_hooks
+    from ops_center import store
+
+    b_home = tmp_path / "profiles" / "aibiz"
+    b_home.mkdir(parents=True)
+    ops = ops_hooks.record(*_msg("oi do grupo"), home=b_home)
+    assert ops and ops["home"] == str(b_home)
+    assert (b_home / "ops.db").exists()
+    assert store.list_inbox() == []  # o padrão não recebeu nada
+
+    ops_hooks.save_draft(ops["item_id"], "rascunho", home=b_home)
+    ops_hooks.mark_replied(ops, _msg("x")[1], "Olá!")
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+
+    token = set_hermes_home_override(b_home)
+    try:
+        assert store.get_inbox(ops["item_id"])["draft"] == "Olá!"
+        assert "Respondeu Ana" in store.list_activity()[0]["action"]
+    finally:
+        reset_hermes_home_override(token)

@@ -125,6 +125,16 @@ const PROFILE_SCOPED_PREFIXES = [
   "/api/curator",
   "/api/webhooks",
   "/api/ops",
+  // Análises dos grupos e diretório de clientes da Central de Operações (ops.db do perfil).
+  "/api/analyses",
+  // Modelos (A5): provedores com a chave no .env do perfil, roteamento por tarefa, gasto e limites.
+  "/api/providers",
+  "/api/models/routing",
+  "/api/usage",
+  "/api/limits",
+  "/api/clients",
+  // Avisos da equipe (tópicos do Telegram, rotas e teste): token do bot e ops.db do perfil.
+  "/api/notify",
   "/api/logs",
   "/api/portal",
   // Pool entries live in the profile's home, and DELETE /api/credentials/pool/{provider}/{index}

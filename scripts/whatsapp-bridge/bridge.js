@@ -742,6 +742,8 @@ async function startSocket() {
         lookupQuotedMedia: (quotedChatId, quotedMessageId) => quotedMediaCache.get(quotedChatId, quotedMessageId),
       });
       event.fromOwner = fromOwner;
+      // Nome real do grupo (assunto) em vez do id: análises e avisos mostram "Padaria Sol", não 120363…
+      if (isGroup) event.chatName = (await groupSubject(chatId)) || event.chatName;
 
       // Ignore Hermes' own reply messages in self-chat mode to avoid loops.
       if (msg.key.fromMe && ((REPLY_PREFIX && event.body.startsWith(REPLY_PREFIX)) || recentlySentIds.has(msg.key.id))) {
@@ -1098,6 +1100,57 @@ app.post('/read', async (req, res) => {
     return res.status(500).json({ error: 'Failed to send read receipt' });
   }
 });
+
+// Participantes de um grupo (painel › Canais › Participantes): id, número, se é admin, nome que o
+// WhatsApp expõe e a foto de perfil (URL temporária do WhatsApp; null quando a pessoa esconde a foto).
+// Só leitura — nada é enviado ao grupo.
+app.get('/group/:id/participants', async (req, res) => {
+  const chatId = req.params.id;
+  if (!sock || connectionState !== 'connected') return res.status(503).json({ error: 'Not connected' });
+  if (!chatId.endsWith('@g.us')) return res.status(400).json({ error: 'not a group' });
+  try {
+    const metadata = await sock.groupMetadata(chatId);
+    const people = (metadata.participants || []).slice(0, 300);
+    const withTimeout = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), ms))]);
+    // O próprio número do Hermes (ex.: o de suporte) aparece como "este número", não como uma pessoa.
+    const me = String(sock.user?.id || '').replace(/:\d+@/, '@').replace(/@.*/, '');
+    const participants = await Promise.all(people.map(async (p) => {
+      const rawId = String(p.id || '');
+      const lidNum = rawId.endsWith('@lid') ? rawId.replace(/@.*/, '') : '';
+      const phone = String(p.phoneNumber || p.jid || '').replace(/@.*/, '')
+        || (rawId.endsWith('@s.whatsapp.net') ? rawId.replace(/@.*/, '') : '')
+        || (lidNum && lidToPhone[lidNum]) || '';
+      const jid = phone ? `${phone}@s.whatsapp.net` : rawId;
+      let photo = null;
+      try { photo = await withTimeout(sock.profilePictureUrl(jid, 'preview'), 4000); } catch { photo = null; }
+      return {
+        id: rawId, jid, phone, lid: lidNum ? rawId : (p.lid || ''),
+        admin: p.admin || null, name: p.name || p.notify || p.verifiedName || '', photo,
+        self: Boolean(me && phone && phone === me),
+      };
+    }));
+    res.json({ name: metadata.subject || '', size: (metadata.participants || []).length, participants });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Assunto dos grupos em cache (1 h): uma consulta ao WhatsApp por grupo, não uma por mensagem.
+const groupSubjects = new Map();
+async function groupSubject(chatId) {
+  const hit = groupSubjects.get(chatId);
+  if (hit && Date.now() - hit.at < 3600_000) return hit.name;
+  try {
+    const metadata = await sock.groupMetadata(chatId);
+    if (metadata?.subject) {
+      groupSubjects.set(chatId, { name: metadata.subject, at: Date.now() });
+      return metadata.subject;
+    }
+  } catch {
+    // sem nome: fica o id
+  }
+  return hit?.name || '';
+}
 
 // Chat info
 app.get('/chat/:id', async (req, res) => {

@@ -1,9 +1,14 @@
+import { useNavigate, useParams } from "react-router";
 import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
 import type { Settings as S } from "../agent/types";
 import { setPrefs, setState, toast, useStore, type Direction } from "../store";
+import { ModelsScreen } from "../models/ModelsScreen";
 import { ApiKeysEditor } from "../ops/ApiKeysEditor";
 import { BusinessesEditor } from "../ops/BusinessesEditor";
+import { PermissionsPanel } from "../permissions/PermissionsPanel";
+import { Notify } from "./Notify";
+import { ProfilesPanel } from "./Profiles";
 import { AgentHeader } from "./Sessions";
 
 export const DIRECTIONS: { id: Direction; name: string; d: string; c: [string, string, string] }[] = [
@@ -37,16 +42,95 @@ function Section({ title, sub, children }: { title: string; sub: string; childre
   );
 }
 
+const TABS = [
+  { id: "geral", label: "Geral", to: "/settings" },
+  { id: "modelos", label: "Modelos", to: "/settings/modelos" },
+  { id: "avisos", label: "Avisos", to: "/settings/avisos" },
+  { id: "perfis", label: "Perfis", to: "/settings/perfis" },
+  { id: "permissoes", label: "Permissões", to: "/settings/permissoes" },
+  { id: "aparencia", label: "Aparência", to: "/settings/aparencia" },
+] as const;
+
+/** Geral · Modelos · Avisos · Perfis · Permissões · Aparência. */
+function SettingsTabs({ tab }: { tab: string }) {
+  const navigate = useNavigate();
+  return (
+    <div role="tablist" aria-label="Configurações" style={{ display: "flex", gap: 4, padding: 4, borderRadius: "var(--r)", background: "var(--panel2)", alignSelf: "flex-start" }}>
+      {TABS.map((t) => (
+        <button key={t.id} role="tab" aria-selected={t.id === tab} className="au-seg au-seg-lg" onClick={() => t.id !== tab && navigate(t.to)} style={{ padding: "7px 16px" }}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Settings() {
   const [s, setS, reload] = useAgentData(() => agent.settings(), []);
   const dir = useStore((x) => x.dir);
-  if (!s) return <div style={{ flex: 1 }} />;
+  const param = useParams().tab;
+  const tab = param === "perfis" || param === "permissoes" || param === "aparencia" || param === "avisos" || param === "modelos" ? param : "geral";
+  if (tab === "avisos") {
+    return (
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div className="au-page au-page-agent" style={{ gap: 22, maxWidth: 1180 }}>
+          <SettingsTabs tab={tab} />
+          <AgentHeader title="Para onde vão os avisos" sub="Escolha em qual tópico do grupo da equipe cada aviso chega, quando ficar em silêncio e quem é chamado no que é crítico." />
+          <Notify />
+        </div>
+      </div>
+    );
+  }
+  if (tab === "modelos") {
+    return (
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div className="au-page au-page-agent" style={{ gap: 22, maxWidth: 1120 }}>
+          <SettingsTabs tab={tab} />
+          <ModelsScreen />
+        </div>
+      </div>
+    );
+  }
+  if (tab === "perfis") {
+    return (
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div className="au-page au-page-agent" style={{ gap: 22, maxWidth: 1060 }}>
+          <SettingsTabs tab={tab} />
+          <ProfilesPanel />
+        </div>
+      </div>
+    );
+  }
+  if (tab === "permissoes") {
+    return (
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div className="au-page au-page-agent" style={{ gap: 22, maxWidth: 1140 }}>
+          <SettingsTabs tab={tab} />
+          <PermissionsPanel />
+        </div>
+      </div>
+    );
+  }
+  if (!s)
+    return (
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div className="au-page au-page-agent" style={{ gap: 22 }}>
+          <SettingsTabs tab={tab} />
+          <div role="status" aria-busy="true" aria-label="Carregando as configurações" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <span style={{ fontSize: 13, color: "var(--fg2)" }}>Carregando as configurações…</span>
+            <div className="au-skel" style={{ height: 96 }} />
+            <div className="au-skel" style={{ height: 180 }} />
+          </div>
+        </div>
+      </div>
+    );
   const prov = s.providers.find((p) => p.id === s.provider) ?? s.providers[0];
   const apply = (patch: Parameters<typeof agent.saveSettings>[0], done?: string) => applySetting(s, setS, patch, done);
 
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page au-page-agent" style={{ gap: 40 }}>
+        <SettingsTabs tab={tab} />
         <AgentHeader title="Configurações" sub="Modelo, chaves, ambiente e aparência do Hermes.">
           <button className="au-outline" onClick={() => setState({ onboarding: 0 })} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, background: "var(--panel)" }}>
             <Icon name="rocket" size={14} color="var(--acc)" />
@@ -54,6 +138,8 @@ export function Settings() {
           </button>
         </AgentHeader>
 
+        {tab === "geral" && (
+          <>
         <Section title="Negócios" sub="Separe canais, contatos, playbooks e custos por negócio. O seletor da barra lateral filtra todas as telas.">
           <BusinessesEditor />
         </Section>
@@ -62,7 +148,7 @@ export function Settings() {
           <ApiKeysEditor onChange={reload} />
         </Section>
 
-        <Section title="Provedor de modelo" sub="Qual serviço de IA o Hermes usa para pensar. Dá para trocar quando quiser.">
+        <Section title="Provedor de modelo" sub="Qual serviço de IA o Hermes usa para pensar. Dá para trocar quando quiser. Modelo por tarefa, provedores próprios e limites de gasto ficam na aba Modelos.">
           {s.modelError ? (
             <p role="alert" style={{ margin: 0, fontSize: 13, color: "var(--warn)", lineHeight: 1.5 }}>
               Não consegui listar os modelos: {s.modelError}
@@ -129,7 +215,10 @@ export function Settings() {
             ))}
           </div>
         </Section>
+          </>
+        )}
 
+        {tab === "aparencia" && (
         <Section title="Aparência" sub="Três direções de design para a interface.">
           <div role="radiogroup" aria-label="Direção de design" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10 }}>
             {DIRECTIONS.map((d) => (
@@ -145,6 +234,7 @@ export function Settings() {
             ))}
           </div>
         </Section>
+        )}
       </div>
     </div>
   );

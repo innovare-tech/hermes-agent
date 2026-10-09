@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { PageHeader, spot } from "../Chrome";
 import { Icon } from "../Icon";
+import { analysesApi } from "../analyses/api";
 import { PRIORITY } from "../ops/InboxList";
+import { HomeSkeleton, ProfileNotice } from "../ProfileChrome";
 import { inBiz, useStore } from "../store";
 
 const WAVE = [40, 70, 55, 90, 35, 80, 60, 95, 45, 75, 50, 85, 40, 65];
@@ -35,8 +37,20 @@ export function Home() {
   const navigate = useNavigate();
   const f = inBiz(s);
   const needs = s.inbox.filter((x) => f(x) && (x.priority === "urgente" || x.priority === "voce"));
-  const approvals = s.approvals.filter(f).length;
-  const alerts = s.radar.filter((x) => f(x) && x.alert).length;
+  const approvals = s.approvals.filter(f).length + s.actionRequests.length; // rascunhos + pedidos de ação
+  // Alertas nos grupos = análises abertas (a mesma fila da tela Análises dos grupos); null até a primeira leitura.
+  const [openAnalyses, setOpenAnalyses] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const read = () => analysesApi.open().then((l) => alive && setOpenAnalyses(l.length), () => {});
+    read();
+    const iv = setInterval(() => document.visibilityState === "visible" && read(), 60000);
+    return () => {
+      alive = false;
+      clearInterval(iv);
+    };
+  }, []);
+  const alerts = openAnalyses ?? 0;
   const brief = s.briefing.filter(f);
   const biz = (id: string) => s.businesses.find((b) => b.id === id);
   const speech = useSpeech(brief.map((b) => `${biz(b.business)?.name}. ${b.text}`).join(" "));
@@ -51,6 +65,9 @@ export function Home() {
   const c = s.costs;
   const costMax = Math.max(30, ...c.byBusiness.map((x) => x.value));
 
+  // Trocando de perfil: esqueleto até os dados do perfil novo chegarem (nunca os do anterior).
+  if (s.switching) return <HomeSkeleton />;
+
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
       <div className="au-page">
@@ -63,6 +80,8 @@ export function Home() {
               : `Hoje o Hermes respondeu ${s.last24h.autoReplies} ${s.last24h.autoReplies === 1 ? "mensagem" : "mensagens"} sozinho e separou ${needs.length + approvals} ${needs.length + approvals === 1 ? "decisão" : "decisões"} para você${s.health.problems.length ? ". Atenção: " + s.health.problems[0].text.charAt(0).toLowerCase() + s.health.problems[0].text.slice(1) : ""}.`
           }
         />
+
+        <ProfileNotice />
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))", gap: 16 }}>
           <div className="au-card" onMouseMove={spot} style={{ padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
@@ -112,13 +131,25 @@ export function Home() {
               { v: String(s.activity.filter((a) => /^\d\d:\d\d$/.test(a.at)).length), l: "ações registradas", c: "var(--acc)" },
               { v: String(s.last24h.autoReplies), l: "respostas enviadas", c: "var(--fg)" },
               { v: String(needs.length + approvals), l: "decisões esperando você", c: "var(--fg)" },
-              { v: String(alerts), l: "alertas nos grupos", c: alerts ? "var(--err)" : "var(--fg)" },
-            ].map((r, i) => (
-              <div key={r.l} style={{ display: "flex", flexDirection: "column", gap: 6, animation: "hpop .7s cubic-bezier(.3,1.4,.5,1) both", animationDelay: 200 + i * 90 + "ms" }}>
-                <span className="au-display" style={{ lineHeight: 1, fontSize: 36, color: r.c }}>{r.v}</span>
-                <span style={{ fontSize: 12.5, color: "var(--fg2)", lineHeight: 1.4 }}>{r.l}</span>
-              </div>
-            ))}
+              { v: openAnalyses === null ? "–" : String(alerts), l: "alertas nos grupos", c: alerts ? "var(--err)" : "var(--fg)", to: "/analises" },
+            ].map((r, i) => {
+              const body = (
+                <>
+                  <span className="au-display" style={{ lineHeight: 1, fontSize: 36, color: r.c }}>{r.v}</span>
+                  <span style={{ fontSize: 12.5, color: "var(--fg2)", lineHeight: 1.4 }}>{r.l}</span>
+                </>
+              );
+              const st = { display: "flex", flexDirection: "column", gap: 6, animation: "hpop .7s cubic-bezier(.3,1.4,.5,1) both", animationDelay: 200 + i * 90 + "ms" } as const;
+              return r.to ? (
+                <button key={r.l} onClick={() => navigate(r.to)} aria-label={`${r.v} alertas nos grupos: abrir as análises`} style={{ ...st, padding: 0, border: 0, background: "transparent", color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer" }}>
+                  {body}
+                </button>
+              ) : (
+                <div key={r.l} style={st}>
+                  {body}
+                </div>
+              );
+            })}
           </div>
         </div>
 

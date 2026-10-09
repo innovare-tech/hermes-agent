@@ -1983,6 +1983,12 @@ def _get_pre_tool_call_directive_details(
     if allowed is not None and tool_name not in allowed:
         fmt = getattr(_thread_tool_whitelist, "fmt", "Tool '{tool_name}' denied")
         return _PreToolCallDirective(action="block", message=fmt.format(tool_name=tool_name))
+    # Central de Operações: permissões por origem (design A6) — sempre ligadas, antes dos plugins,
+    # para nenhum plugin poder "aprovar" por cima. A origem vem do contexto da sessão.
+    from ops_center.guardrails import check as _ops_permissions_check
+    _ops_block = _ops_permissions_check(tool_name, args if isinstance(args, dict) else {})
+    if _ops_block:
+        return _PreToolCallDirective(action="block", message=_ops_block)
     from hermes_cli.lifecycle import invoke_hook as invoke_lifecycle_hook
     hook_results = invoke_lifecycle_hook(
         "pre_tool_call", tool_name=tool_name, args=args if isinstance(args, dict) else {},

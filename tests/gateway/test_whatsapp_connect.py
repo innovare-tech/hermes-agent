@@ -472,6 +472,28 @@ class TestHttpSessionLifecycle:
         mock_proc.kill.assert_not_called()
 
     @pytest.mark.asyncio
+    @pytest.mark.platforms("windows")
+    async def test_disconnect_forces_tree_kill_when_graceful_taskkill_fails(self):
+        """No Windows o taskkill sem /F falha no Node; o /F tem de rodar mesmo assim (senão a ponte fica órfã)."""
+        adapter = _make_adapter()
+        mock_proc = MagicMock()
+        mock_proc.pid = 12345
+        mock_proc.poll.side_effect = [None, 0]
+        adapter._bridge_process = mock_proc
+        adapter._poll_task = None
+        adapter._http_session = None
+        adapter._running = True
+        adapter._session_lock_identity = None
+
+        results = [MagicMock(returncode=128, stderr="não pôde ser finalizado", stdout=""), MagicMock(returncode=0)]
+        with patch("plugins.platforms.whatsapp.adapter.subprocess.run", side_effect=results) as mock_run, \
+             patch("plugins.platforms.whatsapp.adapter.asyncio.sleep", new_callable=AsyncMock):
+            await adapter.disconnect()
+
+        assert [c.args[0] for c in mock_run.call_args_list] == [
+            ["taskkill", "/PID", "12345", "/T"], ["taskkill", "/PID", "12345", "/T", "/F"]]
+
+    @pytest.mark.asyncio
     async def test_session_closed_on_disconnect(self):
         """disconnect() should close self._http_session."""
         adapter = _make_adapter()

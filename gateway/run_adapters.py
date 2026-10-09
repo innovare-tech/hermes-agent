@@ -1881,6 +1881,8 @@ class GatewayAdapterLifecycleMixin:
         adapter = self._instantiate_adapter(platform, config)
         if adapter is not None:
             adapter.gateway_runner = self
+            from gateway import outbound_guard  # canal fora de Autônomo não recebe nada gerado
+            outbound_guard.install(adapter)
         return adapter
 
     def _instantiate_adapter(self, platform: Platform, config: Any) -> Optional[BasePlatformAdapter]:

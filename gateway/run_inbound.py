@@ -234,6 +234,12 @@ class GatewayInboundMixin(GatewayPluginInjectionMixin):
             return None
         source = event.source
 
+        # Grupo em Escutar: só lê (lote de análise) — antes da autorização, porque a equipe do cliente
+        # não é usuária do Hermes; nunca roda turno nem responde.
+        from gateway import ops_hooks
+        if ops_hooks.listen_capture(event, source, home=self._ops_home_for_source(source)):
+            return None
+
         if not self._is_user_authorized_for_source(source):
             if source.user_id is None:
                 # No user identity (Telegram service messages, channel forwards, anonymous admin
@@ -300,7 +306,10 @@ class GatewayInboundMixin(GatewayPluginInjectionMixin):
             from agent.estop import paused_reply as _estop_paused_reply
         except ImportError:
             return None
-        _paused_notice = _estop_paused_reply()
+        # Multiplexado: olha o ESTOP do perfil dono do canal (pausa por perfil) além do global.
+        from gateway.ops_hooks import _home as _ops_profile_home
+        with _ops_profile_home(self._ops_home_for_source(source)):
+            _paused_notice = _estop_paused_reply()
         if _paused_notice is None or self._hm_estop_turn_allowed(event, source):
             return None
         if getattr(event, "_heartbeat_session_id", None):
@@ -1282,6 +1291,16 @@ class GatewayInboundMixin(GatewayPluginInjectionMixin):
             logger.debug("FIFO orphan rescue pre-claim failed for %s", _quick_key, exc_info=True)
             return event, source, is_internal
 
+    def _ops_home_for_source(self, source: SessionSource):
+        """Home do perfil dono do canal para a Central de Operações (só no multiplexado; fail-open)."""
+        if not getattr(getattr(self, "config", None), "multiplex_profiles", False):
+            return None
+        try:
+            return self._resolve_profile_home_for_source(source)
+        except Exception:
+            logger.debug("ops_center: não resolvi o perfil do canal; usando o home atual", exc_info=True)
+            return None
+
     async def _handle_message(self, event: MessageEvent) -> Optional[str]:
         """Handle an incoming message from any platform: auth → command check → running-agent
         interrupt → get/create session → build context → run agent → return response."""
@@ -1302,20 +1321,25 @@ class GatewayInboundMixin(GatewayPluginInjectionMixin):
         # calls handle_message directly, so a teardown on the relay's inbound
         # handler left those turns muted.
 
+        # Central de Operações: toda mensagem real vira item da caixa de entrada (mesmo pausado); a
+        # autonomia do canal decide se o Hermes responde (Autônomo), só rascunha (Rascunhar) ou fica
+        # quieto (Observar/Escutar). Comando fora do Autônomo não roda. Antes da pausa: canal mudo
+        # nem recebe o aviso de pausado.
+        if not is_internal:
+            from gateway import ops_hooks
+            # Síncrono de propósito: um await aqui abre janela para turno duplicado antes da reserva
+            # da sessão. ponytail: INSERT local de ~ms no loop; mover para fila se o ops.db ficar lento.
+            event._ops = ops_hooks.record(event, source, home=self._ops_home_for_source(source))
+            if ops_hooks.mutes_turn(event._ops):
+                return None
+            if event._ops and event._ops.get("command"):
+                event._ops = None  # comando no Autônomo: segue como sempre, sem item na caixa
+
         _paused_notice = self._hm_estop_gate(event, source, is_internal)
         if _paused_notice is not None:
             return _paused_notice
 
         _quick_key = self._session_key_for_source(source)
-        # Central de Operações: toda mensagem real vira item da caixa de entrada; a autonomia do
-        # canal decide se o Hermes responde (Autônomo), só rascunha (Rascunhar) ou fica quieto.
-        if not is_internal:
-            from gateway import ops_hooks
-            # Síncrono de propósito: um await aqui abre janela para turno duplicado antes da reserva
-            # da sessão. ponytail: INSERT local de ~ms no loop; mover para fila se o ops.db ficar lento.
-            event._ops = ops_hooks.record(event, source)
-            if event._ops and event._ops["mode"] == ops_hooks.OBSERVE:
-                return None
         _reply = await self._hm_pending_reply_intercepts(event, source, _quick_key)
         if _reply is not None:
             return _reply

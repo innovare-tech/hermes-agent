@@ -1926,10 +1926,11 @@ class TurnRunner:
                 # Quota cap with valid credentials: /login cannot help; name the reset window (#89401).
                 from gateway.run import _gateway_provider_error_reply
                 return {"final_response": _gateway_provider_error_reply(str(exc)),
-                        "messages": [], "api_calls": 0, "tools": []}
+                        "messages": [], "api_calls": 0, "tools": [], "gateway_error": True}
+            # gateway_error: aviso do próprio gateway, não resposta do agente (a Central não o guarda como rascunho).
             return {
                 "final_response": t("gateway.errors.no_credentials"),
-                "messages": [], "api_calls": 0, "tools": [],
+                "messages": [], "api_calls": 0, "tools": [], "gateway_error": True,
             }
         pr = runner._provider_routing
         reasoning_config = runner._resolve_session_reasoning_config(source=ctx.source, session_key=ctx.session_key, model=model)

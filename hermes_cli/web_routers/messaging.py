@@ -179,6 +179,10 @@ def _platform_enablement(
     required = entry["required_env"]
     if scoped:
         configured = bool(required) and all(env_on_disk.get(key) for key in required)
+        if platform_id == "whatsapp" and not configured:
+            # A credencial do WhatsApp é a sessão pareada (creds.json), não uma variável do .env.
+            from hermes_cli.web_server_messaging import _whatsapp_session_path
+            configured = (_whatsapp_session_path() / "creds.json").exists()
         try:
             plat_cfg = (load_config().get("platforms") or {}).get(platform_id)
             plat_cfg = plat_cfg if isinstance(plat_cfg, dict) else {}
@@ -637,7 +641,11 @@ async def apply_whatsapp_onboarding(pairing_id: str, body: WhatsAppOnboardingApp
     with _onboarding_save_errors("WhatsApp onboarding apply failed", "Failed to save WhatsApp setup."):
         with _config_profile_scope(effective_profile):
             save_env_value("WHATSAPP_MODE", mode)
-            save_env_value("WHATSAPP_DM_POLICY", "pairing")
+            # Mantém uma política de DM já escolhida (ex.: número de suporte com DMs desligadas):
+            # forçar "pairing" faria o número mandar código de pareamento a quem escrever no privado.
+            from hermes_cli.config import get_env_value
+            if not (get_env_value("WHATSAPP_DM_POLICY") or "").strip():
+                save_env_value("WHATSAPP_DM_POLICY", "pairing")
             # Blank means "keep the existing allowlist"; explicit clearing
             # still lives in the normal config editor where the field is visible.
             if allowed_users:

@@ -264,10 +264,19 @@ class _PipeControlProtocol(asyncio.Protocol):
         if len(self._buffer) > _MAX_REQUEST_BYTES:
             self._transport.close()
         elif b"\n" in self._buffer:
-            try:
-                self._transport.write(self._server.handle_request_line(bytes(self._buffer).partition(b"\n")[0]))
-            finally:
-                self._transport.close()
+            # Fora do laço, como no socket POSIX: handlers leem disco, e um handler que agenda trabalho
+            # no próprio laço do gateway (ex.: ops-participants) travava esperando o laço que ocupava.
+            line = bytes(self._buffer).partition(b"\n")[0]
+            future = asyncio.get_running_loop().run_in_executor(None, self._server.handle_request_line, line)
+            future.add_done_callback(self._reply)
+
+    def _reply(self, future) -> None:  # pragma: no cover - windows
+        try:
+            self._transport.write(future.result())
+        except Exception:
+            pass
+        finally:
+            self._transport.close()
 
 
 def query_gateway_control(home: Path, verb: str, *, params: Optional[dict[str, Any]] = None,

@@ -114,7 +114,7 @@ def fire_keyword(platform: str, chat_id: str, text: str, *, sender: str = "", mo
     """Mensagem recebida → dispara playbooks ligados de palavra-chave que casam (canal opcional).
 
     Kill switch: nada dispara. Observar: não dispara. Rascunhar: roda, mas o resultado só fica
-    registrado (deliver=local). Autônomo: entrega onde o playbook manda. Devolve os nomes disparados."""
+    registrado (deliver=local), igual em Escutar. Autônomo: entrega onde o playbook manda. Devolve os nomes disparados."""
     from cron import jobs
 
     try:
@@ -135,7 +135,7 @@ def fire_keyword(platform: str, chat_id: str, text: str, *, sender: str = "", mo
             continue
         if not any(k in msg for k in _keywords(p.get("keywords") or "")):
             continue
-        deliver = "local" if mode == store.DRAFT else (p.get("deliver") or "local")
+        deliver = "local" if mode in (store.DRAFT, store.LISTEN) else (p.get("deliver") or "local")
         prompt = "\n\n".join([prompt_for(p), f"Mensagem que disparou (de {sender or 'contato'}, {platform}): “{text[:2000]}”"])
         jobs.create_job(prompt, datetime.now(timezone.utc).isoformat(), name=f"Playbook · {p['name']} (mensagem)"[:80], repeat=1, deliver=deliver)
         store.mark_playbook_run(p["id"])

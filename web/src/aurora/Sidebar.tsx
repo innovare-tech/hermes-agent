@@ -1,14 +1,20 @@
+import { useEffect } from "react";
 import { NavLink, useNavigate } from "react-router";
 import { Icon } from "./Icon";
+import { refreshModelsHealth, useModelsProblem } from "./models/health";
+import { isListenSession } from "./chat/sources";
+import { ProfileSwitcher } from "./ProfileSwitcher";
 import { inBiz, setPrefs, setState, useStore, type State } from "./store";
 
-type NavItem = { to: string; label: string; icon: string; count?: string };
+type NavItem = { to: string; label: string; icon: string; count?: string; sub?: boolean; dot?: boolean };
 
 export const OPS: NavItem[] = [
   { to: "/", label: "Painel", icon: "layout-dashboard" },
   { to: "/inbox", label: "Caixa de entrada", icon: "inbox" },
+  { to: "/analises", label: "Análises dos grupos", icon: "scan-search", sub: true },
   { to: "/approvals", label: "Aprovações", icon: "shield-check" },
   { to: "/radar", label: "Radar de grupos", icon: "radar" },
+  { to: "/channels", label: "Canais", icon: "messages-square" },
   { to: "/people", label: "Pessoas", icon: "users" },
   { to: "/playbooks", label: "Playbooks", icon: "workflow" },
   { to: "/activity", label: "Atividade", icon: "activity" },
@@ -24,14 +30,21 @@ export const AGENT: NavItem[] = [
   { to: "/gateways", label: "Gateways", icon: "radio-tower" },
   { to: "/logs", label: "Logs", icon: "scroll-text" },
   { to: "/settings", label: "Configurações", icon: "settings-2" },
+  { to: "/settings/modelos", label: "Modelos", icon: "cpu", sub: true, dot: true },
+  { to: "/settings/avisos", label: "Avisos", icon: "bell-ring", sub: true },
+  { to: "/settings/perfis", label: "Perfis", icon: "layers", sub: true },
+  { to: "/settings/permissoes", label: "Permissões", icon: "lock", sub: true },
 ];
+
+/** Aprovações = rascunhos de resposta (filtrados pelo negócio) + pedidos de ação pendentes (sem negócio, valem sempre). */
+export const approvalsCount = (s: Pick<State, "approvals" | "actionRequests" | "biz">) => s.approvals.filter(inBiz(s as State)).length + s.actionRequests.length;
 
 /** Contadores destacados da seção Operação, já filtrados pelo negócio. */
 export function opsCounts(s: State): Record<string, number> {
   const f = inBiz(s);
   return {
     "/inbox": s.inbox.filter((x) => f(x) && (x.priority === "urgente" || x.priority === "voce")).length,
-    "/approvals": s.approvals.filter(f).length,
+    "/approvals": approvalsCount(s),
     "/radar": s.radar.filter((x) => f(x) && x.alert).length,
     "/support": s.tickets.filter((x) => f(x) && x.status !== "resolvido").length,
   };
@@ -55,11 +68,13 @@ export function BusinessSwitcher() {
 }
 
 function NavRow({ item, index, count, hot }: { item: NavItem; index: number; count: string; hot: boolean }) {
+  const problem = useModelsProblem();
   return (
-    <NavLink to={item.to} end={item.to === "/"} className={({ isActive }) => "au-nav" + (isActive ? " active" : "")} style={{ animationDelay: index * 30 + "ms" }}>
+    <NavLink to={item.to} end={item.to === "/"} className={({ isActive }) => "au-nav" + (isActive ? " active" : "")} style={{ animationDelay: index * 30 + "ms", ...(item.sub ? { paddingLeft: 30 } : {}) }}>
       <Icon name={item.icon} />
       <span style={{ whiteSpace: "nowrap" }}>{item.label}</span>
       <span className={"au-count" + (hot && count ? " hot" : "")}>{count}</span>
+      {item.dot && problem && <span role="img" aria-label="Algum provedor com problema" title="Algum provedor com problema" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--err)", flex: "none" }} />}
     </NavLink>
   );
 }
@@ -70,21 +85,15 @@ export function Sidebar() {
   const navigate = useNavigate();
   const s = useStore((x) => x);
   const counts = opsCounts(s);
+  const sessions = s.sessions.filter((x) => !isListenSession(x));
+  const profileId = s.profileId;
+  // Ponto vermelho em Modelos: lê o estado guardado dos provedores ao entrar e a cada troca de perfil.
+  useEffect(() => {
+    refreshModelsHealth();
+  }, [profileId]);
   return (
     <aside className="au-side">
-      <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "18px 18px 16px" }}>
-        <div className="au-logo" aria-hidden="true">☤</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <span className="au-display" style={{ fontSize: 19, lineHeight: 1 }}>Hermes</span>
-          <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>{s.account?.version || " "}</span>
-        </div>
-        <span
-          role="status"
-          title={s.paused ? "Agente pausado" : "Agente rodando"}
-          aria-label={s.paused ? "Agente pausado" : "Agente rodando"}
-          style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: "50%", background: s.paused ? "var(--err)" : "var(--ok)", boxShadow: "0 0 0 4px var(--accSoft)", animation: "hpulse 2.4s ease-in-out infinite" }}
-        />
-      </div>
+      <ProfileSwitcher />
 
       <div style={{ padding: "0 12px 12px" }}>
         <button className="au-new" onClick={() => navigate("/chat")}>
@@ -111,10 +120,10 @@ export function Sidebar() {
 
       <div className="au-side-list" style={{ borderTop: "1px solid var(--line)" }}>
         <div style={{ padding: "0 8px 16px" }}>
-          {GROUPS.filter((g) => s.sessions.some((x) => x.group === g)).map((g) => (
+          {GROUPS.filter((g) => sessions.some((x) => x.group === g)).map((g) => (
             <div key={g}>
               <div className="au-label" style={{ padding: "14px 11px 6px" }}>{g}</div>
-              {s.sessions
+              {sessions
                 .filter((x) => x.group === g)
                 .map((x, i) => (
                   <NavLink key={x.id} to={`/chat/${x.id}`} className="au-sess" style={({ isActive }) => ({ animationDelay: 300 + i * 50 + "ms", background: isActive ? "var(--panel)" : undefined })}>
@@ -136,11 +145,13 @@ export function Sidebar() {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderTop: "1px solid var(--line)" }}>
-        <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--panel2)", display: "grid", placeItems: "center", fontSize: 11.5, fontWeight: 600, color: "var(--fg2)" }}>EU</div>
-        <div style={{ display: "flex", flexDirection: "column", minWidth: 0, gap: 1 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 500 }}>{s.account?.plan}</span>
-          <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>{s.account?.credits}</span>
-        </div>
+        <NavLink to="/settings" title="Abrir Configurações › Chaves de API" style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1, color: "inherit", textDecoration: "none" }}>
+          <Icon name="key-round" size={15} color="var(--fg3)" />
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 0, gap: 1 }}>
+            <span style={{ fontSize: 12, fontWeight: 500 }}>Chaves deste perfil</span>
+            <span title={s.keys.join(" · ")} style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.keys.length ? s.keys.join(" · ") : "Nenhuma chave ainda"}</span>
+          </div>
+        </NavLink>
         <button className="au-theme" title="Alternar tema" aria-label="Alternar tema" onClick={() => setPrefs({ theme: s.theme === "dark" ? "light" : "dark" })}>
           <Icon name={s.theme === "dark" ? "sun" : "moon"} size={14} />
         </button>

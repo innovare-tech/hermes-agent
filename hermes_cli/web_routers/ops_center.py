@@ -6,12 +6,30 @@ compartilhado com o gateway, que grava as mensagens recebidas e respeita a auton
 from __future__ import annotations
 
 import asyncio
+from contextvars import ContextVar
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/api/ops")
+# Perfil pedido pelo painel (``?profile=``, o seletor de perfil): cada rota lê e grava o ops.db,
+# a memória e o cron DAQUELE perfil — um processo de dashboard serve todos.
+_PROFILE: ContextVar[Optional[str]] = ContextVar("ops_profile", default=None)
+
+
+async def _capture_profile(profile: Optional[str] = Query(None)) -> None:
+    _PROFILE.set(profile)
+
+
+ops = APIRouter(prefix="/api/ops")
+clients_router = APIRouter(prefix="/api/clients")
+
+
+async def _scoped(fn, *args, **kwargs):
+    """``fn`` numa thread, dentro do escopo (home + segredos) do perfil pedido."""
+    from hermes_cli.web_routers._common import config_scoped_to_thread
+
+    return await config_scoped_to_thread(_PROFILE.get(), lambda: fn(*args, **kwargs))
 
 
 def _store():
@@ -24,10 +42,10 @@ async def _act(action: str, *, kind: str = "cfg", business_id: Optional[str] = N
     """Registra na Atividade (fail-open) — o painel não precisa lembrar de logar."""
     from hermes_cli.web_routers.ops_activity import log
 
-    await asyncio.to_thread(log, action, kind=kind, business_id=business_id)
+    await _scoped(log, action, kind=kind, business_id=business_id)
 
 
-_MODES = ("Observar", "Rascunhar", "Autônomo")
+_MODES = ("Observar", "Rascunhar", "Autônomo", "Escutar")  # índice = modo no ops.db
 _DOW = ("domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado")
 
 
@@ -58,7 +76,7 @@ def _clip(t: str, n: int = 60) -> str:
 
 async def _run(fn, *args, **kwargs):
     try:
-        return await asyncio.to_thread(fn, *args, **kwargs)
+        return await _scoped(fn, *args, **kwargs)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except KeyError as e:
@@ -72,26 +90,26 @@ class BusinessBody(BaseModel):
     color: str = "#a395ff"
 
 
-@router.get("/businesses")
+@ops.get("/businesses")
 async def list_businesses():
     return await _run(_store().list_businesses)
 
 
-@router.post("/businesses")
+@ops.post("/businesses")
 async def create_business(body: BusinessBody):
     b = await _run(_store().save_business, body.name, body.color)
     await _act(f"Criou o negócio “{b['name']}”", business_id=b["id"])
     return b
 
 
-@router.put("/businesses/{bid}")
+@ops.put("/businesses/{bid}")
 async def update_business(bid: str, body: BusinessBody):
     b = await _run(_store().save_business, body.name, body.color, bid)
     await _act(f"Editou o negócio “{b['name']}”", business_id=bid)
     return b
 
 
-@router.delete("/businesses/{bid}")
+@ops.delete("/businesses/{bid}")
 async def delete_business(bid: str):
     name = next((b["name"] for b in await _run(_store().list_businesses) if b["id"] == bid), bid)
     await _run(_store().delete_business, bid)
@@ -101,25 +119,52 @@ async def delete_business(bid: str):
 
 # ---- canais ----
 
+class WindowBody(BaseModel):
+    useDefault: bool = False
+    silenceMin: Optional[int] = None
+    maxMin: Optional[int] = None
+
+
 class ChannelBody(BaseModel):
     mode: Optional[int] = None
     business_id: Optional[str] = ""  # "" = não mexe; null = sem negócio
     name: Optional[str] = None
+    clientId: Optional[str] = None  # ausente = não mexe; null = desvincula
+    notClient: Optional[bool] = None
+    window: Optional[WindowBody] = None  # ausente = não mexe; null ou {useDefault:true} = janela padrão
+    confirm: bool = False  # exigido ao pôr um grupo em Autônomo
 
 
-@router.get("/channels")
+@ops.get("/channels")
 async def list_channels():
-    return await _run(_store().list_channels)
+    return await _run(_store().channels_view)
 
 
-@router.put("/channels/{cid:path}")
+@ops.put("/channels/{cid:path}")
+@ops.patch("/channels/{cid:path}")
 async def update_channel(cid: str, body: ChannelBody):
-    ch = await _run(_store().update_channel, cid, mode=body.mode, business_id=body.business_id, name=body.name)
+    sent = body.model_fields_set
+    patch: dict[str, Any] = {"mode": body.mode, "business_id": body.business_id, "name": body.name}
+    if "notClient" in sent:
+        patch["notClient"] = body.notClient
+    if "clientId" in sent:
+        patch["clientId"] = body.clientId
+    if "window" in sent:
+        patch["window"] = body.window.model_dump() if body.window else None
+    ch = await _run(_store().patch_channel, cid, patch, confirm=body.confirm)
     label = ch.get("name") or cid
+    biz = ch.get("business_id")
     if body.mode is not None:
-        await _act(f"{label}: autonomia → {_MODES[body.mode]}", business_id=ch.get("business_id"))
+        await _act(f"{label}: autonomia → {_MODES[body.mode]}", business_id=biz)
     if body.business_id != "":
-        await _act(f"{label}: negócio alterado", business_id=ch.get("business_id"))
+        await _act(f"{label}: negócio alterado", business_id=biz)
+    if "clientId" in sent:
+        await _act(f"{label}: vinculado ao cliente {ch['clientName']}" if body.clientId else f"{label}: cliente desvinculado", business_id=biz)
+    if sent & {"notClient"} and body.notClient:
+        await _act(f"{label}: marcado como “não é cliente”", business_id=biz)
+    if "window" in sent:
+        w = ch["window"]
+        await _act(f"{label}: janela de análise → " + ("padrão" if w["useDefault"] else f"{w['silenceMin']} min de silêncio, no máximo a cada {w['maxMin']} min"), business_id=biz)
     return ch
 
 
@@ -127,16 +172,251 @@ class OpsSettings(BaseModel):
     default_mode: int
 
 
-@router.get("/settings")
+@ops.get("/settings")
 async def get_settings():
     return {"default_mode": await _run(_store().default_mode)}
 
 
-@router.put("/settings")
+@ops.put("/settings")
 async def put_settings(body: OpsSettings):
     mode = await _run(_store().set_default_mode, body.default_mode)
     await _act(f"Canais novos passam a começar em {_MODES[mode]}")
     return {"default_mode": mode}
+
+
+# ---- Escutar (janela do lote, triagem, destino do aviso) ----
+
+@ops.get("/listen")
+async def get_listen():
+    return await _run(_store().listen_settings)
+
+
+@ops.put("/listen")
+async def put_listen(body: dict):
+    out = await _run(_store().set_listen_settings, body)
+    await _act("Configuração do Escutar atualizada")
+    return out
+
+
+# ---- Equipe e participantes dos grupos ----
+
+def _participants(cid: str, profile: Optional[str]) -> dict:
+    """Participantes do grupo pelo gateway (verbo ``ops-participants``) + quem é da equipe + nomes já vistos."""
+    from gateway.control_socket import query_gateway_control
+    from hermes_constants import get_process_hermes_home
+
+    store = _store()
+    platform, _, chat_id = cid.partition(":")
+    if not chat_id:
+        raise KeyError(cid)
+    answer = query_gateway_control(get_process_hermes_home(), "ops-participants", timeout=50.0,
+                                   params={"platform": platform, "chat_id": chat_id, "profile": profile or ""})
+    if answer is None:
+        raise ValueError("o gateway não está rodando: ligue-o para ver os participantes")
+    if not answer.get("ok"):
+        raise ValueError(answer.get("error") or "o gateway não listou os participantes")
+    keys = store.team_keys()
+    with store.connect() as c:  # nome com que cada pessoa já apareceu nas mensagens deste canal
+        seen = {store._person_key(r[0]): r[1] for r in c.execute(
+            "SELECT sender_id, sender_name FROM inbox WHERE channel_id=? AND COALESCE(sender_name,'')<>'' "
+            "GROUP BY sender_id", (cid,))}
+    people = []
+    for p in answer.get("participants") or []:
+        ids = [p.get("phone"), p.get("jid"), p.get("lid"), p.get("id")]
+        key = next((store._person_key(i) for i in ids if store._person_key(i)), "")
+        people.append({**p, "key": key, "name": p.get("name") or next((seen[store._person_key(i)] for i in ids
+                       if store._person_key(i) in seen), ""),
+                       "team": any(store.is_team(i, keys) for i in ids if i)})
+    people.sort(key=lambda x: (not x["team"], not x.get("admin"), (x.get("name") or x["key"]).lower()))
+    return {"name": answer.get("name") or "", "size": answer.get("size") or len(people), "participants": people}
+
+
+@ops.get("/channels/{cid}/participants")
+async def channel_participants(cid: str):
+    return await _run(_participants, cid, _PROFILE.get())
+
+
+@ops.get("/team")
+async def get_team():
+    return await _run(_store().list_team)
+
+
+class TeamBody(BaseModel):
+    id: str
+    name: str = ""
+    aliases: list[str] = []
+    photo: Optional[str] = None
+
+
+@ops.post("/team")
+async def add_team(body: TeamBody):
+    out = await _run(_store().add_team_member, body.id, body.name, body.aliases, body.photo)
+    await _act(f"Marcou {out['name'] or out['id']} como equipe (vale em todos os grupos)")
+    return out
+
+
+@ops.delete("/team/{member_id}")
+async def remove_team(member_id: str):
+    await _run(_store().remove_team_member, member_id)
+    await _act(f"Tirou {member_id} da equipe")
+    return {"ok": True}
+
+
+# ---- Permissões (design A6) ----
+
+_HARD_DENY_EXAMPLES = {
+    "Apagar banco ou tabela": ["DROP TABLE", "TRUNCATE", "db.dropDatabase()"],
+    "Apagar ou alterar em massa": ["DELETE sem WHERE", "UPDATE sem WHERE", "deleteMany({})"],
+    "Apagar arquivos em massa": ["rm -rf", "find … -delete"],
+    "Apagar partes do cluster": ["kubectl delete namespace", "kubectl delete pvc", "kubectl drain"],
+    "Mexer em chaves e acessos": ["kubectl … secret", ".env", "authorized_keys", "createUser"],
+    "Mudar estas permissões pelo chat": ["ops.db", "permissões"],
+}
+
+
+def _mcp_connectors(matrix: dict) -> tuple[list[dict], list[dict]]:
+    """Conectores MCP do perfil → (ferramentas, servidores) sem conectar a ninguém.
+
+    Servidores vêm do ``mcp_servers`` da config; ferramentas, do cache de esquema que a última conexão
+    gravou (``tools/mcp_schema_cache``, com o ``readOnlyHint`` de cada uma). Sem cache válido o servidor
+    entra sem ferramentas (``discovered: False``) e elas aparecem depois da primeira conexão. A chave é
+    ``mcp.<servidor>.<ferramenta>`` com os nomes que a checagem recebe (``mcp__servidor__ferramenta``).
+    """
+    tools: dict[str, dict] = {}
+    servers: dict[str, dict] = {}
+    try:
+        from hermes_cli.mcp_config import _get_mcp_servers
+        from tools.mcp_schema_cache import config_fingerprint, get_cached_entry, tools_from_cache_entry
+        from tools.mcp_tool_schema import mcp_prefixed_tool_name, sanitize_mcp_name_component
+
+        for name, cfg in _get_mcp_servers().items():
+            if not isinstance(cfg, dict) or cfg.get("enabled") is False:
+                continue
+            entry = get_cached_entry(name, config_fingerprint(cfg))
+            rows = [t for t in tools_from_cache_entry(entry) if isinstance(t, dict) and t.get("name")] if entry else []
+            server = sanitize_mcp_name_component(name)
+            for t in rows:  # nome exato que a checagem recebe (sanitizado e, se longo, encurtado com hash)
+                tool = mcp_prefixed_tool_name(name, t["name"])[len("mcp__") + len(server) + 2:]
+                ann = t.get("annotations") if isinstance(t.get("annotations"), dict) else {}
+                tools[f"mcp.{server}.{tool}"] = {
+                    "key": f"mcp.{server}.{tool}", "group": "mcp:" + server, "label": t["name"],
+                    "writes": ann.get("readOnlyHint") is not True, "description": str(t.get("description") or "")[:240]}
+            servers[server] = {"id": server, "label": name, "discovered": bool(rows), "tools": len(rows)}
+    except Exception:
+        pass  # sem config/cache legível: só entram os conectores que já têm regra salva
+    for k in matrix:  # regra salva de ferramenta que o cache não conhece (servidor removido, cache velho)
+        if k.startswith("mcp.") and k.count(".") >= 2 and k not in tools:
+            server = k.split(".")[1]
+            tools[k] = {"key": k, "group": "mcp:" + server, "label": k.split(".", 2)[2], "writes": True}
+            servers.setdefault(server, {"id": server, "label": server, "discovered": True, "tools": 0})
+    return list(tools.values()), list(servers.values())
+
+
+def _permissions_payload() -> dict:
+    from ops_center import guardrails
+
+    cfg = guardrails.settings()
+    mcp_tools, mcp_servers = _mcp_connectors(cfg["matrix"])
+    return {
+        "enabled": cfg["enabled"], "origins": list(guardrails.ORIGINS), "originLabels": guardrails.ORIGIN_LABEL,
+        "actions": guardrails.ACTIONS + mcp_tools, "mcpServers": mcp_servers,
+        "matrix": cfg["matrix"], "approvers": cfg["approvers"], "approvalTarget": cfg["approval_target"],
+        "allowSelfApproval": cfg["allow_self_approval"],
+        "approvalTtlMin": cfg["approvalTtlMin"],
+        "hardDeny": [{"label": r["label"], "patterns": _HARD_DENY_EXAMPLES.get(r["label"], [])} for r in guardrails.HARD_DENY],
+    }
+
+
+@ops.get("/permissions")
+async def get_permissions():
+    return await _run(_permissions_payload)
+
+
+@ops.put("/permissions")
+async def put_permissions(body: dict):
+    from ops_center import guardrails
+
+    patch = {k: body[k] for k in ("enabled", "matrix", "approvers") if k in body}
+    if "approvalTarget" in body:
+        patch["approval_target"] = str(body["approvalTarget"] or "")
+    if "allowSelfApproval" in body:
+        patch["allow_self_approval"] = bool(body["allowSelfApproval"])
+    await _run(guardrails.save_settings, patch)
+    await _act("Permissões atualizadas (valem a partir do próximo pedido)")
+    return await _run(_permissions_payload)
+
+
+@ops.get("/approvals")
+async def get_approvals(status: Optional[str] = None, limit: int = Query(100, ge=1, le=500)):
+    return await _run(_store().list_approvals, status, limit)
+
+
+class DecideBody(BaseModel):
+    approve: bool
+    note: str = ""
+
+
+@ops.post("/approvals/{approval_id}/decide")
+async def decide_approval(approval_id: int, body: DecideBody):
+    """Decisão pelo painel (vale a primeira, painel ou Telegram). Aprovado: executa em segundo plano."""
+    from ops_center import guardrails
+
+    out = await _run(guardrails.decide, approval_id, body.approve, "Você (painel)", "dashboard", body.note)
+    if not out.get("ok"):
+        raise HTTPException(status_code=409, detail=out.get("error") or "não deu para decidir")
+    if body.approve:
+        # No escopo do perfil (home + segredos); o resultado fica no histórico e vai ao chat de origem.
+        asyncio.get_running_loop().create_task(_scoped(guardrails.execute_and_announce, approval_id))
+    else:
+        await _run(guardrails.announce, out["approval"])
+    await _act(f"{'Aprovou' if body.approve else 'Negou'} o pedido #{approval_id}: {out['approval'].get('summary')}")
+    return out["approval"]
+
+
+# ---- pausa do perfil ----
+# Diferente do "Pausar tudo" (/api/estop, frota inteira): o ESTOP fica só na pasta DESTE perfil, e
+# retomar remove só ele — nunca levanta a pausa global. O perfil padrão É a raiz: pausá-lo sozinho
+# pausaria todos, então ele só pausa pelo "Pausar tudo".
+
+class PauseBody(BaseModel):
+    paused: bool
+
+
+def _profile_pause_state() -> dict:
+    from agent.estop import sentinel_path
+    from hermes_constants import get_process_hermes_home
+
+    path = sentinel_path()
+    try:
+        is_root = path.parent.resolve() == get_process_hermes_home().resolve()
+    except OSError:
+        is_root = False
+    return {"paused": path.exists(), "can_pause": not is_root}
+
+
+def _set_profile_pause(paused: bool) -> dict:
+    from agent.estop import engage, sentinel_path
+
+    state = _profile_pause_state()
+    if not state["can_pause"]:
+        raise ValueError("o perfil padrão só pausa pelo “Pausar tudo”")
+    if paused:
+        engage(reason="perfil pausado pelo painel")
+    else:
+        sentinel_path().unlink(missing_ok=True)
+    return _profile_pause_state()
+
+
+@ops.get("/pause")
+async def get_profile_pause():
+    return await _run(_profile_pause_state)
+
+
+@ops.put("/pause")
+async def put_profile_pause(body: PauseBody):
+    state = await _run(_set_profile_pause, body.paused)
+    await _act("Pausou este perfil" if body.paused else "Retomou este perfil")
+    return state
 
 
 # ---- caixa de entrada ----
@@ -151,12 +431,12 @@ _INBOX_STATUS = {"new", "drafted", "kept", "archived", "sent", "auto"}
 _PRIORITIES = {"urgente", "voce", "resolve", "ignorar"}
 
 
-@router.get("/inbox")
+@ops.get("/inbox")
 async def list_inbox(include_done: bool = False):
     return await _run(_store().list_inbox, include_done)
 
 
-@router.patch("/inbox/{item_id}")
+@ops.patch("/inbox/{item_id}")
 async def patch_inbox(item_id: int, body: InboxPatch):
     if body.status is not None and body.status not in _INBOX_STATUS:
         raise HTTPException(400, "status inválido")
@@ -174,20 +454,23 @@ class ReplyBody(BaseModel):
     text: str
 
 
-def _send_reply(platform: str, chat_id: str, text: str) -> None:
+def _send_reply(platform: str, chat_id: str, text: str, profile: Optional[str] = None) -> None:
     """Gateway rodando → envia pelo adaptador vivo (verbo ``ops-send``); senão, mesmo caminho do ``hermes send``."""
     from gateway.control_socket import query_gateway_control
     from gateway.ops_hooks import send_text
-    from hermes_constants import get_hermes_home
+    from hermes_constants import get_process_hermes_home
 
-    answer = query_gateway_control(get_hermes_home(), "ops-send", params={"platform": platform, "chat_id": chat_id, "text": text}, timeout=30.0)
+    # O socket de controle é do processo do gateway (home de lançamento), não do perfil; o perfil
+    # vai no pedido para o gateway escolher o bot certo.
+    params = {"platform": platform, "chat_id": chat_id, "text": text, "profile": profile or ""}
+    answer = query_gateway_control(get_process_hermes_home(), "ops-send", params=params, timeout=30.0)
     if answer is None:
         send_text(platform, chat_id, text)
     elif not answer.get("sent"):
         raise RuntimeError(answer.get("error") or "o gateway não enviou")
 
 
-@router.post("/inbox/{item_id}/reply")
+@ops.post("/inbox/{item_id}/reply")
 async def reply_inbox(item_id: int, body: ReplyBody):
     from agent.estop import is_engaged
 
@@ -200,7 +483,7 @@ async def reply_inbox(item_id: int, body: ReplyBody):
     if not item:
         raise HTTPException(404, "item não encontrado")
     try:
-        await asyncio.to_thread(_send_reply, item["platform"], item["chat_id"], text)
+        await _scoped(_send_reply, item["platform"], item["chat_id"], text, _PROFILE.get())
     except Exception as e:  # noqa: BLE001 — motivo vai pro toast
         raise HTTPException(502, f"Falha ao enviar: {e}") from e
     await _run(_store().mark_sent, item_id, text)
@@ -218,12 +501,12 @@ class ActivityBody(BaseModel):
     ref: Optional[dict[str, Any]] = None
 
 
-@router.get("/activity")
+@ops.get("/activity")
 async def list_activity(limit: int = 300):
     return await _run(_store().list_activity, min(max(limit, 1), 1000))
 
 
-@router.post("/activity")
+@ops.post("/activity")
 async def log_activity(body: ActivityBody):
     if body.kind not in {"msg", "cmd", "pay", "mem", "tkt", "cfg"}:
         raise HTTPException(400, "tipo inválido")
@@ -231,7 +514,7 @@ async def log_activity(body: ActivityBody):
                       business_id=body.business_id, reversible=body.reversible, ref=body.ref)
 
 
-@router.post("/activity/{activity_id}/undo")
+@ops.post("/activity/{activity_id}/undo")
 async def undo_activity(activity_id: int):
     row = await _run(_store().mark_undone, activity_id)
     if not row:
@@ -247,12 +530,12 @@ class WatchesBody(BaseModel):
     words: list[str]
 
 
-@router.get("/watches")
+@ops.get("/watches")
 async def list_watches():
     return await _run(_store().list_watches)
 
 
-@router.put("/watches")
+@ops.put("/watches")
 async def set_watches(body: WatchesBody):
     words = await _run(_store().set_watches, body.words)
     await _act("Palavras vigiadas: " + (", ".join(words) if words else "nenhuma"))
@@ -274,19 +557,19 @@ class PersonBody(BaseModel):
     handles: dict[str, str] = {}  # phone / telegram / email — liga o contato às mensagens
 
 
-@router.get("/people")
+@ops.get("/people")
 async def list_people():
     return await _run(_store().list_people)
 
 
-@router.put("/people")
+@ops.put("/people")
 async def save_person(body: PersonBody):
     p = await _run(_store().save_person, body.model_dump())
     await _act(f"{'Editou' if body.id else 'Adicionou'} o contato {p['name']}", business_id=p.get("business_id"))
     return p
 
 
-@router.delete("/people/{pid}")
+@ops.delete("/people/{pid}")
 async def delete_person(pid: str):
     name = next((p["name"] for p in await _run(_store().list_people) if p["id"] == pid), pid)
     await _run(_store().delete_person, pid)
@@ -318,17 +601,17 @@ def _playbooks():
 
 def _gateway_running() -> bool:
     from gateway.control_socket import identify_gateway
-    from hermes_constants import get_hermes_home
+    from hermes_constants import get_process_hermes_home
 
-    return identify_gateway(get_hermes_home(), timeout=2.0) is not None
+    return identify_gateway(get_process_hermes_home(), timeout=2.0) is not None
 
 
-@router.get("/playbooks")
+@ops.get("/playbooks")
 async def list_playbooks():
     return await _run(_playbooks().list_all)
 
 
-@router.put("/playbooks")
+@ops.put("/playbooks")
 async def save_playbook(body: PlaybookBody):
     data = body.model_dump(exclude={"schedule", "deliver"})
     p = await _run(_playbooks().save, data, body.schedule, body.deliver)
@@ -337,17 +620,17 @@ async def save_playbook(body: PlaybookBody):
     return p
 
 
-@router.post("/playbooks/{pid}/run")
+@ops.post("/playbooks/{pid}/run")
 async def run_playbook(pid: str):
     from agent.estop import is_engaged
 
     if is_engaged():
         raise HTTPException(409, "Hermes está pausado — nada roda até retomar")
     result = await _run(_playbooks().run_now, pid)
-    return {**result, "gateway_running": await asyncio.to_thread(_gateway_running)}
+    return {**result, "gateway_running": await _scoped(_gateway_running)}
 
 
-@router.delete("/playbooks/{pid}")
+@ops.delete("/playbooks/{pid}")
 async def delete_playbook(pid: str):
     name = next((p["name"] for p in await _run(_store().list_playbooks) if p["id"] == pid), pid)
     await _run(_playbooks().delete, pid)
@@ -396,12 +679,12 @@ def _memory_apply(fn) -> dict:
     return _memory_snapshot()
 
 
-@router.get("/memory")
+@ops.get("/memory")
 async def get_memory():
     return await _run(_memory_snapshot)
 
 
-@router.post("/memory")
+@ops.post("/memory")
 async def add_memory(body: MemoryAdd):
     target = _memory_target(body.target)
     snap = await _run(_memory_apply, lambda s: s.add(target, body.content))
@@ -409,7 +692,7 @@ async def add_memory(body: MemoryAdd):
     return snap
 
 
-@router.put("/memory")
+@ops.put("/memory")
 async def edit_memory(body: MemoryEdit):
     target = _memory_target(body.target)
     if not (body.content or "").strip():
@@ -419,9 +702,53 @@ async def edit_memory(body: MemoryEdit):
     return snap
 
 
-@router.delete("/memory")
+@ops.delete("/memory")
 async def remove_memory(body: MemoryEdit):
     target = _memory_target(body.target)
     snap = await _run(_memory_apply, lambda s: s.remove(target, body.entry, matched_entry=body.entry))
     await _act(f"Esqueceu: “{_clip(body.entry)}”", kind="mem")
     return snap
+
+
+# ---- diretório de clientes (por perfil; mesma escolha de perfil de /api/ops) ----
+
+@clients_router.get("")
+async def list_clients(q: str = "", cursor: Optional[str] = None, limit: int = 30):
+    return await _run(_store().list_clients, q, cursor, limit)
+
+
+@clients_router.get("/with-analyses")
+async def clients_with_analyses():
+    return await _run(_store().clients_with_analyses)
+
+
+@clients_router.post("/import")
+async def import_clients(body: list[dict[str, Any]]):
+    out = await _run(_store().import_clients, body)
+    await _act(f"Diretório de clientes atualizado: {out['imported']} importados")
+    return out
+
+
+@clients_router.get("/sync")
+async def clients_sync_status():
+    from ops_center import clients_sync
+
+    return await _run(clients_sync.status)
+
+
+@clients_router.post("/sync")
+async def clients_sync_now(body: Optional[dict] = None):
+    """Lê o diretório do banco do negócio (só leitura). ``body`` opcional ajusta banco/coleção/variável."""
+    from ops_center import clients_sync
+
+    if body:
+        await _run(clients_sync.set_source, body)
+    out = await _run(clients_sync.sync)
+    await _act(f"Clientes sincronizados do banco: {out['imported']} lidos, {out['total']} no diretório")
+    return out
+
+
+# ``router`` é o que o servidor monta: /api/ops/* e /api/clients/*, ambos com o escopo de perfil.
+router = APIRouter(dependencies=[Depends(_capture_profile)])
+router.include_router(ops)
+router.include_router(clients_router)

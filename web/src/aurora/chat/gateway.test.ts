@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 // Cliente falso: guarda o handler de estado para simular a queda da conexão.
-const fake = vi.hoisted(() => ({ state: null as null | ((s: string) => void), connects: 0 }));
+const fake = vi.hoisted(() => ({ state: null as null | ((s: string) => void), connects: 0, profile: "", calls: [] as [string, Record<string, unknown>][] }));
 vi.mock("@/lib/gatewayClient", () => ({
   GatewayClient: class {
     connectionState = "idle";
@@ -10,9 +10,10 @@ vi.mock("@/lib/gatewayClient", () => ({
       await new Promise((r) => setTimeout(r, 10));
       this.connectionState = "open";
     };
-    request = async (method: string) => {
+    request = async (method: string, params: Record<string, unknown> = {}) => {
       if (this.connectionState !== "open") throw new Error("gateway not connected");
-      return method === "session.resume" ? { session_id: "live1" } : method === "session.list" ? { sessions: [] } : {};
+      fake.calls.push([method, params]);
+      return method === "session.resume" ? { session_id: "live1" } : method === "session.list" ? { sessions: [] } : method === "session.create" ? { session_id: "live2", stored_session_id: "s2" } : method === "commands.catalog" ? { pairs: [], skills: {} } : {};
     };
     on = () => () => {};
     onRequest = () => () => {};
@@ -22,7 +23,7 @@ vi.mock("@/lib/gatewayClient", () => ({
     };
   },
 }));
-vi.mock("@/lib/api", () => ({ api: {} }));
+vi.mock("@/lib/api", () => ({ api: {}, getManagementProfile: () => fake.profile }));
 
 const { gatewayChat } = await import("./gateway");
 
@@ -30,6 +31,35 @@ describe("conexão", () => {
   it("chamadas simultâneas esperam a mesma conexão", async () => {
     await expect(Promise.all([gatewayChat.sessions(), gatewayChat.sessions()])).resolves.toEqual([[], []]);
     expect(fake.connects).toBe(1);
+  });
+});
+
+describe("perfil", () => {
+  it("criar, listar, retomar e o catálogo de comandos levam o perfil do seletor", async () => {
+    fake.profile = "aibiz";
+    fake.calls.length = 0;
+    await gatewayChat.sessions();
+    await gatewayChat.create();
+    await gatewayChat.slashCommands();
+    const by = (m: string) => fake.calls.find(([x]) => x === m)![1];
+    expect(by("session.list").profile).toBe("aibiz");
+    expect(by("session.create").profile).toBe("aibiz");
+    expect(by("commands.catalog").profile).toBe("aibiz");
+  });
+
+  it("sem perfil escolhido não manda o campo; trocar de perfil esquece os ids vivos", async () => {
+    const { resetChatProfile } = await import("./gateway");
+    fake.profile = "";
+    fake.calls.length = 0;
+    await gatewayChat.sessions();
+    expect(fake.calls[0][1].profile).toBeUndefined();
+
+    // s2 ficou "vivo" no perfil anterior; depois de trocar, interromper não aponta mais para a sessão antiga.
+    await gatewayChat.create();
+    resetChatProfile();
+    fake.calls.length = 0;
+    await gatewayChat.interrupt("s2");
+    expect(fake.calls).toEqual([]);
   });
 });
 

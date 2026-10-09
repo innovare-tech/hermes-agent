@@ -816,6 +816,8 @@ DEFAULT_CONFIG = {
     },
 
     "display": {
+        # Innovare: mensagens do Hermes (erros, avisos, comandos) em português do Brasil (locales/pt.yaml).
+        "language": "pt",
         "compact": False,
         "personality": "",
         "resume_display": "full",
@@ -1159,8 +1161,9 @@ DEFAULT_CONFIG = {
         "echo_transcripts": True,
         # No seeded "provider" (a stored value is an explicit pick; unset = autodetect): local | groq |
         # openai | mistral | elevenlabs | deepinfra | xai. Global language hint unless a per-provider one
-        # overrides it; "en" because Whisper auto-detect misreads short clips; "" = auto; "es", ...
-        "language": "en",
+        # overrides it; fixed because Whisper auto-detect misreads short clips; "" = auto; "es", ...
+        # Innovare: "pt" — os clientes falam português; com "en" o Whisper devolvia o áudio traduzido.
+        "language": "pt",
         "streaming": False,  # live partial text while speaking (openai/xai/elevenlabs); failure = file path
         # Pre-upload ffmpeg silence trim (local whisper uses VAD); failure = raw upload.
         "cloud_trim_silence": True,
@@ -2971,6 +2974,10 @@ OPTIONAL_ENV_VARS = {
         tools=["elevenlabs_tts", "voice_transcription"]),
     "MISTRAL_API_KEY": _tool("Mistral API key for Voxtral TTS and transcription (STT)",
         "Mistral API key", "https://console.mistral.ai/"),
+    # Usada pela transcrição (tools/transcription_tools.py) mas ausente do catálogo: o painel não
+    # tinha como receber a chave do Groq Whisper.
+    "GROQ_API_KEY": _tool("Groq API key for fast Whisper transcription (STT); free tier available",
+        "Groq API key", "https://console.groq.com/keys"),
     "PORCUPINE_ACCESS_KEY": _tool(
         "Picovoice access key for the Porcupine 'Hey Hermes' wake word engine (optional; "
         "openWakeWord is the free default)", "Picovoice access key",

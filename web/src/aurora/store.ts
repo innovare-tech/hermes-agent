@@ -1,6 +1,10 @@
 import { useSyncExternalStore } from "react";
 import { adapter, type Approval, type AutonomyMode, type BizId, type Channel, type InboxItem, type OnBehalf, type OpsSnapshot, type Person, type Playbook, type PlaybookDraft, type Session, type Ticket } from "./adapter";
 import { chat } from "./chat";
+import { permissionsApi, type ApprovalRow } from "./permissions/model";
+import type { Profile, ProfileDialog } from "./profileLogic";
+
+/** Aviso na tela; `action` desenha um botão (ex.: Desfazer) e dura mais. */
 
 export type Direction = "aurora" | "ambar" | "sinal";
 export type Theme = "dark" | "light";
@@ -13,14 +17,29 @@ export type State = Omit<OpsSnapshot, "account"> & {
   theme: Theme;
   /** "all" ou o id do negócio — filtra todas as telas. */
   biz: string;
+  /** Pedidos de ação (escrita) das Permissões que aguardam decisão; somam no contador de Aprovações. */
+  actionRequests: ApprovalRow[];
   /** Último aviso (atalho para testes e leitores de tela). */
   toast: { text: string; id: number } | null;
-  /** Avisos visíveis, empilhados no canto. */
-  toasts: { text: string; id: number }[];
+  /** Avisos visíveis, empilhados no canto. `sub` = linha de apoio; `action` = botão (ex.: "Desfazer"). */
+  toasts: { text: string; sub?: string; id: number; action?: { label: string; run: () => void } }[];
   /** Confirmação aberta (diálogo do Aurora, no lugar do window.confirm). */
   ask: AskRequest | null;
   /** Passo do assistente de setup (-1 = fechado). */
   onboarding: number;
+  /** Perfis (Hermes isolados): lista do agregado /api/ops/profiles e o perfil que o painel mostra. */
+  profiles: Profile[];
+  profilesStatus: "loading" | "ready" | "error";
+  /** Id do perfil atual ("" até a lista chegar). Tudo o que o painel lê vem dele. */
+  profileId: string;
+  /** Trocando de perfil: barra de 2px e esqueleto até os dados do novo perfil chegarem. */
+  switching: boolean;
+  /** Nomes das chaves de API do perfil atual (rodapé da barra lateral). */
+  keys: string[];
+  /** Diálogo de perfil aberto (criar/clonar, editar, apagar). */
+  profileDialog: ProfileDialog | null;
+  /** Assistente curto de configuração de um perfil novo. */
+  wizard: boolean;
 };
 
 const PREFS_KEY = "hermes.aurora";
@@ -38,10 +57,18 @@ let state: State = {
   theme: "dark",
   ...readPrefs(),
   biz: "all",
+  actionRequests: [],
   toast: null,
   toasts: [],
   ask: null,
   onboarding: -1,
+  profiles: [],
+  profilesStatus: "loading",
+  profileId: "",
+  switching: false,
+  keys: [],
+  profileDialog: null,
+  wizard: false,
   paused: false,
   account: null,
   businesses: [],
@@ -89,12 +116,68 @@ export const inBiz = (s: State) => (x: { business: string }) =>
 
 const errMsg = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
+/** Dados da Central de um perfil que ainda não carregou: o que a troca de perfil zera para não mostrar o anterior. */
+export const EMPTY_OPS: Partial<State> = {
+  account: null,
+  businesses: [],
+  inbox: [],
+  approvals: [],
+  actionRequests: [],
+  radar: [],
+  tickets: [],
+  activity: [],
+  autonomy: [],
+  briefing: [],
+  last24h: { saved: "", autoReplies: 0 },
+  health: { online: false, level: "ok", problems: [], uptime: "", items: [], responseTime: "" },
+  costs: { month: "", total: 0, limit: null, projection: null, byBusiness: [] },
+  watches: [],
+  support: { firstResponse: "", resolvedByHermes: "", csat: "", kbUsage: "" },
+  kb: [],
+  people: [],
+  playbooks: [],
+  defaultMode: 1,
+  sessions: [],
+  biz: "all",
+};
+
+// Resposta de um perfil que já não é o atual (troca no meio do carregamento) é descartada: nunca mistura perfis.
 export async function loadOps() {
-  setState(await adapter.load());
+  const pid = state.profileId;
+  const snap = await adapter.load();
+  if (state.profileId === pid) setState(snap);
+  refreshActionRequests();
+}
+
+/** Pedidos de ação pendentes (Permissões). Falha em silêncio: o contador só some até a próxima leitura. */
+export async function refreshActionRequests() {
+  const pid = state.profileId;
+  try {
+    const actionRequests = await permissionsApi.pending();
+    if (state.profileId === pid) setState({ actionRequests });
+  } catch {
+    /* mantém o que já está na tela */
+  }
 }
 
 export async function loadSessions() {
-  setState({ sessions: await chat.sessions() });
+  const pid = state.profileId;
+  const sessions = await chat.sessions();
+  if (state.profileId === pid) setState({ sessions });
+}
+
+/** Decide um pedido de ação pelo painel. Conflito (já decidido no Telegram, expirou…) mostra o motivo do servidor. */
+export async function decideActionRequest(r: ApprovalRow, approve: boolean): Promise<boolean> {
+  try {
+    await permissionsApi.decide(r.id, approve);
+    setState((s) => ({ actionRequests: s.actionRequests.filter((x) => x.id !== r.id) }));
+    toast(approve ? "Pedido aprovado" : "Pedido negado", approve ? "O Hermes executa agora; o resultado aparece no histórico de Permissões." : "O Hermes avisa quem pediu que não vai executar.");
+    return true;
+  } catch (e) {
+    toast(errMsg(e, "Não consegui registrar a decisão"));
+    refreshActionRequests(); // pode ter sido decidido em outro lugar: mostra o estado de verdade
+    return false;
+  }
 }
 
 let toastSeq = 0;
@@ -114,11 +197,23 @@ export function answerAsk(ok: boolean) {
   a?.resolve(ok);
 }
 
-export function toast(text: string) {
-  const t = { text, id: ++toastSeq };
-  // Máximo 3 na tela; cada um some sozinho.
+export function dismissToast(id: number) {
+  setState((s) => ({ toasts: s.toasts.filter((x) => x.id !== id), toast: s.toast?.id === id ? null : s.toast }));
+}
+
+export type ToastAction = { label: string; run: () => void };
+export type ToastOpts = { sub?: string; undo?: () => void; action?: ToastAction; ms?: number };
+
+/** ``toast(texto)``, ``toast(texto, linhaDeApoio, ms?)`` ou ``toast(texto, {sub, undo, action, ms})``.
+ *  Com botão (``undo``/``action``) o aviso fica 6 s; senão 3,6 s. Máximo 3 na tela. */
+export function toast(text: string, opts?: string | ToastOpts | ToastAction, legacyMs?: number) {
+  const o: ToastOpts = typeof opts === "string" ? { sub: opts, ms: legacyMs }
+    : opts && "run" in opts ? { action: opts } : { ...(opts ?? {}) };
+  const action = o.action ?? (o.undo ? { label: "Desfazer", run: o.undo } : undefined);
+  const t = { text, sub: o.sub, id: ++toastSeq, action };
+  // Máximo 3 na tela; cada um some sozinho (ou no X).
   setState((s) => ({ toast: t, toasts: [...s.toasts.filter((x) => x.text !== text), t].slice(-3) }));
-  setTimeout(() => setState((s) => ({ toasts: s.toasts.filter((x) => x.id !== t.id), toast: s.toast?.id === t.id ? null : s.toast })), 3600);
+  setTimeout(() => dismissToast(t.id), o.ms ?? (action ? 6000 : 3600));
 }
 
 export function setPrefs(p: Partial<Pick<State, "dir" | "theme">>) {
@@ -170,7 +265,7 @@ export async function actOnBehalf(a: OnBehalf): Promise<boolean> {
 
 // ---- Caixa de entrada · Aprovações · Autonomia ----
 
-export const MODES = ["Observar", "Rascunhar", "Autônomo"] as const;
+export const MODES = ["Observar", "Rascunhar", "Autônomo", "Escutar"] as const;
 
 const quote = (t: string) => "“" + t.slice(0, 70) + (t.length > 70 ? "…" : "") + "”";
 
@@ -235,10 +330,13 @@ export async function deny(x: Approval) {
 }
 
 export async function setAutonomy(c: Channel, mode: AutonomyMode) {
+  // Grupo em Autônomo responde sozinho para todo mundo: o backend só aceita com confirmação explícita.
+  const confirm = mode === 2 && c.mode !== 2 && c.kind === "group";
+  if (confirm && !(await ask({ title: `Deixar o Hermes responder sozinho em “${c.name}”?`, body: "Ele vai responder para todas as pessoas do grupo, sem você revisar antes.", confirm: "Sim, responder sozinho" }))) return;
   try {
-    await adapter.setAutonomy(c.id, mode);
-  } catch {
-    toast("Não consegui salvar a autonomia");
+    await adapter.setAutonomy(c.id, mode, confirm);
+  } catch (e) {
+    toast(errMsg(e, "Não consegui salvar a autonomia"));
     return;
   }
   setState((s) => ({ autonomy: s.autonomy.map((y) => (y.id === c.id ? { ...y, mode } : y)) }));

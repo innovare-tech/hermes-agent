@@ -121,6 +121,7 @@ describe("management profile scope", () => {
     "/api/model/recommended-default",
     "/api/local-models",
     "/api/ops/restart",
+    "/api/clients/import",
   ])("scopes %s to the selected management profile", async (path) => {
     vi.stubGlobal("window", {});
     const fetchMock = jsonFetchMock();
