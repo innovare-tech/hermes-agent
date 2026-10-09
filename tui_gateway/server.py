@@ -2193,7 +2193,11 @@ def _restart_slash_worker(sid: str, session: dict):
 
 
 def _get_usage(agent) -> dict:
-    g = lambda k, fb=None: getattr(agent, k, 0) or (getattr(agent, fb, 0) if fb else 0)
+    # ``_usage_base``: o que a conversa já gastou antes deste agente (retomada/rebuild zeram os contadores dele).
+    base = getattr(agent, "_usage_base", None) or {}
+    g = lambda k, fb=None: (getattr(agent, k, 0) or (getattr(agent, fb, 0) if fb else 0)) + base.get(k, 0)
+    cost = float(getattr(agent, "session_estimated_cost_usd", 0.0) or 0.0) + base.get("cost", 0.0)
+    status = str(getattr(agent, "session_cost_status", "") or "unknown")
     usage = {
         "model": getattr(agent, "model", "") or "",
         "input": g("session_input_tokens", "session_prompt_tokens"),
@@ -2202,8 +2206,8 @@ def _get_usage(agent) -> dict:
         "completion": g("session_completion_tokens"), "total": g("session_total_tokens"),
         "calls": g("session_api_calls"),
         # Custo acumulado da sessão (o painel distingue "unknown" de US$ 0).
-        "cost_usd": float(getattr(agent, "session_estimated_cost_usd", 0.0) or 0.0),
-        "cost_status": str(getattr(agent, "session_cost_status", "") or "unknown"),
+        "cost_usd": cost,
+        "cost_status": base.get("cost_status", "unknown") if status == "unknown" and cost else status,
     }
     comp = getattr(agent, "context_compressor", None)
     if comp:
@@ -2730,7 +2734,26 @@ def _make_agent(
     if fallback_notice:
         # Emitted once on the first successful reply via _emit_pending_fallback_notice -> status_callback.
         agent._pending_fallback_notice = fallback_notice
+    agent._usage_base = _stored_usage_base(getattr(agent, "_session_db", None), session_id or key)
     return agent
+
+
+def _stored_usage_base(db, key: str) -> dict:
+    """Totais já gravados da conversa (``sessions``), na forma dos contadores do agente: o painel mostra a conversa
+    inteira mesmo depois de retomar. Só leitura; os contadores do agente (cobrança, orçamentos) não mudam."""
+    with contextlib.suppress(Exception):
+        row = db.get_session(key) if db is not None and key else None
+        if row:
+            i, o = int(row.get("input_tokens") or 0), int(row.get("output_tokens") or 0)
+            prompt = i + int(row.get("cache_read_tokens") or 0) + int(row.get("cache_write_tokens") or 0)
+            return {
+                "session_input_tokens": i, "session_output_tokens": o, "session_completion_tokens": o,
+                "session_reasoning_tokens": int(row.get("reasoning_tokens") or 0), "session_prompt_tokens": prompt,
+                "session_total_tokens": prompt + o, "session_api_calls": int(row.get("api_call_count") or 0),
+                "cost": float(row.get("actual_cost_usd") or row.get("estimated_cost_usd") or 0.0),
+                "cost_status": row.get("cost_status") or "unknown",
+            }
+    return {}
 
 
 def _hydrate_session_cwd(sid: str, key: str, session_db, profile_home: str | None) -> None:

@@ -51,3 +51,19 @@ def test_get_usage_reports_session_cost_and_status():
     u = _get_usage(SimpleNamespace(model="m", session_estimated_cost_usd=0.0175, session_cost_status="estimated"))
     assert u["cost_usd"] == 0.0175 and u["cost_status"] == "estimated"
     assert _get_usage(SimpleNamespace(model="m"))["cost_status"] == "unknown"
+
+
+def test_usage_includes_stored_totals_after_resume():
+    """Agente retomado começa do zero; o painel soma o que a conversa já gastou (linha ``sessions``)."""
+    from types import SimpleNamespace
+    from tui_gateway.server import _get_usage, _stored_usage_base
+
+    row = {"input_tokens": 100, "output_tokens": 10, "cache_read_tokens": 50, "reasoning_tokens": 5,
+           "api_call_count": 2, "estimated_cost_usd": 0.02, "cost_status": "estimated"}
+    base = _stored_usage_base(SimpleNamespace(get_session=lambda k: row), "s1")
+    agent = SimpleNamespace(model="m", session_input_tokens=7, session_output_tokens=3, session_api_calls=1,
+                            session_estimated_cost_usd=0.001, _usage_base=base)
+    u = _get_usage(agent)
+    assert (u["input"], u["output"], u["calls"], u["total"]) == (107, 13, 3, 160)
+    assert round(u["cost_usd"], 3) == 0.021 and u["cost_status"] == "estimated"
+    assert _stored_usage_base(SimpleNamespace(get_session=lambda k: None), "s1") == {}
