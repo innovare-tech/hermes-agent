@@ -1,6 +1,13 @@
 import { classifyError } from "./errors";
 import type { AgentMessage, ChatEvent, ChatMessage, TurnStat, UserMessage } from "./types";
 
+/** Junta dois rodapés: o que `over` informa (modelo, tempo, tokens, custo) vale mais; o que ele não sabe fica como estava. */
+export function mergeStat(base?: TurnStat, over?: TurnStat | null): TurnStat | undefined {
+  if (!over) return base;
+  const defined = Object.fromEntries(Object.entries(over).filter(([, v]) => v !== undefined));
+  return { ...base, ...defined };
+}
+
 /** Aplica um evento do turno à mensagem viva do agente. `now` só existe para os testes. */
 export function applyEvent(m: AgentMessage, e: ChatEvent, now = Date.now()): AgentMessage {
   switch (e.type) {
@@ -46,9 +53,9 @@ export function answered(m: AgentMessage, choice: "once" | "session" | "always" 
   return { ...m, approval: { ...m.approval, status: choice === "deny" ? "denied" : "approved" } };
 }
 
-/** "N mensagens" do cabeçalho: perguntas e respostas que aparecem na tela (sem passos de ferramenta nem cartões de comando). */
-export function visibleCount(messages: ChatMessage[]): number {
-  return messages.filter((m) => m.role === "user" || (m.role === "agent" && (!!m.text || !!m.error))).length;
+/** "N perguntas" do cabeçalho: as bolhas do usuário na tela. Bate com o `question_count` da lista de Sessões. */
+export function questionCount(messages: ChatMessage[]): number {
+  return messages.filter((m) => m.role === "user").length;
 }
 
 /** Posição da última pergunta do usuário (-1 se não há). */
@@ -58,6 +65,13 @@ export const lastUserIndex = (messages: ChatMessage[]) => messages.map((m) => m.
 export function keepForRetry(list: ChatMessage[]): ChatMessage[] | null {
   const i = lastUserIndex(list);
   return i < 0 ? null : list.slice(0, i + 1);
+}
+
+export const RETRY_BLOCKED = "Envie ou remova os anexos pendentes antes de refazer.";
+
+/** Refazer não reconstrói anexo pendente no composer (o backend recusa, código 4018): avisa antes e traduz o erro cru se ele ainda vier. */
+export function retryBlock(pending: number, error?: string): string | null {
+  return pending > 0 || (!!error && /\b4018\b|reconstruct or combine attached media/i.test(error)) ? RETRY_BLOCKED : null;
 }
 
 /** Desfazer: sai a última pergunta e tudo o que veio depois. */

@@ -3,7 +3,8 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { Icon } from "../Icon";
 import { highlight } from "./highlight";
-import { texToParts, texToText } from "./mathLite";
+import "katex/dist/katex.min.css";
+import { renderTex } from "./tex";
 
 export type MdBlock =
   | { t: "code"; lang: string; text: string }
@@ -112,7 +113,7 @@ export function parseMd(src: string): MdBlock[] {
   return out;
 }
 
-const INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|\*\*([\s\S]+?)\*\*|__([\s\S]+?)__|~~([\s\S]+?)~~|\*([^*\s][\s\S]*?)\*|(?<![\w])_([^_\s][\s\S]*?)_(?![\w])|\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|\$(?=[^$\n]*[\\^_][^$\n]*\$)([^\s$](?:[^$\n]*[^\s$])?)\$|\\\(([^\n]+?)\\\)|\$\$([\s\S]+?)\$\$|\$([\d(](?:[\d+\-×*/=()^,.\s]*[\d)])?)\$/g;
+const INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|\*\*([\s\S]+?)\*\*|__([\s\S]+?)__|~~([\s\S]+?)~~|\*([^*\s][\s\S]*?)\*|(?<![\w])_([^_\s][\s\S]*?)_(?![\w])|\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([^\n]+?)\\\)|\$(?=[^$\n]*[\\^_=])([^\s$](?:[^$\n]*[^\s$])?)\$(?!\d)|\$([\d(](?:[\d+\-×*/=()^,.\s]*[\d)])?)\$|(?<![\w$])\$([A-Za-z])\$(?![\w$])/g;
 
 /** Inline: código, negrito, itálico, riscado, links (só http/https/mailto), URLs soltas. */
 export function inline(text: string, key = "i"): ReactNode[] {
@@ -126,8 +127,8 @@ export function inline(text: string, key = "i"): ReactNode[] {
     else if (m[3] ?? m[4]) out.push(<strong key={k}>{inline(m[3] ?? m[4], k)}</strong>);
     else if (m[5]) out.push(<del key={k}>{inline(m[5], k)}</del>);
     else if (m[6] ?? m[7]) out.push(<em key={k}>{inline(m[6] ?? m[7], k)}</em>);
-    else if (m[13]) out.push(<MathBlock key={k} tex={m[13]} inline />);
-    else if (m[11] ?? m[12] ?? m[14]) out.push(<span key={k} className="au-md-math">{texToText(m[11] ?? m[12] ?? m[14])}</span>);
+    else if (m[11] ?? m[12]) out.push(<Tex key={k} tex={m[11] ?? m[12]} display />);
+    else if (m[13] ?? m[14] ?? m[15] ?? m[16]) out.push(<Tex key={k} tex={m[13] ?? m[14] ?? m[15] ?? m[16]} />);
     else {
       const href = m[9] ?? m[10];
       const safe = /^(https?:|mailto:)/i.test(href);
@@ -139,19 +140,9 @@ export function inline(text: string, key = "i"): ReactNode[] {
   return out;
 }
 
-/** Fórmula em destaque: frações de nível de cima em duas linhas (numerador sobre denominador). */
-function MathBlock({ tex, inline }: { tex: string; inline?: boolean }) {
-  const body = texToParts(tex).map((p, i) =>
-    typeof p === "string" ? (
-      <Fragment key={i}>{p}</Fragment>
-    ) : (
-      <span key={i} className="au-frac">
-        <span className="au-frac-n">{p.n}</span>
-        <span className="au-frac-d">{p.d}</span>
-      </span>
-    ),
-  );
-  return inline ? <span className="au-md-mathblock au-md-mathinline">{body}</span> : <div className="au-md-mathblock">{body}</div>;
+/** Fórmula do KaTeX (HTML gerado por ele, nunca texto do modelo). `display`: em destaque, centrada. */
+function Tex({ tex, display }: { tex: string; display?: boolean }) {
+  return <span className={display ? "au-md-mathblock" : "au-md-math"} dangerouslySetInnerHTML={{ __html: renderTex(tex, !!display) }} />;
 }
 
 /** Bloco de código com destaque de sintaxe e botão Copiar. */
@@ -187,7 +178,7 @@ function Block({ b, tail }: { b: MdBlock; tail?: ReactNode }): ReactNode {
     case "code":
       return <CodeBlock lang={b.lang} text={b.text} tail={tail} />;
     case "math":
-      return <MathBlock tex={b.text} />;
+      return <Tex tex={b.text} display />;
     case "h": {
       const H = `h${Math.min(b.level + 1, 6)}` as "h2";
       return (

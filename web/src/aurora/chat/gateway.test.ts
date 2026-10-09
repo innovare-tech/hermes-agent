@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import type { AgentMessage } from "./types";
 
 // Cliente falso: guarda o handler de estado para simular a queda da conexão.
-const fake = vi.hoisted(() => ({ state: null as null | ((s: string) => void), connects: 0, profile: "", calls: [] as [string, Record<string, unknown>][], configSet: null as null | ((p: Record<string, unknown>) => Record<string, unknown>), asked: [] as { title: string; body: string; confirm: string }[], answer: true }));
+const fake = vi.hoisted(() => ({ handlers: {} as Record<string, ((e: unknown) => void)[]>, state: null as null | ((s: string) => void), connects: 0, profile: "", calls: [] as [string, Record<string, unknown>][], configSet: null as null | ((p: Record<string, unknown>) => Record<string, unknown>), asked: [] as { title: string; body: string; confirm: string }[], answer: true }));
 vi.mock("../store", () => ({ ask: async (o: { title: string; body: string; confirm: string }) => (fake.asked.push(o), fake.answer) }));
 vi.mock("@/lib/gatewayClient", () => ({
   GatewayClient: class {
@@ -17,7 +18,10 @@ vi.mock("@/lib/gatewayClient", () => ({
       if (method === "config.set" && fake.configSet) return fake.configSet(params);
       return method === "session.resume" ? { session_id: "live1" } : method === "session.list" ? { sessions: [] } : method === "session.create" ? { session_id: "live2", stored_session_id: "s2" } : method === "commands.catalog" ? { pairs: [], skills: {} } : {};
     };
-    on = () => () => {};
+    on = (ev: string, h: (e: unknown) => void) => {
+      (fake.handlers[ev] ??= []).push(h);
+      return () => {};
+    };
     onRequest = () => () => {};
     onState = (h: (s: string) => void) => {
       fake.state = h;
@@ -216,5 +220,71 @@ describe("/model digitado usa o fluxo do seletor", () => {
     expect(fake.calls.filter(([m]) => m === "config.set")).toHaveLength(1);
     expect(r).toMatchObject({ type: "error", message: "Troca de modelo cancelada" });
     fake.configSet = null;
+  });
+});
+
+describe("resumo do turno gravado pelo backend", async () => {
+  const { fromTranscript, statLine } = await import("./gateway");
+  const { applyExtras } = await import("./persist");
+  const T = 2_000_000;
+  const done = { status: "complete", model: "gpt-x", tokens: { input: 900, output: 300, reasoning: 0, total: 1200 }, duration_s: 4.4, cost_usd: 0.0123, cost_status: "estimated" };
+  const asked = (id: number, turn?: unknown, extra: object = {}) => ({ role: "user", text: "p" + id, row_id: id, timestamp: T, ...(turn ? { display_metadata: { turn } } : {}), ...extra });
+  const answer = (id: number, text = "ok") => ({ role: "assistant", text, row_id: id, timestamp: T + 9 });
+
+  it("rodapé do turno: modelo, duração, tokens e custo DESTE turno", () => {
+    const [, a] = fromTranscript([asked(1, done), answer(2)] as never, { model: "outro" });
+    expect(a).toMatchObject({ fromTurn: true, interrupted: false, stat: { model: "gpt-x", secs: 4.4, tokens: 1200, cost: 0.0123 } });
+    expect(statLine((a as AgentMessage).stat)).toBe("gpt-x · 4,4s · 1,2k tokens · US$ 0,01");
+  });
+
+  it("custo desconhecido não vira US$ 0,00", () => {
+    const [, a] = fromTranscript([asked(1, { ...done, cost_usd: 0, cost_status: "unknown" }), answer(2)] as never, {});
+    expect((a as { stat: { cost: unknown } }).stat.cost).toBeNull();
+  });
+
+  it("turno interrompido: selo 'interrompido' com os tokens, mesmo com texto parcial ou sem resposta nenhuma", () => {
+    const stopped = { ...done, status: "interrupted", tokens: { total: 800 } };
+    const [, partial] = fromTranscript([asked(1, stopped), answer(2, "parc")] as never, {});
+    expect(partial).toMatchObject({ interrupted: true, text: "parc", stat: { tokens: 800 } });
+    const msgs = fromTranscript([asked(1, stopped)] as never, {});
+    expect(msgs[1]).toMatchObject({ interrupted: true, fromTurn: true, stat: { tokens: 800 } });
+    // resposta que não veio e turno rodando: continua em andamento
+    expect(fromTranscript([asked(1)] as never, { running: true })).toHaveLength(1);
+  });
+
+  it("turno com erro: cartão em português com o erro do backend, sem linha de resposta", () => {
+    const failed = { status: "error", model: "gemini-9", error: "Gemini HTTP 404 (NOT_FOUND): models/gemini-9 is not found", duration_s: 1.1 };
+    const msgs = fromTranscript([asked(1, failed), asked(2, done), answer(3)] as never, {});
+    expect(msgs.map((m) => m.role)).toEqual(["user", "agent", "user", "agent"]);
+    expect(msgs[1]).toMatchObject({ interrupted: false, text: "", error: { kind: "model", title: "O modelo gemini-9 não existe neste provedor", detail: expect.stringContaining("404") } });
+    const [, a] = fromTranscript([asked(1, failed), { role: "assistant", text: "Your request was not processed. Send it again if you still want me to carry it out.", row_id: 2, timestamp: T }] as never, {});
+    expect(a).toMatchObject({ text: "", error: { kind: "model" } });
+  });
+
+  it("o resumo do backend vence o que o localStorage guardou; sem resumo, o localStorage ainda vale", () => {
+    const rows = [asked(1, done), answer(2), asked(3), answer(4)] as never;
+    const ex = { cards: [], turns: { 1: { n: 1, tok: 5, cost: 9, st: "i" as const }, 3: { n: 3, tok: 700 } } };
+    const back = applyExtras(fromTranscript(rows, { model: "m" }), ex) as { stat: unknown; interrupted?: boolean }[];
+    expect(back[1]).toMatchObject({ interrupted: false, stat: { tokens: 1200, cost: 0.0123 } });
+    expect(back[3]).toMatchObject({ stat: { tokens: 700 } });
+  });
+});
+
+describe("message.complete com turn_summary", () => {
+  it("done e interrompido usam o resumo do turno (tokens, custo, duração)", async () => {
+    const run = async (payload: Record<string, unknown>) => {
+      fake.handlers = {};
+      const events: { type: string; stat?: unknown }[] = [];
+      const p = gatewayChat.send("s1", "oi", (e) => events.push(e));
+      await vi.waitFor(() => expect(fake.handlers["message.complete"]?.length).toBeGreaterThan(0));
+      fake.handlers["message.complete"].forEach((h) => h({ session_id: "live1", payload }));
+      await p;
+      return events;
+    };
+    const summary = { status: "complete", model: "gpt-x", tokens: { total: 1200 }, duration_s: 4.4, cost_usd: 0.02, cost_status: "exact" };
+    expect((await run({ status: "complete", text: "oi", turn_summary: summary })).at(-1)).toMatchObject({ type: "done", stat: { model: "gpt-x", secs: 4.4, tokens: 1200, cost: 0.02 } });
+    expect((await run({ status: "interrupted", turn_summary: { ...summary, status: "interrupted", tokens: { total: 800 } } })).at(-1)).toMatchObject({ type: "interrupted", stat: { tokens: 800, cost: 0.02 } });
+    // backend antigo, sem resumo: continua com a conta local
+    expect((await run({ status: "complete", text: "oi" })).at(-1)).toMatchObject({ type: "done" });
   });
 });

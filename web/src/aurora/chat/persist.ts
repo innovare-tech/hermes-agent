@@ -57,7 +57,7 @@ export function limitExtras(ex: Extras, maxEntries = MAX_ENTRIES, maxBytes = MAX
   return out;
 }
 
-/** Devolve às mensagens do histórico o que o backend não guardou. O que veio do backend (pensamento) tem prioridade. */
+/** Devolve às mensagens do histórico o que o backend não guardou. O que veio do backend (pensamento, resumo do turno) tem prioridade. */
 export function applyExtras(messages: ChatMessage[], ex: Extras | null): ChatMessage[] {
   if (!ex || (!ex.cards.length && !Object.keys(ex.turns).length && !ex.names)) return messages;
   const out: ChatMessage[] = [];
@@ -89,6 +89,8 @@ function withTurn(m: AgentMessage, t?: TurnExtra): AgentMessage {
   const a = { ...m };
   if (!a.reasoning && t.r) a.reasoning = t.r;
   a.thinkMs ??= t.ms;
+  // Rodapé, "interrompido" e erro que o backend gravou (resumo do turno) valem mais que o que este navegador guardou.
+  if (m.fromTurn) return a;
   if (a.stat && (t.tok || t.cost != null)) a.stat = { ...a.stat, tokens: a.stat.tokens ?? t.tok, cost: a.stat.cost ?? t.cost };
   // Turno sem resposta: o histórico só tem o aviso em inglês — volta o estado de antes (interrompido ou erro do provedor).
   if (t.st && (!a.error || isFailedTurnText(a.error.detail))) {

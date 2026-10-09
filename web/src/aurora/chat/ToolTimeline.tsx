@@ -55,19 +55,22 @@ function Summary({ s, output }: { s: ToolSummary; output: string }) {
     return (
       <>
         <span className="au-toolsum">{s.line}</span>
-        <Output text={output} empty="(a ferramenta não devolveu nada)" />
+        {s.head ? <pre className="au-pre">{s.head}</pre> : <Output text={output} empty="(a ferramenta não devolveu nada)" />}
       </>
     );
   return (
     <>
       <span className="au-toolsum">{s.line}</span>
+      {s.head && <pre className="au-pre">{s.head}</pre>}
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
         <button className="au-more" aria-expanded={more} onClick={() => setMore(!more)}>
           {more ? "Esconder" : (s.moreLabel ?? "Ver mais")}
         </button>
-        <button className="au-more" aria-expanded={raw} onClick={() => setRaw(!raw)}>
-          {raw ? "Esconder o detalhe" : "Detalhe técnico"}
-        </button>
+        {output.trim() !== s.more.trim() && (
+          <button className="au-more" aria-expanded={raw} onClick={() => setRaw(!raw)}>
+            {raw ? "Esconder o detalhe" : "Detalhe técnico"}
+          </button>
+        )}
       </div>
       <Collapsible open={more}>
         <Output text={s.more} empty="" />

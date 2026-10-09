@@ -4,15 +4,15 @@ import { spot } from "../Chrome";
 import { Icon } from "../Icon";
 import { chat } from "../chat";
 import { AgentBubble, UserBubble } from "../chat/Bubbles";
-import { checkAttachment, attachError, attachKind, withRefs } from "../chat/attachments";
+import { checkAttachment, attachError, attachKind, refsOf, withRefs } from "../chat/attachments";
 import { CommandCard } from "../chat/CommandCard";
 import { cmdName, commandError, EFFORT_PT, parseCommandOutput, ptWarning, withWarning } from "../chat/commandOutput";
 import { Composer } from "../chat/Composer";
 import { ContextPanel } from "../chat/ContextPanel";
 import { saveExtras } from "../chat/persist";
 import { plural } from "../chat/sources";
-import { answered, applyEvent, interrupted, keepForRetry, keepForUndo, lastUserIndex, planEdit, visibleCount } from "../chat/turn";
-import type { AgentMessage, ApprovalChoice, Attachment, ChatMessage, ContextBreakdown, SessionInfo, SlashCommand } from "../chat/types";
+import { answered, applyEvent, interrupted, keepForRetry, keepForUndo, lastUserIndex, mergeStat, planEdit, questionCount, retryBlock } from "../chat/turn";
+import type { AgentMessage, ApprovalChoice, Attachment, ChatMessage, ContextBreakdown, SentAttachment, SessionInfo, SlashCommand } from "../chat/types";
 import { actOnBehalf, ask, loadSessions, toast, useStore } from "../store";
 
 const BACKEND_LABEL: Record<string, string> = { local: "nesta máquina", docker: "Docker", ssh: "via SSH", modal: "Modal", daytona: "Daytona", singularity: "Singularity", vercel_sandbox: "Vercel Sandbox" };
@@ -219,7 +219,7 @@ export function Chat() {
           if (e.type === "interrupted" && e.stat && !messagesRef.current.some((m) => m.role === "agent" && m.live)) {
             setMessages((list) => {
               const i = list.map((m) => m.role).lastIndexOf("agent");
-              return list.map((m, j) => (j === i && m.role === "agent" && m.interrupted ? { ...m, stat: { ...e.stat, ...m.stat, tokens: m.stat?.tokens ?? e.stat?.tokens } } : m));
+              return list.map((m, j) => (j === i && m.role === "agent" && m.interrupted ? { ...m, stat: mergeStat(m.stat, e.stat) } : m));
             });
             return;
           }
@@ -243,7 +243,7 @@ export function Chat() {
     if (running) return;
     let text = raw.trim();
     const ready = atts.filter((a) => a.status === "ready");
-    if (text.startsWith("/") && !ready.length) return slash(text);
+    if (text.startsWith("/") && (!ready.length || cmdName(text) === "retry")) return slash(text);
     if (!text && !ready.length) return;
     if (!text) text = "Veja o que anexei.";
     const user = { text, attachments: ready.map((a) => ({ name: a.name, kind: a.kind, preview: a.preview, paths: [...(a.paths ?? []), ...(a.ref ? [a.ref.replace(/^@\w+:/, "").replace(/\s*\[[^\]]*\]\s*$/, "")] : [])] })) };
@@ -289,9 +289,12 @@ export function Chat() {
     const id = sidRef.current;
     const keep = keepForRetry(messagesRef.current);
     if (!id || !keep || running) return;
+    // O backend não reconstrói anexo pendente junto do pedido refeito (código 4018): avisa antes, sem mandar.
+    const blocked = retryBlock(atts.filter((a) => a.status !== "error").length);
+    if (blocked) return void toast(blocked);
     const r = await chat.slash(id, "/retry");
     if (r.type !== "send") {
-      toast(r.type === "error" ? commandError("/retry", r.message).lines?.[0] ?? "Não consegui refazer" : "Não consegui refazer");
+      toast((r.type === "error" && retryBlock(0, r.message)) || (r.type === "error" ? commandError("/retry", r.message).lines?.[0] : "") || "Não consegui refazer");
       return;
     }
     await startTurn(r.message, { keep });
@@ -314,19 +317,22 @@ export function Chat() {
   }
 
   /** Editar uma pergunta: apaga dali em diante e responde de novo com o texto novo. */
-  async function edit(m: Extract<ChatMessage, { role: "user" }>, text: string) {
+  async function edit(m: Extract<ChatMessage, { role: "user" }>, free: string, kept: SentAttachment[]) {
     const id = sidRef.current;
     const plan = planEdit(messagesRef.current, m.id);
     if (!id || running) return;
     if (!plan) return void toast("Recarregue a conversa para editar essa mensagem");
-    const user = { text, attachments: plan.user.attachments };
-    if (plan.mode === "truncate") return startTurn(text, { keep: plan.keep, truncateFrom: plan.rowId, user });
+    // O campo trouxe só o texto livre; as referências dos anexos que sobraram voltam na frente do pedido.
+    const text = free || "Veja o que anexei.";
+    const refs = kept.flatMap(refsOf);
+    const user = { text, attachments: kept.length ? kept : undefined };
+    if (plan.mode === "truncate") return startTurn(text, { keep: plan.keep, truncateFrom: plan.rowId, user, refs });
     try {
       await chat.undo(id); // mensagem sem endereço no histórico: só a última, desfazendo e reenviando
     } catch (e) {
       return void toast(errText(e, "Não consegui editar essa mensagem"));
     }
-    return startTurn(text, { keep: plan.keep, user });
+    return startTurn(text, { keep: plan.keep, user, refs });
   }
 
   // Aprovar um comando pedido no meio do turno é agir em seu nome: passa pelo kill switch e vira Atividade.
@@ -486,7 +492,7 @@ export function Chat() {
   useEffect(() => {
     if (cur?.title) setInfo((i) => (i.title === cur.title ? i : { ...i, title: cur.title }));
   }, [cur?.title]);
-  const count = visibleCount(messages);
+  const count = questionCount(messages);
   const hour = new Date().getHours();
   const greet = [...(hour < 12 ? "Bom dia." : hour < 18 ? "Boa tarde." : "Boa noite.").split(" "), ..."O que vamos resolver hoje?".split(" ")];
   const lastAgent = messages.map((m) => m.role).lastIndexOf("agent");
@@ -526,8 +532,8 @@ export function Chat() {
             ) : (
               <span style={{ fontSize: 14.5, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{loading ? "Carregando…" : title}</span>
             )}
-            <span title={sid ? `id: ${sid} · conta só as perguntas e respostas que aparecem na tela, sem os passos das ferramentas` : undefined} style={{ fontSize: 11.5, color: "var(--fg3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {loading ? " " : sid ? `${cur?.source ?? "Web"} · ${plural(count, "mensagem", "mensagens")}` : "ainda não salva — começa ao enviar"}
+            <span title={sid ? `id: ${sid} · conta as suas perguntas nesta conversa, o mesmo número da lista de Sessões` : undefined} style={{ fontSize: 11.5, color: "var(--fg3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {loading ? " " : sid ? `${cur?.source ?? "Web"} · ${plural(count, "pergunta", "perguntas")}` : "ainda não salva — começa ao enviar"}
             </span>
           </div>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
@@ -592,7 +598,7 @@ export function Chat() {
           <div style={{ maxWidth: 780, margin: "0 auto", padding: "30px 26px 80px", display: "flex", flexDirection: "column", gap: 30 }}>
             {messages.map((m, i) =>
               m.role === "user" ? (
-                <UserBubble key={m.id} m={m} canEdit={!running && !!sid} onEdit={(t) => edit(m, t)} />
+                <UserBubble key={m.id} m={m} canEdit={!running && !!sid} onEdit={(t, a) => edit(m, t, a)} />
               ) : m.role === "system" ? (
                 <CommandCard key={m.id} cmd={m.cmd} card={m.card} pending={m.pending} />
               ) : (

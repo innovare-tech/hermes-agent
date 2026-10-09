@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { logFrom } from "./live";
+import { logFrom, sessionRow } from "./live";
 
 describe("logFrom", () => {
   it("separa hora, nível, origem e mensagem", () => {
@@ -17,5 +17,13 @@ describe("logFrom", () => {
 
   it("linha fora do formato vira só mensagem", () => {
     expect(logFrom("Traceback (most recent call last):", 2)).toMatchObject({ t: "", src: "", msg: "Traceback (most recent call last):" });
+  });
+});
+
+describe("sessionRow", () => {
+  it("leva o question_count do backend (perguntas), sem confundir com message_count", () => {
+    expect(sessionRow({ id: "a", title: "T", source: "web", message_count: 9, question_count: 4, started_at: 1 })).toMatchObject({ msgs: 9, questions: 4 });
+    // backend antigo / resultado de busca: sem question_count, a tela cai para "mensagens"
+    expect(sessionRow({ id: "b", message_count: 3 })).toMatchObject({ msgs: 3, questions: undefined, title: "Sem título" });
   });
 });

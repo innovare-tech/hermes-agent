@@ -51,6 +51,13 @@ export function attachError(message: string): string {
   return message || "Não consegui anexar.";
 }
 
+/** Referências `@tipo:caminho` que a mensagem leva para o agente: o que a edição recoloca nos anexos que sobraram. */
+export function refsOf(a: SentAttachment): string[] {
+  if (a.ref) return [a.ref];
+  // Enviado agora, sem recarregar: só temos os caminhos no servidor (PDF vira uma imagem por página).
+  return (a.paths ?? []).map((p) => `@${a.kind === "pdf" ? "image" : a.kind}:${p}`);
+}
+
 const KIND_OF: Record<string, AttachmentKind> = { image: "image", file: "file", pdf: "pdf" };
 const looksLikePath = (p: string) => /[\\/]/.test(p) || /\.\w{1,6}$/.test(p);
 
@@ -66,10 +73,11 @@ export function parseAttachRefs(text: string, names?: Record<string, string>): {
   if (!text.includes("@")) return { text, attachments: [] };
   const attachments: SentAttachment[] = [];
   const add = (kind: string, raw: string) => {
-    const path = raw.replace(/\s*\[[^\]\n]*\]\s*$/, "").trim().replace(/^["']|["']$/g, "");
+    const clean = raw.replace(/\s*\[[^\]\n]*\]\s*$/, "").trim();
+    const path = clean.replace(/^["'`]|["'`]$/g, "");
     if (!path || !looksLikePath(path)) return false;
     const base = baseName(path);
-    attachments.push({ name: names?.[base] ?? base, kind: KIND_OF[kind] });
+    attachments.push({ name: names?.[base] ?? base, kind: KIND_OF[kind], ref: `@${kind}:${clean}` });
     return true;
   };
   const lines: string[] = [];

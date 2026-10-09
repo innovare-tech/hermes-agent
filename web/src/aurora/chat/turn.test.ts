@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answered, applyEvent, interrupted, keepForRetry, keepForUndo, lastUserIndex, planEdit, visibleCount } from "./turn";
+import { answered, applyEvent, interrupted, keepForRetry, keepForUndo, lastUserIndex, mergeStat, planEdit, questionCount, RETRY_BLOCKED, retryBlock } from "./turn";
 import type { AgentMessage, ChatMessage, ToolStep } from "./types";
 
 const empty: AgentMessage = { id: "a", role: "agent", steps: [], text: "", live: true };
@@ -70,11 +70,11 @@ const u = (id: string, rowId?: number): ChatMessage => ({ id, role: "user", text
 const a = (id: string, text = "r"): ChatMessage => ({ id, role: "agent", steps: [], text, live: false });
 
 describe("contagem e cortes (refazer, desfazer, editar)", () => {
-  it("'N mensagens' conta só perguntas e respostas visíveis", () => {
+  it("'N perguntas' conta só as bolhas do usuário (o mesmo número da lista de Sessões)", () => {
     const sys: ChatMessage = { id: "s", role: "system", cmd: "/status" };
     const onlyTools: ChatMessage = { id: "t", role: "agent", steps: [{ ...step, status: "ok" }], text: "", live: false };
-    expect(visibleCount([u("1"), a("2"), sys, u("3"), onlyTools])).toBe(3);
-    expect(visibleCount([])).toBe(0);
+    expect(questionCount([u("1"), a("2"), sys, u("3"), onlyTools])).toBe(2);
+    expect(questionCount([])).toBe(0);
   });
 
   it("refazer: mantém até a última pergunta (a resposta é substituída, não ganha balão novo)", () => {
@@ -103,5 +103,25 @@ describe("interrupção com tokens", () => {
   it("o evento traz o rodapé do turno parado", () => {
     const m = applyEvent(applyEvent(empty, { type: "delta", text: "parcial" }), { type: "interrupted", stat: { model: "m", secs: 2, tokens: 800 } });
     expect(m).toMatchObject({ interrupted: true, live: false, text: "parcial", stat: { tokens: 800 } });
+  });
+});
+
+describe("mergeStat", () => {
+  it("o que o backend informa vale mais; o que ele não sabe fica", () => {
+    expect(mergeStat({ model: "a", secs: 5, tokens: 100 }, { model: "b", secs: undefined, tokens: 800, cost: 0.02 })).toEqual({ model: "b", secs: 5, tokens: 800, cost: 0.02 });
+    expect(mergeStat({ tokens: 1 }, null)).toEqual({ tokens: 1 });
+    expect(mergeStat(undefined, { tokens: 2 })).toEqual({ tokens: 2 });
+  });
+});
+
+describe("refazer com anexo pendente", () => {
+  it("anexo no campo bloqueia o refazer com a frase em português", () => {
+    expect(retryBlock(1)).toBe("Envie ou remova os anexos pendentes antes de refazer.");
+    expect(retryBlock(0)).toBeNull();
+  });
+  it("o erro cru do backend (código 4018) nunca aparece: vira a mesma frase", () => {
+    expect(retryBlock(0, "retry cannot safely reconstruct or combine attached media (4018)")).toBe(RETRY_BLOCKED);
+    expect(retryBlock(0, "RPC error 4018")).toBe(RETRY_BLOCKED);
+    expect(retryBlock(0, "sessão não encontrada")).toBeNull();
   });
 });

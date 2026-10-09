@@ -2145,6 +2145,8 @@ export interface SessionInfo {
   last_active: number;
   is_active: boolean;
   message_count: number;
+  /** Perguntas do usuário (linhas ativas); o backend novo informa em `GET /api/sessions`. */
+  question_count?: number;
   tool_call_count: number;
   input_tokens: number;
   output_tokens: number;

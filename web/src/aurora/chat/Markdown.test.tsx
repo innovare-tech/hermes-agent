@@ -52,40 +52,68 @@ describe("código e fórmulas", () => {
     expect(out).toContain('aria-label="Copiar código"');
   });
 
-  it("fórmula inline com barra, ^ ou _ vira símbolos; dinheiro fica como está", () => {
-    expect(html("A conta $17 \\times 23$ dá 391.")).toContain('<span class="au-md-math">17 × 23</span>');
-    expect(html("Custa $5 e depois $10.")).not.toContain("au-md-math");
-    expect(html("x vale $x^2$")).toContain("x²");
-  });
-
-  it("fórmula em bloco $$…$$", () => {
+  it("fórmula em bloco $$…$$ é um bloco de matemática", () => {
     expect(parseMd("antes\n\n$$\n\\frac{1}{2}\n$$\n\ndepois").map((b) => b.t)).toEqual(["p", "math", "p"]);
-    expect(html("$$ \\sqrt{16} $$")).toContain('class="au-md-mathblock">√16');
   });
 });
 
-describe("fórmulas em listas e frações", () => {
+describe("KaTeX", () => {
+  it("fórmula inline vira KaTeX (HTML + MathML), não texto cru", () => {
+    const out = html("A conta $17 \\times 23$ dá 391 e $x^2$ também.");
+    expect(out).toContain('class="au-md-math"');
+    expect(out).toContain('class="katex"');
+    expect(out).toContain("<math");
+    expect(out).toContain("×");
+    expect(out).not.toContain("$17");
+    expect(out).not.toContain("$x^2$");
+    expect(html("com \\(a_1 + a_2\\) aqui")).toContain('class="katex"');
+  });
+
+  it("bloco $$…$$ e \\[…\\] em modo display", () => {
+    expect(html("$$ \\sqrt{16} $$")).toContain("katex-display");
+    expect(html("\\[ \\sqrt{16} \\]")).toContain("katex-display");
+    expect(html("texto \\[ y^2 \\] no meio")).toContain("katex-display");
+  });
+
+  it("matriz, fração em linha, somatório e integral saem com a estrutura tipográfica", () => {
+    const mat = html("$$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$$");
+    expect(mat).toContain("mtable");
+    expect(mat).toContain("delimcenter");
+    expect(mat).not.toContain("katex-error");
+    const frac = html("vale $\\frac{a}{b}$ aqui");
+    expect(frac).toContain("mfrac");
+    expect(frac).toContain("frac-line");
+    const sum = html("$\\sum_{i=1}^{n} i^2$");
+    expect(sum).toContain("op-symbol");
+    expect(sum).toContain("msupsub");
+    const integral = html("$$\\int_0^1 x\\,dx$$");
+    expect(integral).toContain("op-symbol");
+    expect(integral).not.toContain("katex-error");
+  });
+
+  it("fórmula inválida não quebra a conversa: aparece como erro do KaTeX", () => {
+    expect(html("veja \\(\\foo{\\) ok")).toContain("katex-error");
+  });
+
   it("$$…$$ dentro de item de lista é renderizado, não sai cru", () => {
     const out = html("1. **Fórmula:**\n   $$x = \\frac{-b}{2a}$$\n2. Outra coisa $$y^2$$ no meio");
     expect(out).not.toContain("$$");
     expect(out).toContain("au-md-mathblock");
-    expect(out).toContain("au-frac");
+    expect(out).toContain("mfrac");
     expect(html("- item $$a + b$$ fim")).not.toContain("$$");
-  });
-  it("Bhaskara em bloco: fração em duas linhas, com numerador e denominador", () => {
-    const out = html("$$ x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a} $$");
-    expect(out).toContain('<span class="au-frac"><span class="au-frac-n">-b ± √(b²-4ac)</span><span class="au-frac-d">2a</span></span>');
-  });
-  it("fórmula inline continua em linha: a/b", () => {
-    expect(html("vale $\\frac{a}{b}$ aqui")).toContain('<span class="au-md-math">a/b</span>');
   });
 });
 
-describe("$ com conta numérica", () => {
+describe("$ com conta numérica e dinheiro", () => {
   it("renderiza conta, mas não dinheiro", () => {
-    expect(html("Dá $340 + 51 = 391$ ao todo.")).toContain('<span class="au-md-math">340 + 51 = 391</span>');
-    expect(html("O resultado é $23$.")).toContain('<span class="au-md-math">23</span>');
-    expect(html("A conta $(3 + 4) * 2$ fecha.")).toContain("au-md-math");
-    for (const money of ["Custa $5 e depois $10.", "De $5 a $10 por mês", "Pague $ 5 + 3 $ hoje", "US$ 5 ou $20 reais"]) expect(html(money)).not.toContain("au-md-math");
+    expect(html("Dá $340 + 51 = 391$ ao todo.")).toContain('class="katex"');
+    expect(html("O resultado é $23$.")).toContain('class="katex"');
+    expect(html("A conta $(3 + 4) * 2$ fecha.")).toContain('class="katex"');
+    expect(html("com $n$ itens")).toContain('class="katex"');
+    for (const money of ["Custa $5 e depois $10.", "De $5 a $10 por mês", "Pague $ 5 + 3 $ hoje", "US$ 5 ou $20 reais", "Entre R$5-$10 e US$5=$6", "valia $5, ou $x e $y"]) {
+      const out = html(money);
+      expect(out).not.toContain("katex");
+      expect(out).toContain("$");
+    }
   });
 });

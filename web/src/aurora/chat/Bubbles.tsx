@@ -9,7 +9,7 @@ import { statLine } from "./gateway";
 import { Markdown } from "./Markdown";
 import { Reasoning } from "./Reasoning";
 import { ToolTimeline } from "./ToolTimeline";
-import type { AgentMessage, ApprovalChoice, Block, UserMessage } from "./types";
+import type { AgentMessage, ApprovalChoice, Block, SentAttachment, UserMessage } from "./types";
 
 /** Mensagem do usuário com mais que isto fica recolhida ("mostrar mais"). */
 export const LONG_CHARS = 1600;
@@ -23,10 +23,12 @@ export function previewOf(t: string): string {
   return (nl > PREVIEW_CHARS * 0.5 ? head.slice(0, nl) : head).trimEnd();
 }
 
-export function UserBubble({ m, canEdit, onEdit }: { m: UserMessage; canEdit: boolean; onEdit: (text: string) => void }) {
+/** `onEdit(texto livre, anexos que sobraram)`: quem chama recoloca as referências dos anexos ao reenviar. */
+export function UserBubble({ m, canEdit, onEdit }: { m: UserMessage; canEdit: boolean; onEdit: (text: string, attachments: SentAttachment[]) => void }) {
   const [more, setMore] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.text);
+  const [kept, setKept] = useState<SentAttachment[]>([]);
   const area = useRef<HTMLTextAreaElement>(null);
   // Depois de recarregar, os anexos voltam como "@image:caminho" no texto: viram chips iguais aos do envio.
   const parsed = useMemo(() => parseAttachRefs(m.text), [m.text]);
@@ -40,10 +42,16 @@ export function UserBubble({ m, canEdit, onEdit }: { m: UserMessage; canEdit: bo
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);
+  // Editar: só o texto livre vai para o campo; os anexos aparecem como chips que dá para tirar.
+  const startEdit = () => {
+    setDraft(shown);
+    setKept(chips);
+    setEditing(true);
+  };
   const save = () => {
     const t = draft.trim();
     setEditing(false);
-    if (t && t !== m.text.trim()) onEdit(t);
+    if ((t || kept.length) && (t !== shown.trim() || kept.length !== chips.length)) onEdit(t, kept);
   };
   return (
     <div className="au-user" style={{ display: "flex", justifyContent: "flex-end", animation: "hblurin .6s cubic-bezier(.2,.7,.2,1) both" }}>
@@ -60,10 +68,23 @@ export function UserBubble({ m, canEdit, onEdit }: { m: UserMessage; canEdit: bo
               if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) save();
             }}
           />
+          {!!kept.length && (
+            <div className="au-sentatt" style={{ justifyContent: "flex-start" }}>
+              {kept.map((a, i) => (
+                <span key={i} className="au-achip" title={a.name}>
+                  {a.preview ? <img src={a.preview} alt="" /> : <Icon name={a.kind === "pdf" ? "file-text" : "paperclip"} size={14} />}
+                  <span className="au-achip-name">{a.name}</span>
+                  <button className="au-achip-x" aria-label={`Remover anexo ${a.name}`} onClick={() => setKept(kept.filter((_, j) => j !== i))}>
+                    <Icon name="x" size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <span style={{ fontSize: 11.5, color: "var(--fg3)", marginRight: "auto" }}>Isto apaga a resposta e tudo o que veio depois, e o Hermes responde de novo.</span>
             <button className="au-outline" onClick={() => setEditing(false)}>Cancelar</button>
-            <button className="au-primary" onClick={save} disabled={!draft.trim()}>Enviar de novo</button>
+            <button className="au-primary" onClick={save} disabled={!draft.trim() && !kept.length}>Enviar de novo</button>
           </div>
         </div>
       ) : (
@@ -90,7 +111,7 @@ export function UserBubble({ m, canEdit, onEdit }: { m: UserMessage; canEdit: bo
           )}
           {canEdit && (
             <div className="au-uactions">
-              <button className="au-mini" title="Editar e enviar de novo" aria-label="Editar a mensagem" onClick={() => { setDraft(m.text); setEditing(true); }}>
+              <button className="au-mini" title="Editar e enviar de novo" aria-label="Editar a mensagem" onClick={startEdit}>
                 <Icon name="pencil" size={12} />
               </button>
               <button className="au-mini" title="Copiar" aria-label="Copiar a mensagem" onClick={() => navigator.clipboard.writeText(shown || m.text).then(() => toast("Copiado"), () => {})}>

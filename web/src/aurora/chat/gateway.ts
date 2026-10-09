@@ -11,9 +11,10 @@ import { ptConfirm } from "./commandOutput";
 import { applyExtras, loadExtras } from "./persist";
 import { shortWhen, sourceIcon, sourceLabel } from "./sources";
 import { buildSlashMenu } from "./slashMenu";
+import { mergeStat } from "./turn";
 import { summarizeArgs } from "./toolLabels";
 import { summarizeOutput, toolDenied } from "./toolSummary";
-import type { AgentMessage, ApprovalChoice, ChatAdapter, ChatMessage, ModelSwitch, SendOpts, SessionInfo, SessionUsage, SlashResult, StepStatus, ToolStep, TurnStat } from "./types";
+import type { AgentMessage, ApprovalChoice, ChatAdapter, ChatMessage, ModelSwitch, SendOpts, SessionInfo, SessionUsage, SlashResult, StepStatus, ToolStep, TurnStat, TurnSummary } from "./types";
 
 let gw: GatewayClient | null = null;
 let connecting: Promise<void> | null = null;
@@ -123,6 +124,17 @@ export function turnStat(u: Usage | null | undefined, secs: number, base: number
   return { model: u?.model ?? model, secs, tokens: tokens || undefined };
 }
 
+/** Resumo do turno vindo do backend (ou null se o objeto não é um resumo). */
+export function parseTurn(v: unknown): TurnSummary | null {
+  const t = v as Partial<TurnSummary> | null | undefined;
+  return t && typeof t === "object" && (t.status === "complete" || t.status === "interrupted" || t.status === "error") ? (t as TurnSummary) : null;
+}
+
+/** Rodapé do turno a partir do resumo do backend: modelo, duração, tokens e custo DESTE turno. */
+export function statOfTurn(t: TurnSummary, model?: string): TurnStat {
+  return { model: t.model || model, secs: typeof t.duration_s === "number" ? t.duration_s : undefined, tokens: t.tokens?.total || undefined, cost: costOf(t) };
+}
+
 /** Texto do rodapé: "gemini-3.8-flash · 5,2s · 1,2k tokens". */
 export function statLine(s?: TurnStat): string {
   if (!s) return "";
@@ -136,6 +148,15 @@ export function fromTranscript(rows: TranscriptMessage[], o: { model?: string; r
   let agent: AgentMessage | null = null;
   let t0: number | null = null;
   let t1: number | null = null;
+  // Resumo do turno gravado na linha do usuário que o abriu: manda no rodapé, no "interrompido" e no erro.
+  let turn: TurnSummary | null = null;
+  const applyTurn = (a: AgentMessage, t: TurnSummary) => {
+    a.fromTurn = true;
+    a.stat = { ...statOfTurn(t, o.model), secs: t.duration_s ?? a.stat?.secs };
+    if (t.status === "interrupted") Object.assign(a, { interrupted: true, error: undefined });
+    else if (t.status === "error") Object.assign(a, { interrupted: false, error: t.error ? classifyError(t.error, { model: t.model || o.model }) : (a.error ?? classifyError("", { model: t.model || o.model })) });
+    else a.interrupted = false;
+  };
   // Fecha o bloco do agente: rodapé (modelo + tempo), erro gravado como texto e turno interrompido.
   const close = (last: boolean) => {
     const a = agent;
@@ -151,15 +172,22 @@ export function fromTranscript(rows: TranscriptMessage[], o: { model?: string; r
     }
     if (a.text || a.error) a.stat = { model: o.model, secs: t0 != null && t1 != null && t1 > t0 ? t1 - t0 : undefined };
     else if (!(last && o.running)) a.interrupted = true;
+    if (turn) applyTurn(a, turn);
     agent = null;
+  };
+  const unanswered = (id: string) => {
+    const a: AgentMessage = { id, role: "agent", steps: [], text: "", live: false, interrupted: true };
+    if (turn) applyTurn(a, turn);
+    return a;
   };
   rows.forEach((r, i) => {
     const id = String(r.row_id ?? i);
     if (r.role === "user") {
       close(false);
       // Pergunta sem nenhuma resposta antes da próxima = turno que parou: continua visível, marcado.
-      if (out.length && out[out.length - 1].role === "user") out.push({ id: id + "-i", role: "agent", steps: [], text: "", live: false, interrupted: true });
+      if (out.length && out[out.length - 1].role === "user") out.push(unanswered(id + "-i"));
       out.push({ id, role: "user", text: r.text ?? text(r.content), rowId: typeof r.row_id === "number" ? r.row_id : undefined });
+      turn = parseTurn((r.display_metadata as { turn?: unknown } | null | undefined)?.turn);
       t0 = r.timestamp ?? null;
       t1 = null;
       return;
@@ -181,7 +209,7 @@ export function fromTranscript(rows: TranscriptMessage[], o: { model?: string; r
   });
   close(true);
   // Terminou numa pergunta sem resposta (e sem turno rodando): também fica marcado.
-  if (out.length && out[out.length - 1].role === "user" && !o.running) out.push({ id: "end-i", role: "agent", steps: [], text: "", live: false, interrupted: true });
+  if (out.length && out[out.length - 1].role === "user" && !o.running) out.push(unanswered("end-i"));
   return out;
 }
 
@@ -402,10 +430,11 @@ export const gatewayChat: ChatAdapter = {
         c.on("message.complete", (e) => {
           if (e.session_id !== sid) return;
           const p = e.payload ?? {};
+          const summary = parseTurn((p as { turn_summary?: unknown }).turn_summary);
           const surface = p.error_surface as { code?: string; retryable?: boolean; model?: string } | null | undefined;
           if (p.status === "error") on({ type: "error", message: text(p.error) || "O agente falhou nesse turno", code: surface?.code, retryable: surface?.retryable, model: surface?.model });
           else if (p.status === "interrupted") {
-            const stat = turnStat(p.usage, (Date.now() - t0) / 1000, usageBase.get(sid));
+            const stat = mergeStat(turnStat(p.usage, (Date.now() - t0) / 1000, usageBase.get(sid)), summary && statOfTurn(summary));
             const us = usageOf(p.usage);
             if (us) usageBase.set(sid, us.total);
             on({ type: "interrupted", stat });
@@ -414,7 +443,7 @@ export const gatewayChat: ChatAdapter = {
             // Provedor sem streaming: o texto vem só aqui. O raciocínio final também (mesmo sem "mostrar pensamento").
             if (!gotText && typeof p.text === "string" && p.text) on({ type: "delta", text: p.text });
             if (!gotThink && typeof p.reasoning === "string" && p.reasoning.trim()) on({ type: "reasoning", text: p.reasoning.trim(), full: true });
-            const stat = turnStat(p.usage, (Date.now() - t0) / 1000, usageBase.get(sid));
+            const stat = mergeStat(turnStat(p.usage, (Date.now() - t0) / 1000, usageBase.get(sid)), summary && statOfTurn(summary));
             const us = usageOf(p.usage);
             if (us) usageBase.set(sid, us.total);
             on({ type: "done", stat, info: fromUsage(p.usage) });

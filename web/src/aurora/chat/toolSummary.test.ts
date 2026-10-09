@@ -25,7 +25,6 @@ describe("summarizeOutput", () => {
   });
   it("sem resumo: erro da ferramenta, texto puro, JSON desconhecido", () => {
     expect(summarizeOutput("search_files", '{"error":"sem permissão"}')).toBeUndefined();
-    expect(summarizeOutput("terminal", "texto puro")).toBeUndefined();
     expect(summarizeOutput("memory", '{"a":1}')).toBeUndefined();
   });
 });
@@ -36,5 +35,30 @@ describe("toolDenied", () => {
     expect(toolDenied("BLOCKED: User denied this command.")).toBe(true);
     expect(toolDenied("BLOCKED: Command timed out without user response.")).toBe(false);
     expect(toolDenied('{"output":"ok"}')).toBe(false);
+  });
+});
+
+describe("terminal com saída em texto (não JSON)", () => {
+  it("saída curta: mostra tudo e diz como terminou quando o código aparece", () => {
+    expect(summarizeOutput("terminal", "ok\nexit code: 0")).toEqual({ line: "Terminou sem erro", head: "ok\nexit code: 0" });
+    expect(summarizeOutput("terminal", "boom\nProcess exited with code 2")).toMatchObject({ line: "Terminou com erro (código 2)", head: "boom\nProcess exited with code 2" });
+    expect(summarizeOutput("terminal", "falhou\ncódigo de saída 127")?.line).toBe("Terminou com erro (código 127)");
+  });
+  it("sem código na saída: conta as linhas, sem inventar sucesso", () => {
+    expect(summarizeOutput("terminal", "texto puro")).toEqual({ line: "1 linha de saída", head: "texto puro" });
+    expect(summarizeOutput("terminal", "a\nb")?.line).toBe("2 linhas de saída");
+    expect(summarizeOutput("terminal", "   ")).toBeUndefined();
+  });
+  it("saída longa: primeiras linhas à vista e o resto recolhido", () => {
+    const text = Array.from({ length: 30 }, (_, i) => `linha ${i + 1}`).join("\n") + "\nexit_code=1";
+    const s = summarizeOutput("terminal", text);
+    expect(s?.line).toBe("Terminou com erro (código 1)");
+    expect(s?.head).toBe("linha 1\nlinha 2\nlinha 3\nlinha 4\nlinha 5");
+    expect(s?.more).toBe(text);
+    expect(s?.moreLabel).toBe("Ver a saída completa (31 linhas)");
+    expect(s?.open).toBeUndefined();
+  });
+  it("outras ferramentas com texto puro continuam sem resumo", () => {
+    expect(summarizeOutput("read_file", "texto puro")).toBeUndefined();
   });
 });

@@ -263,12 +263,12 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-md-copy:hover{background:var(--panel2);color:var(--fg)}
 .au-md-code pre{padding-top:6px}
 .au-tk-k{color:var(--acc)}.au-tk-s{color:var(--ok)}.au-tk-n{color:var(--warn)}.au-tk-l{color:var(--warn)}.au-tk-c{color:var(--fg3);font-style:italic}
-.au-md-math{font-family:var(--fd);font-style:italic;font-size:1.06em;white-space:nowrap}
-.au-md-mathblock{font-family:var(--fd);font-style:italic;font-size:1.2em;text-align:center;padding:6px 0;overflow-x:auto}
-.au-md-mathinline{display:inline-block;max-width:100%;vertical-align:middle;padding:2px 4px}
-.au-frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 .3em;font-size:.95em;line-height:1.2}
-.au-frac-n{padding:0 .3em .08em;border-bottom:1px solid currentColor}
-.au-frac-d{padding:.08em .3em 0}
+/* KaTeX: a cor vem do texto (tema claro/escuro); só ajusta tamanho e deixa fórmula longa rolar em vez de estourar o balão. */
+.au-md-math .katex{font-size:1.06em}
+.au-md-mathblock{display:block;margin:10px 0;overflow-x:auto;overflow-y:hidden;padding:2px 0}
+.au-md-mathblock .katex-display{margin:0}
+.au-md-mathblock .katex{font-size:1.15em}
+.au-md .katex-error{color:var(--err);font-family:var(--fm);font-size:.9em}
 .au-toolsum{display:block;margin:2px 0 4px;font-size:12.5px;color:var(--fg)}
 .au-syswarn{display:flex;align-items:flex-start;gap:7px;margin-top:6px;padding:7px 10px;border:1px solid color-mix(in oklab,var(--warn) 45%,var(--line));border-radius:var(--r2);background:color-mix(in oklab,var(--warn) 9%,transparent);color:var(--fg);font-size:12.5px;line-height:1.5}
 .au-syswarn svg{flex:none;margin-top:2px;color:var(--warn)}

@@ -4,7 +4,7 @@ import type { Session } from "../adapter";
 export type StepStatus = "run" | "ok" | "err" | "denied";
 
 /** Resumo em português da saída da ferramenta; o texto/JSON original fica no detalhe. */
-export type ToolSummary = { line: string; /** Conteúdo recolhido (lista de arquivos, texto lido…). */ more?: string; moreLabel?: string; /** Mostra `more` já aberto. */ open?: boolean };
+export type ToolSummary = { line: string; /** Primeiras linhas da saída, sempre à vista. */ head?: string; /** Conteúdo recolhido (lista de arquivos, texto lido…). */ more?: string; moreLabel?: string; /** Mostra `more` já aberto. */ open?: boolean };
 
 export type ToolStep = {
   id: string;
@@ -58,7 +58,7 @@ export type Attachment = {
   ref?: string;
 };
 
-export type SentAttachment = { name: string; kind: AttachmentKind; preview?: string; /** Caminhos no servidor: depois de recarregar o texto só tem esses, e o nome original se perde. */ paths?: string[] };
+export type SentAttachment = { name: string; kind: AttachmentKind; preview?: string; /** Referência (`@image:caminho`) que o texto do pedido leva: é o que a edição recoloca. */ ref?: string; /** Caminhos no servidor: depois de recarregar o texto só tem esses, e o nome original se perde. */ paths?: string[] };
 
 export type UserMessage = {
   id: string;
@@ -104,6 +104,18 @@ export type ChatError = {
 
 export type TurnStat = { model?: string; secs?: number; tokens?: number; cost?: number | null };
 
+/** Resumo do turno que o gateway grava (`display_metadata.turn` da linha do usuário e `turn_summary` do `message.complete`). Tokens e custo são DESTE turno. */
+export type TurnSummary = {
+  status: "complete" | "interrupted" | "error";
+  model?: string;
+  tokens?: { input?: number; output?: number; reasoning?: number; total?: number };
+  duration_s?: number;
+  /** null = o provedor não informa custo. */
+  cost_usd?: number | null;
+  cost_status?: string | null;
+  error?: string;
+};
+
 export type AgentMessage = {
   id: string;
   role: "agent";
@@ -124,6 +136,8 @@ export type AgentMessage = {
   error?: ChatError;
   /** Turno que parou no meio (Parar, queda ou recarregou antes de terminar). */
   interrupted?: boolean;
+  /** Rodapé, "interrompido" e erro vieram do resumo do turno do backend: valem mais que o que o navegador guardou. */
+  fromTurn?: boolean;
 };
 export type ChatMessage = UserMessage | AgentMessage | SystemMessage;
 

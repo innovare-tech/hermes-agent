@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachError, attachKind, checkAttachment, fmtSize, MAX_ATTACH_BYTES, MAX_ATTACHMENTS, parseAttachRefs, withRefs } from "./attachments";
+import { attachError, attachKind, checkAttachment, fmtSize, MAX_ATTACH_BYTES, MAX_ATTACHMENTS, parseAttachRefs, refsOf, withRefs } from "./attachments";
 
 const f = (name: string, type: string, size = 1000) => ({ name, type, size });
 
@@ -34,25 +34,39 @@ describe("anexos", () => {
 describe("parseAttachRefs", () => {
   it("o caminho cru do anexo vira chip (ícone + nome), o resto do texto fica", () => {
     const r = parseAttachRefs("@image:C:\\Users\\Usuario\\AppData\\Local\\hermes\\images\\upload_20261009_170843_2.png [screenshot]\n\nO que tem nesta imagem?");
-    expect(r.attachments).toEqual([{ name: "upload_20261009_170843_2.png", kind: "image" }]);
+    expect(r.attachments).toEqual([{ name: "upload_20261009_170843_2.png", kind: "image", ref: "@image:C:\\Users\\Usuario\\AppData\\Local\\hermes\\images\\upload_20261009_170843_2.png" }]);
     expect(r.text).toBe("O que tem nesta imagem?");
   });
   it("rótulo solto na linha de baixo some junto da referência; nome original quando conhecido", () => {
     const r = parseAttachRefs("@image:C:\\Users\\U\\hermes\\images\\upload_2026_2.png\n[screenshot]\n\nolha isso", { "upload_2026_2.png": "tela.png" });
     expect(r.text).toBe("olha isso");
-    expect(r.attachments).toEqual([{ name: "tela.png", kind: "image" }]);
+    expect(r.attachments).toEqual([{ name: "tela.png", kind: "image", ref: "@image:C:\\Users\\U\\hermes\\images\\upload_2026_2.png" }]);
     expect(parseAttachRefs("@image:/a/b.png [screenshot]\n[screenshot]\nfim").text).toBe("fim");
     expect(parseAttachRefs("oi\n[screenshot]").text).toBe("oi\n[screenshot]");
   });
   it("@file e @pdf, várias referências e caminho com espaço", () => {
     const r = parseAttachRefs("@file:/home/u/relatório final.txt @pdf:/tmp/p/doc.pdf [pages]\n\nresuma");
-    expect(r.attachments).toEqual([{ name: "relatório final.txt", kind: "file" }, { name: "doc.pdf", kind: "pdf" }]);
+    expect(r.attachments).toEqual([{ name: "relatório final.txt", kind: "file", ref: "@file:/home/u/relatório final.txt" }, { name: "doc.pdf", kind: "pdf", ref: "@pdf:/tmp/p/doc.pdf" }]);
     expect(r.text).toBe("resuma");
   });
   it("no meio da frase o caminho vai até o espaço; sem caminho de verdade não mexe", () => {
-    expect(parseAttachRefs("veja @image:/a/b.png [x] por favor")).toEqual({ text: "veja  por favor", attachments: [{ name: "b.png", kind: "image" }] });
+    expect(parseAttachRefs("veja @image:/a/b.png [x] por favor")).toEqual({ text: "veja  por favor", attachments: [{ name: "b.png", kind: "image", ref: "@image:/a/b.png" }] });
     const same = "mande @image:isso para o time";
     expect(parseAttachRefs(same)).toEqual({ text: same, attachments: [] });
     expect(parseAttachRefs("texto comum")).toEqual({ text: "texto comum", attachments: [] });
+  });
+});
+
+describe("refsOf (editar mensagem com anexo)", () => {
+  it("usa a referência original; sem ela, monta pelos caminhos do servidor (PDF = uma imagem por página)", () => {
+    expect(refsOf({ name: "a.png", kind: "image", ref: "@image:`/h/com espaço/a.png`" })).toEqual(["@image:`/h/com espaço/a.png`"]);
+    expect(refsOf({ name: "tela.png", kind: "image", paths: ["/h/images/u1.png"] })).toEqual(["@image:/h/images/u1.png"]);
+    expect(refsOf({ name: "doc.pdf", kind: "pdf", paths: ["/p/1.png", "/p/2.png"] })).toEqual(["@image:/p/1.png", "@image:/p/2.png"]);
+    expect(refsOf({ name: "x", kind: "file" })).toEqual([]);
+  });
+  it("o texto livre + as referências que ficaram reconstroem a mensagem", () => {
+    const { text, attachments } = parseAttachRefs("@image:/h/a.png [screenshot]\n@file:/h/b.csv\n\nolha isso");
+    expect(text).toBe("olha isso");
+    expect(withRefs(text, attachments.slice(1).flatMap(refsOf))).toBe("@file:/h/b.csv\n\nolha isso");
   });
 });

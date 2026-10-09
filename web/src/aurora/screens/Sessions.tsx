@@ -100,7 +100,7 @@ export function Sessions() {
                 </span>
               </span>
               <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg2)" }}>
-                {r.source} · {plural(r.msgs, "mensagem", "mensagens")}
+                {r.source} · {r.questions != null ? plural(r.questions, "pergunta", "perguntas") : plural(r.msgs, "mensagem", "mensagens")}
               </span>
               <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)", textAlign: "right", whiteSpace: "nowrap" }}>{r.when}</span>
               <span className="au-rowactions" style={{ display: "flex", gap: 2, justifyContent: "flex-end" }} onClick={(e) => e.stopPropagation()}>

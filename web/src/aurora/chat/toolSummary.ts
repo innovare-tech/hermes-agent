@@ -23,8 +23,24 @@ export const toolDenied = (raw: unknown) => /BLOCKED:[^\n]*\bdenied\b|\bUser den
 
 const item = (x: unknown) => (typeof x === "string" ? x : x && typeof x === "object" ? str((x as { path?: unknown }).path ?? (x as { url?: unknown }).url ?? x) : str(x));
 
+const HEAD_LINES = 5;
+/** Código de saída que aparece escrito na saída em texto ("exit code: 2", "exited with code 1", "código de saída 3"); vale o último. */
+const EXIT_CODE = /\b(?:exit[_ ]?code|exit status|exited with(?: code| status)?|returned(?: exit code)?|código de saída)[\s:="']*(-?\d+)/gi;
+
+/** Terminal que devolveu texto puro (não JSON): primeiras linhas à vista, o resto recolhido, e como terminou quando o código aparece. */
+function terminalText(raw: string): ToolSummary | undefined {
+  const text = raw.trim();
+  if (!text) return undefined;
+  const lines = text.split("\n");
+  const code = [...text.matchAll(EXIT_CODE)].at(-1)?.[1];
+  const line = code == null ? count(lines.length, "linha de saída", "linhas de saída") : Number(code) === 0 ? "Terminou sem erro" : `Terminou com erro (código ${code})`;
+  if (lines.length <= HEAD_LINES) return { line, head: text };
+  return { line, head: lines.slice(0, HEAD_LINES).join("\n"), more: text.slice(0, MAX_MORE), moreLabel: `Ver a saída completa (${num(lines.length)} linhas)` };
+}
+
 export function summarizeOutput(name: string, raw: unknown): ToolSummary | undefined {
   const o = parse(raw);
+  if (!o && name === "terminal" && typeof raw === "string") return terminalText(raw);
   if (!o || o.error) return undefined;
   switch (name) {
     case "search_files": {
