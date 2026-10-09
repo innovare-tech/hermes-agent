@@ -239,3 +239,12 @@ def test_panel_decision_is_announced_on_telegram(monkeypatch):
     (m1, edit), (m2, sent) = calls
     assert m1 == "editMessageText" and edit["message_id"] == 25 and "✅ Aprovado por Você (painel)" in edit["text"]
     assert m2 == "sendMessage" and sent["message_thread_id"] == 6 and "bytes_written" in sent["text"]
+
+
+def test_general_topic_is_sent_without_thread(monkeypatch):
+    from ops_center import guardrails, notify
+
+    calls = []
+    monkeypatch.setattr(notify, "_call", lambda method, payload=None: calls.append(payload) or {})
+    guardrails.announce({"id": 1, "status": "approved", "target": "telegram:-100:1", "summary": "x", "command": "y"}, "ok")
+    assert "message_thread_id" not in calls[-1]

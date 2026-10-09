@@ -525,6 +525,8 @@ def announce(a: dict, result: Optional[str] = None) -> None:
             return
         chat = parts[1]
         thread = int(parts[2]) if len(parts) > 2 and parts[2].lstrip("-").isdigit() else None
+        if thread == 1:
+            thread = None  # tópico "Geral": o Telegram recusa message_thread_id=1 ("thread not found")
         from ops_center import notify
 
         verdict = ("✅ Aprovado" if a.get("status") == "approved" else "❌ Negado") + \
