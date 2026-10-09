@@ -33,7 +33,8 @@ logger = logging.getLogger(__name__)
 
 ORIGINS = ("whatsapp_group", "telegram_team", "api_copilot", "scheduled")
 ORIGIN_LABEL = {"whatsapp_group": "WhatsApp (grupo de cliente)", "telegram_team": "Telegram (equipe)",
-                "api_copilot": "API (Copiloto)", "scheduled": "tarefa agendada"}
+                "api_copilot": "API (Copiloto)", "scheduled": "tarefa agendada",
+                "health_probe": "Saúde (investigação)", "dashboard": "painel"}
 ACTIONS = [
     {"key": "db.read", "group": "db", "label": "Ler banco", "writes": False},
     {"key": "db.write", "group": "db", "label": "Escrever banco", "writes": True},
@@ -306,6 +307,14 @@ def _check(tool_name: str, args: dict, org: Optional[str]) -> Optional[str]:
     action = classify(tool_name, args)
     if action is None:
         return None
+    if org == "health_probe":
+        # Investigação da Saúde: só lê, sempre (fora da matriz). A correção vira pedido de aprovação no painel.
+        rule = hard_deny(action["command"], action["writes"])
+        if action["writes"] or rule:
+            _record_blocked(org, action, rule or "a investigação da Saúde só lê")
+            return ("Bloqueado: na investigação de um incidente só comandos de leitura. Sugira a correção no JSON "
+                    "(suggested_action); ela só roda depois que um humano aprovar.")
+        return None
     if org is None or org == "whatsapp_group":
         # Dono direto: só vale o que o perfil ligou. Grupo de cliente: invariante sem depender do ops.db.
         if org == "whatsapp_group" and action["writes"]:
@@ -435,6 +444,29 @@ def _request_approval(cfg: dict, org: str, action: dict, tool_name: str, args: d
             f"Expira em {APPROVAL_TTL_MIN} min. Não tente executar de novo nem por outro caminho.")
 
 
+def request_panel_approval(command: str, *, label: str, by: str, context: str) -> int:
+    """Pedido de aprovação criado pelo painel (ex.: correção de um incidente da Saúde). Vai para o destino das
+    aprovações (Permissões); só executa depois do Aprovar. ``ValueError`` legível se não der para pedir."""
+    from ops_center import store
+
+    action = classify("terminal", {"command": command})
+    rule = hard_deny(command, action["writes"])
+    if rule:
+        raise ValueError(f"esta correção cai em “sempre bloqueado” ({rule.lower()}); faça à mão se for mesmo preciso")
+    _platform, chat_id, thread_id = _approval_target()
+    if not chat_id:
+        raise ValueError("configure o destino das aprovações em Permissões (um chat do Telegram)")
+    aid = store.add_approval(
+        origin="dashboard", requested_by=by, requested_by_id="dashboard", context=context, action=action["key"],
+        summary=label, command=command, tool="terminal", args={"command": command}, status="pending",
+        target=f"telegram:{chat_id}" + (f":{thread_id}" if thread_id else ""),
+        expires_at=time.time() + APPROVAL_TTL_MIN * 60)
+    if not _send_approval_prompt(aid, chat_id, thread_id):
+        store.update_approval(aid, status="blocked", note="não consegui enviar o pedido ao Telegram")
+        raise ValueError("não consegui enviar o pedido ao Telegram (o gateway está ligado?)")
+    return aid
+
+
 def approval_text(a: dict) -> str:
     import html
 
@@ -456,7 +488,7 @@ def _send_approval_prompt(aid: int, chat_id: str, thread_id: Optional[str]) -> b
         loop = getattr(runner, "_gateway_loop", None)
         send = getattr(adapter, "send_ops_approval", None)
         if adapter is None or loop is None or send is None:
-            return False
+            return _send_approval_via_bot_api(aid, chat_id, thread_id)  # processo do painel: sem adapter vivo
         import asyncio
 
         fut = asyncio.run_coroutine_threadsafe(send(chat_id, approval_text(store.get_approval(aid)), aid,
@@ -469,6 +501,24 @@ def _send_approval_prompt(aid: int, chat_id: str, thread_id: Optional[str]) -> b
     except Exception:
         logger.warning("ops_center: pedido de aprovação #%s não saiu", aid, exc_info=True)
         return False
+
+
+def _send_approval_via_bot_api(aid: int, chat_id: str, thread_id: Optional[str]) -> bool:
+    """Mesmos botões ``oa:y|n:<id>`` pela Bot API; quem trata o clique é o gateway (que escuta o bot)."""
+    from ops_center import notify, store
+
+    payload: dict = {"chat_id": chat_id, "text": approval_text(store.get_approval(aid)), "parse_mode": "HTML",
+                     "reply_markup": {"inline_keyboard": [[{"text": "✅ Aprovar", "callback_data": f"oa:y:{aid}"},
+                                                           {"text": "❌ Negar", "callback_data": f"oa:n:{aid}"}]]}}
+    if thread_id and str(thread_id) != "1":  # tópico "Geral" não aceita message_thread_id
+        payload["message_thread_id"] = int(thread_id)
+    try:
+        r = notify._call("sendMessage", payload)
+    except Exception:  # noqa: BLE001
+        logger.warning("ops_center: pedido de aprovação #%s não saiu pela Bot API", aid, exc_info=True)
+        return False
+    store.update_approval(aid, message_id=str(r.get("message_id") or ""))
+    return True
 
 
 # ---- decisão (botão no Telegram ou painel) e execução ----

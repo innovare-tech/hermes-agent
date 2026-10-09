@@ -83,6 +83,22 @@ CREATE TABLE IF NOT EXISTS team_members (
   id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', aliases TEXT NOT NULL DEFAULT '[]',
   photo TEXT, added_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS health_checks (
+  id TEXT PRIMARY KEY, grp TEXT NOT NULL, name TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL, params TEXT NOT NULL DEFAULT '{}', interval_sec INTEGER NOT NULL DEFAULT 300,
+  severity TEXT NOT NULL DEFAULT 'critical', client_id TEXT, source_text TEXT, parsed TEXT,
+  status TEXT NOT NULL DEFAULT 'pending', result TEXT NOT NULL DEFAULT '{}', last_run_at REAL,
+  history TEXT NOT NULL DEFAULT '[]', history_label TEXT NOT NULL DEFAULT '', fails INTEGER NOT NULL DEFAULT 0,
+  created_at REAL NOT NULL, paused INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS incidents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, check_id TEXT, severity TEXT NOT NULL, title TEXT NOT NULL,
+  impact TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', started_at REAL NOT NULL,
+  ack_by TEXT, ack_at REAL, resolved_at REAL, resolved_by TEXT, note TEXT,
+  timeline TEXT NOT NULL DEFAULT '[]', hypothesis TEXT, suggested_action TEXT, approval_id INTEGER,
+  investigated INTEGER NOT NULL DEFAULT 0, problem_since REAL, recommendation TEXT
+);
+CREATE INDEX IF NOT EXISTS incidents_status ON incidents(status, started_at);
 CREATE TABLE IF NOT EXISTS clients (
   system_client_id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT '',
   name_norm TEXT NOT NULL DEFAULT '', updated_at REAL NOT NULL DEFAULT 0
@@ -132,6 +148,13 @@ def _migrate(con: sqlite3.Connection) -> None:
                       ("updated_at", "REAL NOT NULL DEFAULT 0")):
         if name not in cols:
             con.execute(f"ALTER TABLE clients ADD COLUMN {name} {ddl}")
+    cols = {r[1] for r in con.execute("PRAGMA table_info(incidents)")}
+    for name, ddl in (("problem_since", "REAL"), ("recommendation", "TEXT")):
+        if name not in cols:
+            con.execute(f"ALTER TABLE incidents ADD COLUMN {name} {ddl}")
+    cols = {r[1] for r in con.execute("PRAGMA table_info(health_checks)")}
+    if "paused" not in cols:
+        con.execute("ALTER TABLE health_checks ADD COLUMN paused INTEGER NOT NULL DEFAULT 0")
     cols = {r[1] for r in con.execute("PRAGMA table_info(playbooks)")}
     for name, ddl in (("trigger_kind", "TEXT NOT NULL DEFAULT 'manual'"), ("keywords", "TEXT NOT NULL DEFAULT ''"),
                       ("channel_id", "TEXT"), ("deliver", "TEXT NOT NULL DEFAULT 'local'")):

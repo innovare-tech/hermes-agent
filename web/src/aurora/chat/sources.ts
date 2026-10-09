@@ -35,5 +35,8 @@ export function shortWhen(ts?: number | null) {
   return `${String(d.getDate()).padStart(2, "0")} ${month}, ${d.toTimeString().slice(0, 5)}`;
 }
 
-/** Sessões internas do Escutar (análise em lote, rodam como cron): não são conversas, ficam fora da barra lateral. */
-export const isListenSession = (x: { id: string; title: string }) => x.title.startsWith("Escutar ·") || x.id.startsWith("cron_ops-listen-");
+/** Sessões internas do Escutar (análise em lote) e da Saúde (investigação de incidente), que rodam como cron:
+ * não são conversas, ficam fora da barra lateral. */
+export const isListenSession = (x: { id: string; title: string }) =>
+  x.title.startsWith("Escutar ·") || x.id.startsWith("cron_ops-listen-") ||
+  x.title.startsWith("Saúde ·") || x.id.startsWith("cron_ops-health-");

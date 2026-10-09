@@ -748,7 +748,124 @@ async def clients_sync_now(body: Optional[dict] = None):
     return out
 
 
-# ``router`` é o que o servidor monta: /api/ops/* e /api/clients/*, ambos com o escopo de perfil.
+# ---- Saúde (A7): verificações e incidentes, por perfil ----
+
+health_router = APIRouter(prefix="/api/health")
+incidents_router = APIRouter(prefix="/api/incidents")
+
+
+def _health():
+    from ops_center import health
+
+    return health
+
+
+@health_router.get("/checks")
+async def health_checks():
+    return await _run(_health().list_checks)
+
+
+@health_router.get("/overview")
+async def health_overview():
+    return await _run(_health().overview)
+
+
+@health_router.post("/checks/{cid}/run")
+async def health_run(cid: str):
+    return await _run(_health().run_check, cid)
+
+
+class ParseBody(BaseModel):
+    text: str
+    interval: int = 300
+
+
+@health_router.post("/checks/parse")
+async def health_parse(body: ParseBody):
+    return await _run(_health().parse_text, body.text, body.interval)
+
+
+@health_router.post("/checks")
+async def health_create(body: dict[str, Any]):
+    """``{text, interval, parsed}`` (do "Entendi assim") ou ``{group, name, kind, params, intervalSec, ...}``."""
+    h = _health()
+    out = await _run(h.create_from_parsed, body) if body.get("parsed") else await _run(
+        lambda: h.add_check(group=body.get("group") or "", name=body.get("name") or "", kind=body.get("kind") or "",
+                            params=body.get("params") or {}, interval_sec=int(body.get("intervalSec") or 300),
+                            detail=body.get("detail") or "", severity=body.get("severity") or "critical",
+                            client_id=body.get("clientId")))
+    await _act(f"Saúde: nova verificação “{out['name']}”")
+    return out
+
+
+@health_router.post("/checks/recommended")
+async def health_recommended():
+    out = await _run(_health().create_recommended)
+    await _act(f"Saúde: {len(out['created'])} verificações recomendadas criadas")
+    return out
+
+
+@health_router.patch("/checks/{cid}")
+async def health_update(cid: str, body: dict[str, Any]):
+    return await _run(_health().update_check, cid, body)
+
+
+@health_router.delete("/checks/{cid}")
+async def health_delete(cid: str):
+    await _run(_health().delete_check, cid)
+    await _act("Saúde: verificação removida")
+    return {"ok": True}
+
+
+@health_router.get("/settings")
+async def health_settings():
+    return await _run(_health().settings_view)
+
+
+@health_router.put("/settings")
+async def health_save_settings(body: dict[str, Any]):
+    out = await _run(_health().save_settings, body)
+    await _act("Saúde: conexões atualizadas")
+    return out
+
+
+@incidents_router.get("")
+async def incidents(status: str = "open"):
+    return await _run(_health().list_incidents, status)
+
+
+class WhoBody(BaseModel):
+    by: str = "Equipe (painel)"
+    note: str = ""
+
+
+@incidents_router.post("/{iid}/ack")
+async def incident_ack(iid: int, body: Optional[WhoBody] = None):
+    body = body or WhoBody()
+    out = await _run(_health().ack, iid, body.by)
+    await _act(f"{out['code']} reconhecido")
+    return out
+
+
+@incidents_router.post("/{iid}/resolve")
+async def incident_resolve(iid: int, body: Optional[WhoBody] = None):
+    body = body or WhoBody()
+    out = await _run(_health().resolve, iid, body.by, body.note)
+    await _act(f"{out['incident']['code']} resolvido" + (f": {body.note}" if body.note else ""))
+    return out
+
+
+@incidents_router.post("/{iid}/action")
+async def incident_action(iid: int, body: Optional[WhoBody] = None):
+    body = body or WhoBody()
+    out = await _run(_health().request_action, iid, body.by)
+    await _act(f"{out['code']}: correção enviada para aprovação")
+    return out
+
+
+# ``router`` é o que o servidor monta: /api/ops/*, /api/clients/*, /api/health/* e /api/incidents, com o escopo de perfil.
 router = APIRouter(dependencies=[Depends(_capture_profile)])
 router.include_router(ops)
 router.include_router(clients_router)
+router.include_router(health_router)
+router.include_router(incidents_router)

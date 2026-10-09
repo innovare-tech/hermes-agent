@@ -2978,6 +2978,14 @@ OPTIONAL_ENV_VARS = {
     # tinha como receber a chave do Groq Whisper.
     "GROQ_API_KEY": _tool("Groq API key for fast Whisper transcription (STT); free tier available",
         "Groq API key", "https://console.groq.com/keys"),
+    # Saúde (ops_center/health.py): conexões só de leitura do monitoramento. Base64 numa linha é aceito.
+    "AIBIZ_MONGO_URI": _tool("MongoDB connection (read-only user) for the client directory and health checks",
+        "MongoDB URI (somente leitura)", ""),
+    "HEALTH_SSH_KEY": _tool("Private SSH key (base64 or PEM) of the read-only monitor user on the servers",
+        "Chave SSH do monitor (base64)", ""),
+    "K8S_TOKEN": _tool("Kubernetes service account token with the 'view' role (health checks)",
+        "Token do cluster (leitura)", ""),
+    "K8S_CA_CERT": _tool("Kubernetes cluster CA certificate (base64 ca.crt)", "CA do cluster (base64)", ""),
     "PORCUPINE_ACCESS_KEY": _tool(
         "Picovoice access key for the Porcupine 'Hey Hermes' wake word engine (optional; "
         "openWakeWord is the free default)", "Picovoice access key",

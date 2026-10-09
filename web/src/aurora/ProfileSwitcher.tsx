@@ -2,12 +2,13 @@
 // faixa de problema de OUTRO perfil, e o popover com busca, perfis, grupo "Clientes do Copiloto", Novo e Gerenciar.
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { useCriticalProfiles, useHealthBadge } from "./health/badge";
 import { Icon } from "./Icon";
 import { hexOf, otherIssueLabel, otherIssues, rowSubtitle, splitProfiles, triggerStatus, type Profile } from "./profileLogic";
 import { switchProfile } from "./profiles";
 import { setState, useStore } from "./store";
 
-function Row({ p, current, small, onPick }: { p: Profile; current: boolean; small?: boolean; onPick: () => void }) {
+function Row({ p, current, small, incident, onPick }: { p: Profile; current: boolean; small?: boolean; incident?: boolean; onPick: () => void }) {
   const theme = useStore((s) => s.theme);
   const sub = rowSubtitle(p);
   const box = small ? 22 : 28;
@@ -24,6 +25,7 @@ function Row({ p, current, small, onPick }: { p: Profile; current: boolean; smal
         </span>
         <span style={{ fontSize: small ? 10.5 : 11.5, fontFamily: small ? "var(--fm)" : undefined, color: sub.tone, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub.text}</span>
       </span>
+      {incident && <span role="img" aria-label="Incidente crítico" title="Incidente crítico" style={{ flex: "none", width: 8, height: 8, borderRadius: "50%", background: "var(--err)" }} />}
       {current && <Icon name="check" size={small ? 14 : 15} color="var(--fg)" />}
     </button>
   );
@@ -63,6 +65,10 @@ export function ProfileSwitcher() {
     };
   }, [open]);
 
+  const critical = useHealthBadge().critical;
+  const critProfiles = useCriticalProfiles();
+  // O perfil aberto usa a contagem ao vivo da tela de Saúde; os outros, a leitura de 60 s.
+  const hasIncident = (pid: string) => (pid === id ? critical > 0 : critProfiles.has(pid));
   const cur = profiles.find((p) => p.id === id);
   // Lista ainda não chegou (ou falhou): o bloco "Hermes" de sempre, sem seletor.
   if (!cur) {
@@ -77,7 +83,8 @@ export function ProfileSwitcher() {
     );
   }
 
-  const st = triggerStatus(cur);
+  // Incidente crítico aberto em Saúde passa na frente do "rodando"; perfil já com problema ou pausado mantém o seu status.
+  const st = critical > 0 && cur.status === "ok" ? { label: "Incidente crítico", tone: "var(--err)", pulse: true } : triggerStatus(cur);
   const others = otherIssues(profiles, id);
   const { top, clients } = splitProfiles(profiles, q);
   const searching = q.trim().length > 0;
@@ -126,7 +133,7 @@ export function ProfileSwitcher() {
             <span className="au-kbd" style={{ marginLeft: 0, fontSize: 10 }}>Esc</span>
           </div>
           {top.map((p) => (
-            <Row key={p.id} p={p} current={p.id === id} onPick={() => pick(p.id)} />
+            <Row key={p.id} p={p} current={p.id === id} incident={hasIncident(p.id)} onPick={() => pick(p.id)} />
           ))}
           {clients.length > 0 && (
             <>
@@ -136,7 +143,7 @@ export function ProfileSwitcher() {
                 {clientIssues > 0 && <span style={{ fontSize: 11, color: "var(--err)" }}>{clientIssues} com problema</span>}
                 <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, padding: "1px 7px", borderRadius: 999, background: "var(--panel2)" }}>{clients.length}</span>
               </button>
-              {grpOpen && clients.map((p) => <Row key={p.id} p={p} small current={p.id === id} onPick={() => pick(p.id)} />)}
+              {grpOpen && clients.map((p) => <Row key={p.id} p={p} small current={p.id === id} incident={hasIncident(p.id)} onPick={() => pick(p.id)} />)}
             </>
           )}
           {none && (
