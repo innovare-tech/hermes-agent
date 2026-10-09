@@ -255,3 +255,62 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-mitem[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
 .au-mitem.danger{color:var(--err)}
 .au-modal{position:absolute;inset:0;z-index:60;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:grid;place-items:center;padding:24px;animation:hin .18s both}
+
+/* ---- conversa: código, fórmulas, anexos, pensamento, erros, comandos ---- */
+.au-md-codebar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px 0 14px;min-height:28px}
+.au-md-code .au-md-lang{position:static}
+.au-md-copy{display:flex;align-items:center;gap:5px;padding:3px 8px;border:0;border-radius:6px;background:transparent;color:var(--fg3);font-family:var(--fm);font-size:10.5px;cursor:pointer}
+.au-md-copy:hover{background:var(--panel2);color:var(--fg)}
+.au-md-code pre{padding-top:6px}
+.au-tk-k{color:var(--acc)}.au-tk-s{color:var(--ok)}.au-tk-n{color:var(--warn)}.au-tk-l{color:var(--warn)}.au-tk-c{color:var(--fg3);font-style:italic}
+.au-md-math{font-family:var(--fd);font-style:italic;font-size:1.06em;white-space:nowrap}
+.au-md-mathblock{font-family:var(--fd);font-style:italic;font-size:1.2em;text-align:center;padding:6px 0;overflow-x:auto}
+.au-menurow{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:8px 10px;border-radius:var(--r2)}
+.au-chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.au-achip{display:flex;align-items:center;gap:7px;max-width:240px;padding:4px 6px 4px 6px;border:1px solid var(--line2);border-radius:var(--r2);background:var(--panel2);font-size:12px;color:var(--fg)}
+.au-achip.err{border-color:var(--err)}.au-achip.err .au-achip-sub{color:var(--err)}
+.au-achip img{width:26px;height:26px;border-radius:5px;object-fit:cover;flex:none}
+.au-achip-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.au-achip-sub{font-family:var(--fm);font-size:10.5px;color:var(--fg3);white-space:nowrap}
+.au-achip-x{display:grid;place-items:center;width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--fg3);cursor:pointer}
+.au-achip-x:hover{background:var(--line2);color:var(--fg)}
+.au-sentatt{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.au-more{padding:0;border:0;background:transparent;color:var(--acc);font-size:12.5px;cursor:pointer;align-self:flex-start;margin:2px 0 6px}
+.au-more:hover{text-decoration:underline}
+.au-link{padding:0;border:0;background:transparent;color:var(--acc);font:inherit;font-size:12.5px;cursor:pointer}
+.au-link:disabled,.au-mini:disabled,.au-send:disabled{cursor:not-allowed;opacity:.4}
+.au-link:disabled{color:var(--fg3)}
+.au-stats{display:grid;grid-template-columns:1fr auto;gap:6px 12px;margin:0;font-size:12.5px}
+.au-stats dt{color:var(--fg2)}.au-stats dd{margin:0;font-family:var(--fm);font-size:11.5px;color:var(--fg);text-align:right}
+.au-think{display:flex;flex-direction:column;gap:6px}
+.au-think-body{padding:10px 14px;border-left:2px solid var(--line2);color:var(--fg2);font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;animation:hin .25s ease both}
+.au-errcard{display:flex;flex-direction:column;gap:12px;padding:16px 18px;border:1px solid color-mix(in oklab,var(--err) 45%,var(--line));border-radius:var(--r);background:color-mix(in oklab,var(--err) 6%,var(--panel))}
+.au-errcard-ic{flex:none;width:32px;height:32px;display:grid;place-items:center;border-radius:var(--r2);background:color-mix(in oklab,var(--err) 16%,transparent);color:var(--err)}
+.au-syscard{display:flex;flex-direction:column;gap:2px;align-self:center;width:min(620px,100%);padding:10px 14px;border:1px solid var(--line);border-radius:var(--r2);background:var(--panel);animation:hblurin .5s both}
+.au-syscard.system{background:transparent;border-style:dashed}
+.au-syscard.error{border-color:color-mix(in oklab,var(--err) 40%,var(--line))}
+.au-syscmd{font-family:var(--fm);font-size:10.5px;color:var(--fg3);font-weight:400}
+.au-interrupted{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;padding:2px 10px;border:1px solid var(--line2);border-radius:999px;font-family:var(--fm);font-size:10.5px;color:var(--fg3)}
+.au-uactions{display:flex;gap:2px;opacity:0;transition:opacity .15s}
+.au-user:hover .au-uactions,.au-user:focus-within .au-uactions{opacity:1}
+.au-edit{width:min(620px,100%);display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--acc);border-radius:var(--r);background:var(--panel)}
+.au-edit textarea{width:100%;resize:vertical;border:0;outline:0;background:transparent;color:var(--fg);font-size:14.5px;line-height:1.55;font-family:inherit}
+.au-jump{position:absolute;left:50%;bottom:132px;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:7px;padding:7px 14px;border:1px solid var(--line2);border-radius:999px;background:linear-gradient(var(--panel),var(--panel)),var(--bg);color:var(--fg);font-size:12.5px;cursor:pointer;box-shadow:var(--shadow);animation:hin .2s both}
+.au-jump:hover{border-color:var(--acc)}
+.au-drop{position:absolute;inset:8px;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:2px dashed var(--acc);border-radius:var(--r);background:color-mix(in oklab,var(--bg) 82%,transparent);backdrop-filter:blur(3px);color:var(--acc);font-size:15px;font-weight:500;pointer-events:none}
+.au-title{display:flex;align-items:center;gap:7px;max-width:100%;padding:0;border:0;background:transparent;color:var(--fg);font-size:14.5px;font-weight:500;cursor:text;text-align:left}
+.au-title span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.au-title svg{opacity:0;color:var(--fg3);transition:opacity .15s}
+.au-title:hover svg,.au-title:focus-visible svg{opacity:1}
+.au-chat-skel{max-width:780px;margin:0 auto;padding:30px 26px;display:flex;flex-direction:column;gap:30px}
+.au-detail{font-size:12px;color:var(--fg3)}
+.au-detail summary{cursor:pointer;width:max-content}
+.au-detail p{margin:6px 0 0;line-height:1.5;color:var(--fg2)}
+.au-hit{background:var(--accSoft);color:var(--fg);border-radius:3px;padding:0 1px}
+/* menu ⋯ / botão direito dos itens de conversa na barra lateral */
+.au-sesswrap{position:relative}
+.au-sessmore{position:absolute;right:6px;top:8px;opacity:0;transition:opacity .15s}
+.au-sesswrap:hover .au-sessmore,.au-sessmore:focus-visible,.au-sessmore[aria-expanded="true"]{opacity:1}
+.au-ctxmenu{position:absolute;right:6px;top:34px;z-index:30;min-width:160px;padding:4px;border:1px solid var(--line2);border-radius:var(--r2);background:linear-gradient(var(--panel),var(--panel)),var(--bg);box-shadow:var(--shadow);display:flex;flex-direction:column;animation:hin .15s both}
+.au-ctxmenu .au-mitem{flex-direction:row;align-items:center;gap:8px}
+.au-syscard.pending{flex-direction:row;align-items:center;gap:8px}

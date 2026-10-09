@@ -1,9 +1,13 @@
 // Markdown das respostas do agente (subconjunto que LLMs usam: títulos, listas aninhadas, código,
 // tabelas, citações, regra, negrito/itálico/riscado/código/links). Gera elementos React — nunca HTML cru.
-import { Fragment, useMemo, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Icon } from "../Icon";
+import { highlight } from "./highlight";
+import { texToText } from "./mathLite";
 
 export type MdBlock =
   | { t: "code"; lang: string; text: string }
+  | { t: "math"; text: string }
   | { t: "h"; level: number; text: string }
   | { t: "hr" }
   | { t: "quote"; blocks: MdBlock[] }
@@ -32,6 +36,26 @@ export function parseMd(src: string): MdBlock[] {
       while (i < lines.length && !lines[i].trim().startsWith(fence[1])) body.push(lines[i++]);
       i++; // fecha a cerca (ou acaba o texto, durante o streaming)
       out.push({ t: "code", lang: fence[2], text: body.join("\n") });
+      continue;
+    }
+    // Fórmula em bloco: $$ … $$ (uma ou várias linhas) ou \[ … \].
+    const mathOpen = line.match(/^\s*(\$\$|\\\[)(.*)$/);
+    if (mathOpen) {
+      const close = mathOpen[1] === "$$" ? "$$" : "\\]";
+      const body: string[] = [];
+      let rest = mathOpen[2];
+      for (;;) {
+        const end = rest.indexOf(close);
+        if (end >= 0) {
+          body.push(rest.slice(0, end));
+          break;
+        }
+        body.push(rest);
+        if (++i >= lines.length) break; // sem fechar (streaming)
+        rest = lines[i];
+      }
+      i++;
+      out.push({ t: "math", text: body.join(" ").trim() });
       continue;
     }
     const h = line.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
@@ -88,7 +112,7 @@ export function parseMd(src: string): MdBlock[] {
   return out;
 }
 
-const INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|\*\*([\s\S]+?)\*\*|__([\s\S]+?)__|~~([\s\S]+?)~~|\*([^*\s][\s\S]*?)\*|(?<![\w])_([^_\s][\s\S]*?)_(?![\w])|\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g;
+const INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|\*\*([\s\S]+?)\*\*|__([\s\S]+?)__|~~([\s\S]+?)~~|\*([^*\s][\s\S]*?)\*|(?<![\w])_([^_\s][\s\S]*?)_(?![\w])|\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|\$(?=[^$\n]*[\\^_][^$\n]*\$)([^\s$](?:[^$\n]*[^\s$])?)\$|\\\(([^\n]+?)\\\)/g;
 
 /** Inline: código, negrito, itálico, riscado, links (só http/https/mailto), URLs soltas. */
 export function inline(text: string, key = "i"): ReactNode[] {
@@ -102,6 +126,7 @@ export function inline(text: string, key = "i"): ReactNode[] {
     else if (m[3] ?? m[4]) out.push(<strong key={k}>{inline(m[3] ?? m[4], k)}</strong>);
     else if (m[5]) out.push(<del key={k}>{inline(m[5], k)}</del>);
     else if (m[6] ?? m[7]) out.push(<em key={k}>{inline(m[6] ?? m[7], k)}</em>);
+    else if (m[11] ?? m[12]) out.push(<span key={k} className="au-md-math">{texToText(m[11] ?? m[12])}</span>);
     else {
       const href = m[9] ?? m[10];
       const safe = /^(https?:|mailto:)/i.test(href);
@@ -113,18 +138,40 @@ export function inline(text: string, key = "i"): ReactNode[] {
   return out;
 }
 
+/** Bloco de código com destaque de sintaxe e botão Copiar. */
+export function CodeBlock({ lang, text, tail }: { lang: string; text: string; tail?: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () =>
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1600);
+      },
+      () => {}, // sem permissão de área de transferência: o botão só não confirma
+    );
+  return (
+    <div className="au-md-code">
+      <div className="au-md-codebar">
+        <span className="au-md-lang">{lang || "código"}</span>
+        <button className="au-md-copy" onClick={copy} aria-label={copied ? "Código copiado" : "Copiar código"}>
+          <Icon name={copied ? "check" : "copy"} size={12} />
+          {copied ? "Copiado" : "Copiar"}
+        </button>
+      </div>
+      <pre>
+        <code>{highlight(text, lang).map((t, i) => (t.t ? <span key={i} className={"au-tk-" + t.t}>{t.v}</span> : <Fragment key={i}>{t.v}</Fragment>))}</code>
+        {tail}
+      </pre>
+    </div>
+  );
+}
+
 function Block({ b, tail }: { b: MdBlock; tail?: ReactNode }): ReactNode {
   switch (b.t) {
     case "code":
-      return (
-        <div className="au-md-code">
-          {b.lang && <span className="au-md-lang">{b.lang}</span>}
-          <pre>
-            <code>{b.text}</code>
-            {tail}
-          </pre>
-        </div>
-      );
+      return <CodeBlock lang={b.lang} text={b.text} tail={tail} />;
+    case "math":
+      return <div className="au-md-mathblock">{texToText(b.text)}</div>;
     case "h": {
       const H = `h${Math.min(b.level + 1, 6)}` as "h2";
       return (

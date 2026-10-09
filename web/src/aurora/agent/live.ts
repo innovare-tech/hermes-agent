@@ -19,7 +19,12 @@ export const cleanSnippet = (t: string) =>
     .replace(/>>>|<<</g, "")
     .replace(/\\+(["/])/g, "$1") // \" e \/ de JSON
     .replace(/\\{2,}/g, "\\") // \\\\ → \
-    .replace(/\*\*|__|`+|^#+\s*/g, "")
+    .replace(/\*\*|__|`+|^#+\s*/gm, "")
+    .replace(/\[([^\]\n]+)\]\([^)\s]*\)/g, "$1") // [texto](link) → texto
+    .replace(/^\s*\|?[\s:|-]{3,}\|?\s*$/gm, "") // linha separadora de tabela (|---|---|)
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, "") // marcador de lista
+    .replace(/^\s*\||\|\s*$/gm, "") // bordas da tabela
+    .replace(/\s*\|\s*/g, " · ") // colunas
     .replace(/\s+/g, " ")
     .trim();
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);

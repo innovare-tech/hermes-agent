@@ -184,6 +184,13 @@ function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
 }
 
 export const liveAdapter: OpsAdapter = {
+  async loadLean() {
+    const [estop, businesses, channels, inboxRaw] = await Promise.all([fetchJSON<Estop>("/api/estop"), ops<Business[]>("/businesses"), ops<RawChannel[]>("/channels"), ops<RawInbox[]>("/inbox")]);
+    const inbox = inboxRaw.map(inboxFrom);
+    const autonomy = channels.map(channelFrom);
+    return { businesses, inbox, approvals: inboxRaw.filter((i) => i.status === "drafted" && i.draft).map((i) => approvalFrom(inboxFrom(i))), radar: radarFrom(autonomy, inboxRaw), autonomy, paused: estop.paused };
+  },
+
   async load() {
     const [estop, status, costs, businesses, channels, inboxRaw, activity, watches, people, playbooks, settings, messaging, warnLogs] = await Promise.all([
       fetchJSON<Estop>("/api/estop"),

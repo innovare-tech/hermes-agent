@@ -212,6 +212,8 @@ export type OnBehalf = {
 
 export interface OpsAdapter {
   load(): Promise<OpsSnapshot>;
+  /** Só o que a barra lateral mostra em toda tela (negócios, contadores da caixa/aprovações/radar, pausa): 4 leituras em vez de 13. */
+  loadLean(): Promise<Partial<OpsSnapshot>>;
   /** Estado atual do kill switch (pode mudar por fora, ex.: `hermes pause` no terminal). */
   getPaused(): Promise<boolean>;
   /** Kill switch global: o gateway não envia nem executa nada enquanto `true`. */

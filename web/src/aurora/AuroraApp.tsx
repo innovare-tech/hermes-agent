@@ -29,7 +29,7 @@ import { Playbooks } from "./screens/Playbooks";
 import { Radar } from "./screens/Radar";
 import { Support } from "./screens/Support";
 import { AGENT, OPS, Sidebar } from "./Sidebar";
-import { loadOps, loadSessions, refreshActionRequests, refreshPaused, setState, toast, useStore } from "./store";
+import { ensureFullOps, loadOpsOnce, loadSessions, setOpsLean, refreshActionRequests, refreshPaused, setState, toast, useStore } from "./store";
 
 // Spotlight que segue o cursor: escreve direto no style, sem re-render.
 const onMove = (e: MouseEvent<HTMLDivElement>) => {
@@ -72,6 +72,12 @@ export function AuroraApp() {
 
   // Título da aba: "Hermes · <tela>".
   const { pathname } = useLocation();
+  // Conversa e Sessões não usam os dados da Central: só a leitura enxuta da barra lateral (ver store.loadOps).
+  const leanRoute = /^\/(chat|sessions)(\/|$)/.test(pathname);
+  setOpsLean(leanRoute);
+  useEffect(() => {
+    if (booted && !leanRoute) ensureFullOps().catch(() => toast("Não consegui carregar os dados do agente"));
+  }, [booted, leanRoute, profileId]);
   useEffect(() => {
     const item = [...OPS, ...AGENT].find((n) => (n.to === "/" ? pathname === "/" : pathname.startsWith(n.to)));
     document.title = item ? `Hermes · ${item.label}` : pathname.startsWith("/support") ? "Hermes · Suporte" : "Hermes";
@@ -90,7 +96,7 @@ export function AuroraApp() {
       .finally(() => {
         if (!alive) return;
         setBooted(true);
-        loadOps().catch(() => toast("Não consegui carregar os dados do agente"));
+        loadOpsOnce().catch(() => toast("Não consegui carregar os dados do agente"));
         // Primeira vez sem modelo configurado: abre o assistente sozinho (uma vez; reabre por Configurações).
         agent.settings().then(
           (st) => {

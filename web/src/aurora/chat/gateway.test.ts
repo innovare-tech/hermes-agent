@@ -75,7 +75,7 @@ describe("send", () => {
 });
 
 describe("formatação", async () => {
-  const { ptPreview, toolOutput, WEB_COMMANDS } = await import("./gateway");
+  const { ptPreview, toolOutput } = await import("./gateway");
   const { sourceLabel, plural } = await import("./sources");
 
   it("prévia do passo em português", () => {
@@ -93,9 +93,66 @@ describe("formatação", async () => {
     expect([sourceLabel("tui"), sourceLabel("cli"), sourceLabel("web"), sourceLabel("api_server")]).toEqual(["Terminal", "Terminal", "Web", "API"]);
     expect([plural(1, "mensagem", "mensagens"), plural(4, "mensagem", "mensagens")]).toEqual(["1 mensagem", "4 mensagens"]);
   });
+});
 
-  it("menu / sem comandos de terminal", () => {
-    const cmds = WEB_COMMANDS.map(([c]) => c);
-    for (const t of ["/redraw", "/mouse", "/quit", "/prompt", "/statusbar", "/login", "/yolo", "/topup"]) expect(cmds).not.toContain(t);
+describe("transcrição (recarregar /chat/<id>)", async () => {
+  const { fromTranscript, withInflightError, turnStat, statLine, usageOf, toolFailed } = await import("./gateway");
+  const T = 1_000_000;
+  const rows = [
+    { role: "user", text: "Quanto é 17 x 23?", row_id: 1, timestamp: T },
+    { role: "tool", name: "terminal", context: "echo $((17*23))", tool_call_id: "c1", timestamp: T + 2, args: { command: "echo $((17*23))" }, content: '{"output":"391","exit_code":0}' },
+    { role: "assistant", text: "É 391.", row_id: 3, timestamp: T + 5.2, reasoning: "Multiplicar 17 por 23." },
+  ];
+
+  it("a resposta recarregada mantém o rodapé (modelo e tempo), o pensamento e o endereço da pergunta", () => {
+    const [u, a] = fromTranscript(rows as never, { model: "gemini-3.8-flash" });
+    expect(u).toMatchObject({ role: "user", rowId: 1 });
+    expect(a).toMatchObject({ role: "agent", text: "É 391.", reasoning: "Multiplicar 17 por 23.", stat: { model: "gemini-3.8-flash" } });
+    expect((a as { stat: { secs: number } }).stat.secs).toBeCloseTo(5.2, 5);
+    expect((a as { steps: unknown[] }).steps).toHaveLength(1);
+    expect(statLine((a as { stat: { model: string; secs: number } }).stat)).toBe("gemini-3.8-flash · 5,2s");
+  });
+
+  it("troca interrompida continua no histórico, marcada", () => {
+    const cut = fromTranscript([{ role: "user", text: "faça algo longo", row_id: 5, timestamp: T }, { role: "user", text: "e agora?", row_id: 6, timestamp: T + 9 }] as never, { model: "m" });
+    expect(cut.map((m) => m.role)).toEqual(["user", "agent", "user", "agent"]);
+    expect(cut[1]).toMatchObject({ interrupted: true, text: "" });
+    expect(cut[3]).toMatchObject({ interrupted: true });
+    // sem resposta e com turno rodando: não é interrompido, está em andamento
+    expect(fromTranscript([{ role: "user", text: "oi", row_id: 1 }] as never, { running: true })).toHaveLength(1);
+    // só ferramentas, sem texto final: também interrompido
+    const tools = fromTranscript([{ role: "user", text: "x", row_id: 1 }, { role: "tool", name: "terminal", tool_call_id: "t", content: "{}" }] as never, {});
+    expect(tools[1]).toMatchObject({ interrupted: true });
+  });
+
+  it("erro gravado como texto vira cartão, não resposta", () => {
+    const [, a] = fromTranscript([{ role: "user", text: "oi", row_id: 1 }, { role: "assistant", text: "⚠ Gemini HTTP 404 (NOT_FOUND): models/x-1 is not found", row_id: 2 }] as never, { model: "x-1" });
+    expect(a).toMatchObject({ text: "", error: { kind: "model" } });
+  });
+
+  it("erro retido na sessão (inflight) entra depois da pergunta", () => {
+    const msgs = fromTranscript([{ role: "user", text: "oi", row_id: 1 }] as never, {});
+    withInflightError(msgs, { user: "oi", error: "HTTP 429 rate limit", error_surface: { code: "rate_limit" } }, "m");
+    expect(msgs.map((m) => m.role)).toEqual(["user", "agent"]);
+    expect(msgs[1]).toMatchObject({ error: { kind: "limit" }, interrupted: false });
+    // pergunta que nem chegou a ser gravada
+    const none: never[] = [];
+    withInflightError(none, { user: "perdida", error: "boom" });
+    expect(none.map((m: { role: string }) => m.role)).toEqual(["user", "agent"]);
+  });
+
+  it("tokens do turno = diferença do total da sessão; custo desconhecido não vira US$ 0,00", () => {
+    const u = { model: "m", input: 900, output: 100, total: 1000, calls: 2, cost_status: "unknown", cost_usd: 0 };
+    expect(turnStat(u as never, 3, 400)).toEqual({ model: "m", secs: 3, tokens: 600 });
+    expect(turnStat(u as never, 3, undefined).tokens).toBeUndefined();
+    expect(usageOf(u as never)?.cost).toBeNull();
+    expect(usageOf({ ...u, cost_status: "estimated", cost_usd: 0.12 } as never)?.cost).toBe(0.12);
+    expect(statLine({ model: "m", secs: 12, tokens: 1500 })).toBe("m · 12,0s · 1,5k tokens");
+  });
+
+  it("ferramenta que devolveu erro fica vermelha", () => {
+    expect(toolFailed('{"error":"arquivo não existe"}')).toBe(true);
+    expect(toolFailed('{"output":"ok","exit_code":1}')).toBe(false);
+    expect(toolFailed("texto")).toBe(false);
   });
 });
