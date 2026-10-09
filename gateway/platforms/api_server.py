@@ -1550,6 +1550,24 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             return ""
 
     @staticmethod
+    def _previous_api_key() -> tuple:
+        """Chave anterior de um perfil nomeado, válida até ``API_SERVER_KEY_PREVIOUS_UNTIL`` (rotação com
+        janela de transição, ops_center/copilot.py). Vazia fora da janela."""
+        profile = _api_request_profile.get()
+        if not profile or profile == "default":
+            return ()
+        try:
+            import time as _time
+
+            from agent.secret_scope import get_secret
+            from hermes_cli.auth import has_usable_secret
+            key = get_secret("API_SERVER_KEY_PREVIOUS", "") or ""
+            until = float(get_secret("API_SERVER_KEY_PREVIOUS_UNTIL", "") or 0)
+            return (key,) if until > _time.time() and has_usable_secret(key, min_length=16) else ()
+        except Exception:  # noqa: BLE001 — fail closed
+            return ()
+
+    @staticmethod
     def _auth_failed_response() -> "web.Response":
         return web.json_response(
             {"error": {"message": "Invalid gateway API key (API_SERVER_KEY)", "type": "gateway_auth_error",
@@ -1575,7 +1593,8 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             token = auth_header[7:].strip()
             # Compare as bytes: compare_digest raises TypeError on non-ASCII str, and the
             # token is raw client input — a stray byte must 401, not 500.
-            if hmac.compare_digest(token.encode(), expected_key.encode()):
+            if any(hmac.compare_digest(token.encode(), k.encode())
+                   for k in (expected_key, *self._previous_api_key())):
                 return None
         logger.warning("API server rejected invalid API key: %s", self._request_audit_log_suffix(request))
         return self._auth_failed_response()
@@ -4080,6 +4099,16 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
     def _concurrency_limited_response(self) -> Optional["web.Response"]:
         """429 when the concurrent-run cap is reached (0 disables), else None. Uses the same
         adapter-owned work count as shutdown draining (admitted requests included)."""
+        profile = _api_request_profile.get() or ""
+        if profile.startswith("cli-"):
+            try:
+                from ops_center import copilot
+                blocked = copilot.quota_block(profile)
+            except Exception:  # noqa: BLE001 — cota ilegível não derruba o Copiloto; o MCP segue isolado
+                logger.warning("copilot: cota de %s ilegível", profile, exc_info=True)
+                blocked = None
+            if blocked:
+                return _error_response(blocked, 402, err_type="insufficient_quota", code="copilot_no_credit")
         limit = self._max_concurrent_runs
         if limit <= 0:
             return None
@@ -4297,6 +4326,16 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
                     result, usage = self._finish_turn_result(
                         agent, result, session_id, route=route, requested_runtime=requested_runtime,
                         route_source=route_source, confirmed_runtime_lock=confirmed_runtime_lock)
+                    _profile = _api_request_profile.get() or ""
+                    if _profile.startswith("cli-"):
+                        try:
+                            from ops_center import copilot
+                            copilot.record_turn(
+                                _profile, usage, (result or {}).get("session_id") or session_id, user_message,
+                                json.dumps({"name": (turn_author or {}).get("name"), "via": "Aibiz Manager"})
+                                if turn_author else "")
+                        except Exception:  # noqa: BLE001
+                            logger.warning("copilot: consumo do turno não registrado", exc_info=True)
                     if muted and isinstance(result, dict):
                         # Project presentation only after finishing the source outcome. Keep
                         # the agent's result, transcript, failure flags and usage intact.

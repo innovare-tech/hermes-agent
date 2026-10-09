@@ -684,6 +684,12 @@ def _emit_post_tool_call_hook(
     fields are derived from the result only past that gate when status is None."""
     if _post_tool_call_hook_suppressed.get():
         return
+    if function_name.startswith("mcp__aibiz_ops__"):  # auditoria do Copiloto do Gestor (ops_center/copilot.py)
+        try:
+            from ops_center import copilot
+            copilot.record_tool(function_name, function_args, result, duration_ms, session_id)
+        except Exception as _audit_err:
+            logger.warning("copilot: auditoria da ferramenta falhou: %s", type(_audit_err).__name__)
     try:
         from hermes_cli.lifecycle import has_hook, invoke_hook
         if not has_hook("post_tool_call"):
