@@ -8,7 +8,7 @@ import type { Activity, Approval, AutonomyMode, Business, Channel, Costs, Health
 type Estop = { paused: boolean; reason: string | null; engaged_at: string | null };
 
 // Formato cru de /api/ops (ops_center.store).
-type RawChannel = { id: string; platform: string; chat_id: string; name: string; kind: string; business_id: string | null; mode: number; last_seen: number | null };
+type RawChannel = { id: string; platform: string; chat_id: string; name: string; kind: string; business_id: string | null; mode: number; last_seen: number | null; todayCount?: number; members?: number | null };
 type RawInbox = { id: number; channel_id: string; sender_id: string | null; sender_name: string | null; text: string; received_at: number; priority: string; summary: string | null; draft: string | null; status: string; sent_at: number | null; platform: string; chat_name: string; kind: string; mode: number; business_id: string | null };
 type RawActivity = { id: number; at: number; business_id: string | null; kind: Activity["kind"]; action: string; why: string; reversible: number; undone: number };
 type RawPerson = { id: string; name: string; role: string; business_id: string | null; tone: string; channels: string; notes: string; pending: string[]; waiting_since: number | null; handles?: PersonHandles };
@@ -87,6 +87,8 @@ export const channelFrom = (c: RawChannel): Channel => ({
   business: c.business_id ?? "",
   mode: (c.mode as AutonomyMode) ?? 2,
   lastSeen: whenLabel(c.last_seen),
+  todayCount: c.todayCount,
+  speakers: c.members,
 });
 
 export function inboxFrom(i: RawInbox): InboxItem {
@@ -160,7 +162,7 @@ const playbookFrom = (p: RawPlaybook): Playbook => ({
 });
 
 /** Grupos para o Radar: canais de grupo + volume de hoje vindo da caixa de entrada. */
-function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
+export function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
   const today = new Date().setHours(0, 0, 0, 0) / 1000;
   return channels
     .filter((c) => c.kind === "group")
@@ -172,8 +174,9 @@ function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
         business: c.business,
         channel: c.platform,
         name: c.name,
-        members: new Set(msgs.map((m) => m.sender_id)).size,
-        msgsToday: msgs.length,
+        // Do canal quando houver: grupos em Escutar não passam pela Caixa de entrada.
+        members: c.speakers ?? new Set(msgs.map((m) => m.sender_id)).size,
+        msgsToday: c.todayCount ?? msgs.length,
         sentiment: [],
         alert: urgent ? `${urgent} ${urgent === 1 ? "mensagem" : "mensagens"} com palavras vigiadas hoje` : undefined,
         decisions: [],

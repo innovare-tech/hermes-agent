@@ -56,3 +56,12 @@ describe("cleanSnippet", async () => {
     expect(cleanSnippet(raw)).toBe(String.raw`spike em negrito \hermes-agent\web", "pattern`);
   });
 });
+
+describe("radarFrom", () => {
+  it("usa a contagem do canal (grupos em Escutar não vão à Caixa de entrada)", async () => {
+    const { radarFrom } = await import("./live");
+    const ch = { id: "c1", name: "Hermes", icon: "users", platform: "WhatsApp", kind: "group", business: "", mode: 3, lastSeen: "", todayCount: 3, speakers: 2 };
+    const [g] = radarFrom([ch as never], []);
+    expect([g.msgsToday, g.members]).toEqual([3, 2]);
+  });
+});

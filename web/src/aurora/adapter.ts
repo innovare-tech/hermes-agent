@@ -91,7 +91,9 @@ export type Activity = {
   undone: boolean;
 };
 
-export type Channel = { id: string; name: string; icon: string; platform: string; kind: string; business: BizId; mode: AutonomyMode; lastSeen: string };
+export type Channel = { id: string; name: string; icon: string; platform: string; kind: string; business: BizId; mode: AutonomyMode; lastSeen: string;
+  /** Mensagens de hoje e quem já escreveu, contados no canal (inclui grupos em Escutar, que não vão à Caixa). */
+  todayCount?: number; speakers?: number | null };
 
 export type KbArticle = { title: string; source: string; uses: number };
 
