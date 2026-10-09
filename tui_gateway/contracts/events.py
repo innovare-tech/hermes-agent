@@ -208,6 +208,9 @@ class MessageCompletePayload(Payload):
     error_surface: ErrorSurface | None = None
     partial: bool | None = None
     persisted_turn: PersistedTurn | None = None
+    #: Resumo do turno (modelo, tokens/custo DESTE turno, duração, status) também gravado no
+    #: ``display_metadata.turn`` da linha do usuário — renderizadores o leem ao reabrir a conversa.
+    turn_summary: dict[str, JsonValue] | None = None
 
 
 event("message.complete", MessageCompletePayload, doc="The turn ended: final text, usage and outcome.")
