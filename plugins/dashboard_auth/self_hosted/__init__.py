@@ -21,7 +21,7 @@ from typing import Any, Dict, Optional
 
 import httpx
 
-from hermes_cli.dashboard_auth import LoginStart, ProviderError, Session
+from hermes_cli.dashboard_auth import InvalidCodeError, LoginStart, ProviderError, Session
 from plugins.dashboard_auth._shared import (
     DEFAULT_TOKEN_LEEWAY_SECONDS,
     JSON_HEADERS,
@@ -78,6 +78,16 @@ def _origin(url: str) -> tuple:
             parts.port or {"https": 443, "http": 80}.get(scheme))
 
 
+class EmailNotAllowedError(InvalidCodeError):
+    """The IDP authenticated someone who is not on ``allowed_emails``."""
+
+
+def _parse_allowed_emails(raw: Any) -> frozenset:
+    """``allowed_emails`` as a list (config.yaml) or comma/space-separated string (env); lower-cased."""
+    items = raw if isinstance(raw, (list, tuple)) else str(raw or "").replace(",", " ").split()
+    return frozenset(str(e).strip().lower() for e in items if str(e).strip())
+
+
 class SelfHostedOIDCProvider(JwtOAuthProvider):
     """Generic self-hosted OpenID Connect provider (authorization-code + PKCE)."""
 
@@ -90,7 +100,7 @@ class SelfHostedOIDCProvider(JwtOAuthProvider):
 
     def __init__(
         self, *, issuer: str, client_id: str, scopes: str = _DEFAULT_SCOPES, client_secret: str = "",
-        id_token_leeway: float = DEFAULT_TOKEN_LEEWAY_SECONDS,
+        id_token_leeway: float = DEFAULT_TOKEN_LEEWAY_SECONDS, allowed_emails: Any = (),
     ) -> None:
         if not issuer:
             raise ValueError("issuer is required")
@@ -108,6 +118,9 @@ class SelfHostedOIDCProvider(JwtOAuthProvider):
         # Empty/whitespace secret ⇒ public client, so a provisioned-but-blank secret
         # can't flip us into a broken confidential mode.
         self._client_secret = (client_secret or "").strip()
+        # Empty ⇒ any account the IDP authenticates (upstream behaviour). A public IDP such as
+        # Google authenticates EVERY Google account, so a public dashboard must set this.
+        self._allowed_emails = _parse_allowed_emails(allowed_emails)
         # Discovery + JWKS resolve lazily so registration never hits the network
         # (the IDP may be down at boot; fail per-request instead).
         self._discovery: Dict[str, Any] | None = None
@@ -272,11 +285,24 @@ class SelfHostedOIDCProvider(JwtOAuthProvider):
 
     _claims_for = _verify_id_token
 
+    def verify_session(self, *, access_token: str) -> Optional[Session]:
+        # An email dropped from allowed_emails loses its live sessions on the next request.
+        try:
+            return super().verify_session(access_token=access_token)
+        except EmailNotAllowedError:
+            return None
+
     def _session(self, id_token: str, refresh_token: str, claims: Dict[str, Any]) -> Session:
         """Map verified OIDC claims onto a Session. The verified ID token is stored in
         ``Session.access_token`` so the per-request ``verify_session`` re-verifies a real
         JWT; the opaque OAuth access token is not kept — the dashboard only needs identity."""
         email = str(claims.get("email", "") or "")
+        if self._allowed_emails:
+            # Only a verified address counts: an unverified one is a claim anyone can type.
+            verified = claims.get("email_verified") in (True, "true", "True")
+            if not verified or email.strip().lower() not in self._allowed_emails:
+                logger.warning("[%s] login refused: %s is not on allowed_emails", _TAG, email or "<no email>")
+                raise EmailNotAllowedError("this account has no access to this dashboard")
         # Org/tenant is non-standard: accept common spellings, else join ``groups`` so
         # multi-tenant IDPs surface *something* (free-form string).
         org_id = claims.get("org_id") or claims.get("organization") or ""
@@ -318,7 +344,10 @@ def _settings() -> dict:
         # Credential: canonical home is the env var / ~/.hermes/.env. Empty ⇒ public client.
         "client_secret": setting("HERMES_DASHBOARD_OIDC_CLIENT_SECRET", "client_secret"),
         # Clock-skew tolerance for ID-token exp/nbf/iat (config.yaml only; default 60s, 0 = strict).
-        "id_token_leeway": parse_leeway(oidc_cfg.get("id_token_leeway"))}
+        "id_token_leeway": parse_leeway(oidc_cfg.get("id_token_leeway")),
+        # Who may log in (comma-separated env, or a list in config.yaml). Empty ⇒ anyone the IDP accepts.
+        "allowed_emails": _parse_allowed_emails(
+            resolve_env_or_cfg("HERMES_DASHBOARD_OIDC_ALLOWED_EMAILS", None) or oidc_cfg.get("allowed_emails"))}
 
 
 def register(ctx) -> None:
