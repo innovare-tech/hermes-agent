@@ -213,7 +213,7 @@ describe("Clientes do Copiloto", () => {
     expect(art.textContent).toContain("Plano Starter");
     expect(art.querySelector('a[href="/settings/perfis?perfil=cli-ai7781"]')?.textContent).toContain("perfil cli-ai7781");
     expect(q(".cp-banner")?.textContent).toContain("Cliente novo");
-    expect(qa(".cp-kpibox").map((k) => k.querySelector("span")?.textContent)).toEqual(["Conversas no mês", "Gasto no mês", "Créditos", "Última atividade"]);
+    expect(qa(".cp-kpibox").map((k) => k.querySelector("span")?.textContent)).toEqual(["Conversas no mês", "Gasto no mês", "Créditos usados", "Última atividade"]);
     expect(art.textContent).toContain("nunca usou");
     expect(byText("button", "Mudar plano")).toBeTruthy();
     expect(byText("button", "Rotacionar chave")).toBeTruthy();
