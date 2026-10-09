@@ -512,3 +512,43 @@ def execute_approved(approval_id: int) -> str:
         _EXECUTING.reset(token)
     store.update_approval(approval_id, result=str(result)[:20000])
     return str(result)
+
+
+def announce(a: dict, result: Optional[str] = None) -> None:
+    """Decisão tomada no painel: atualiza a mensagem do pedido no Telegram (tira os botões) e, se executou,
+    responde no mesmo tópico com o resultado — igual ao caminho dos botões do Telegram."""
+    import html
+
+    try:
+        parts = str(a.get("target") or "").split(":")
+        if len(parts) < 2 or parts[0] != "telegram":
+            return
+        chat = parts[1]
+        thread = int(parts[2]) if len(parts) > 2 and parts[2].lstrip("-").isdigit() else None
+        from ops_center import notify
+
+        verdict = ("✅ Aprovado" if a.get("status") == "approved" else "❌ Negado") + \
+            f" por {html.escape(a.get('decided_by') or 'painel')}" + (". Executado." if result is not None else ".")
+        body = f"<b>{html.escape(a.get('summary') or '')}</b>\n<pre>{html.escape((a.get('command') or '')[:3000])}</pre>\n{verdict}"
+        if a.get("message_id"):
+            try:
+                notify._call("editMessageText", {"chat_id": chat, "message_id": int(a["message_id"]), "text": body,
+                                                 "parse_mode": "HTML"})
+            except Exception:  # noqa: BLE001 — mensagem antiga/apagada: segue para o resultado
+                logger.debug("ops_center: não consegui editar o pedido #%s no Telegram", a.get("id"), exc_info=True)
+        if result is not None:
+            payload: dict = {"chat_id": chat, "text": f"Resultado do pedido #{a.get('id')}:\n{str(result)[:3500]}"}
+            if thread is not None:
+                payload["message_thread_id"] = thread
+            notify._call("sendMessage", payload)
+    except Exception:
+        logger.warning("ops_center: decisão do pedido #%s não foi avisada no Telegram", a.get("id"), exc_info=True)
+
+
+def execute_and_announce(approval_id: int) -> str:
+    """Caminho do painel: executa a chamada aprovada e conta o resultado no chat de origem."""
+    from ops_center import store
+
+    result = execute_approved(approval_id)
+    announce(store.get_approval(approval_id) or {"id": approval_id}, result)
+    return result

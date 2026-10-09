@@ -193,7 +193,7 @@ def test_permissions_and_approvals_routes(client, monkeypatch):
                              args={"command": "kubectl scale deploy/x --replicas=2"}, status="pending",
                              expires_at=10**12)
     ran = []
-    monkeypatch.setattr(guardrails, "execute_approved", lambda i: ran.append(i) or "ok")
+    monkeypatch.setattr(guardrails, "execute_and_announce", lambda i: ran.append(i) or "ok")
     assert client.get("/api/ops/approvals", params={"status": "pending"}).json()[0]["id"] == aid
     out = client.post(f"/api/ops/approvals/{aid}/decide", json={"approve": True}).json()
     assert out["status"] == "approved" and out["decided_by"] == "Você (painel)"

@@ -298,8 +298,10 @@ async def decide_approval(approval_id: int, body: DecideBody):
     if not out.get("ok"):
         raise HTTPException(status_code=409, detail=out.get("error") or "não deu para decidir")
     if body.approve:
-        # No escopo do perfil (home + segredos); o resultado fica no histórico do pedido.
-        asyncio.get_running_loop().create_task(_scoped(guardrails.execute_approved, approval_id))
+        # No escopo do perfil (home + segredos); o resultado fica no histórico e vai ao chat de origem.
+        asyncio.get_running_loop().create_task(_scoped(guardrails.execute_and_announce, approval_id))
+    else:
+        await _run(guardrails.announce, out["approval"])
     await _act(f"{'Aprovou' if body.approve else 'Negou'} o pedido #{approval_id}: {out['approval'].get('summary')}")
     return out["approval"]
 

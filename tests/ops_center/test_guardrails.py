@@ -222,3 +222,20 @@ def test_dashboard_always_decides_even_with_approvers(monkeypatch):
     with session(platform="telegram", chat_type="group", chat_id="-100", user_id="11"):
         guardrails.check("terminal", {"command": "systemctl restart x"})
     assert guardrails.decide(1, False, "Você (painel)", "dashboard")["ok"]
+
+
+def test_panel_decision_is_announced_on_telegram(monkeypatch):
+    from ops_center import guardrails, notify, store
+
+    calls = []
+    monkeypatch.setattr(notify, "_call", lambda method, payload=None: calls.append((method, payload)) or {})
+    monkeypatch.setattr(guardrails, "execute_approved", lambda i: '{"bytes_written": 4}')
+    aid = store.add_approval(origin="telegram_team", requested_by="Kelvin", requested_by_id="1", summary="Arquivos",
+                             command="write_file teste.txt", tool="write_file", args={}, status="pending",
+                             target="telegram:-100:6", expires_at=10**12)
+    store.update_approval(aid, message_id="25")
+    store.claim_approval(aid, True, "Você (painel)", "dashboard")
+    guardrails.execute_and_announce(aid)
+    (m1, edit), (m2, sent) = calls
+    assert m1 == "editMessageText" and edit["message_id"] == 25 and "✅ Aprovado por Você (painel)" in edit["text"]
+    assert m2 == "sendMessage" and sent["message_thread_id"] == 6 and "bytes_written" in sent["text"]
