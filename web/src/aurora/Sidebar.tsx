@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { NavLink, useNavigate } from "react-router";
 import { Icon } from "./Icon";
 import { refreshModelsHealth, useModelsProblem } from "./models/health";
+import { isListenSession } from "./chat/sources";
 import { ProfileSwitcher } from "./ProfileSwitcher";
 import { inBiz, setPrefs, setState, useStore, type State } from "./store";
 
@@ -32,14 +33,18 @@ export const AGENT: NavItem[] = [
   { to: "/settings/modelos", label: "Modelos", icon: "cpu", sub: true, dot: true },
   { to: "/settings/avisos", label: "Avisos", icon: "bell-ring", sub: true },
   { to: "/settings/perfis", label: "Perfis", icon: "layers", sub: true },
+  { to: "/settings/permissoes", label: "Permissões", icon: "lock", sub: true },
 ];
+
+/** Aprovações = rascunhos de resposta (filtrados pelo negócio) + pedidos de ação pendentes (sem negócio, valem sempre). */
+export const approvalsCount = (s: Pick<State, "approvals" | "actionRequests" | "biz">) => s.approvals.filter(inBiz(s as State)).length + s.actionRequests.length;
 
 /** Contadores destacados da seção Operação, já filtrados pelo negócio. */
 export function opsCounts(s: State): Record<string, number> {
   const f = inBiz(s);
   return {
     "/inbox": s.inbox.filter((x) => f(x) && (x.priority === "urgente" || x.priority === "voce")).length,
-    "/approvals": s.approvals.filter(f).length,
+    "/approvals": approvalsCount(s),
     "/radar": s.radar.filter((x) => f(x) && x.alert).length,
     "/support": s.tickets.filter((x) => f(x) && x.status !== "resolvido").length,
   };
@@ -80,6 +85,7 @@ export function Sidebar() {
   const navigate = useNavigate();
   const s = useStore((x) => x);
   const counts = opsCounts(s);
+  const sessions = s.sessions.filter((x) => !isListenSession(x));
   const profileId = s.profileId;
   // Ponto vermelho em Modelos: lê o estado guardado dos provedores ao entrar e a cada troca de perfil.
   useEffect(() => {
@@ -114,10 +120,10 @@ export function Sidebar() {
 
       <div className="au-side-list" style={{ borderTop: "1px solid var(--line)" }}>
         <div style={{ padding: "0 8px 16px" }}>
-          {GROUPS.filter((g) => s.sessions.some((x) => x.group === g)).map((g) => (
+          {GROUPS.filter((g) => sessions.some((x) => x.group === g)).map((g) => (
             <div key={g}>
               <div className="au-label" style={{ padding: "14px 11px 6px" }}>{g}</div>
-              {s.sessions
+              {sessions
                 .filter((x) => x.group === g)
                 .map((x, i) => (
                   <NavLink key={x.id} to={`/chat/${x.id}`} className="au-sess" style={({ isActive }) => ({ animationDelay: 300 + i * 50 + "ms", background: isActive ? "var(--panel)" : undefined })}>

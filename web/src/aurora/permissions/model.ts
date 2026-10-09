@@ -55,6 +55,8 @@ export const permissionsApi = {
   save: (patch: PermissionsPatch) => fetchJSON<Permissions>("/api/ops/permissions", json("PUT", patch)),
   /** Tudo o que o painel mostra (pendentes e decididos); os filtros são aplicados aqui, no cliente. */
   approvals: () => fetchJSON<ApprovalRow[]>("/api/ops/approvals?limit=500"),
+  /** Só os que aguardam decisão (Aprovações e contador da barra lateral). */
+  pending: () => fetchJSON<ApprovalRow[]>("/api/ops/approvals?status=pending"),
   decide: (id: number, approve: boolean) => fetchJSON<ApprovalRow>(`/api/ops/approvals/${id}/decide`, json("POST", { approve })),
 };
 
@@ -107,7 +109,7 @@ export const ROW_HELP: Record<string, string> = {
   "cluster.write": "Reiniciar, escalar (pôr mais ou menos cópias) e fazer deploy.",
   "server.read": "Ver espaço em disco, processos, arquivos de log (df, ps, tail).",
   "server.write": "Instalar, mudar configuração, parar serviços.",
-  files: "Ler e criar arquivos na pasta de trabalho do Hermes.",
+  files: "Criar e alterar arquivos na pasta de trabalho do Hermes (ler não passa por aqui).",
   web: "Pesquisar e ler páginas públicas.",
 };
 export const MCP_NO_DESC_READ = "Só lê. Não muda nada no serviço.";

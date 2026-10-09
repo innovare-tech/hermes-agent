@@ -11,6 +11,8 @@ import { ChannelDrawer } from "../channels/Drawer";
 import { ChannelRowView } from "../channels/Row";
 import { DefaultWindowDialog } from "../channels/Window";
 import { Modal } from "../channels/parts";
+import { TeamDialog } from "../channels/Participants";
+import { teamApi, type TeamMember } from "../channels/team";
 import {
   applyFilters,
   channelsApi,
@@ -50,6 +52,13 @@ export function Channels() {
   const [confirmAuto, setConfirmAuto] = useState<string | null>(null);
   const [defaultDialog, setDefaultDialog] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [teamOpen, setTeamOpen] = useState(false);
+
+  const loadTeam = useCallback(() => teamApi.list().then(setTeam, () => {}), []);
+  useEffect(() => {
+    loadTeam();
+  }, [loadTeam]);
 
   const reload = useCallback(async (silent = false) => {
     if (!silent) setLoad("loading");
@@ -257,6 +266,9 @@ export function Channels() {
               <button className="au-outline" onClick={() => setDefaultDialog(true)} disabled={!def}>
                 <Icon name="clock" size={13} /> Janela de análise padrão
               </button>
+              <button className="au-outline" onClick={() => setTeamOpen(true)} title="Pessoas da sua equipe: as mensagens delas contam como resposta do suporte em todos os grupos">
+                <Icon name="users" size={13} /> Equipe ({team.length})
+              </button>
             </div>
 
             {visible.length === 0 ? (
@@ -303,6 +315,7 @@ export function Channels() {
           row={drawerRow}
           def={def}
           busy={busy}
+          onTeamChanged={loadTeam}
           onClose={() => setOpen(null)}
           actions={{
             onMode: (m) => setMode(drawerRow, m),
@@ -343,6 +356,7 @@ export function Channels() {
           </div>
         </Modal>
       )}
+      {teamOpen && <TeamDialog team={team} onChanged={loadTeam} onClose={() => setTeamOpen(false)} />}
       {defaultDialog && def && <DefaultWindowDialog current={def} using={usingDefault} onSave={saveDefault} onClose={() => setDefaultDialog(false)} />}
     </div>
   );

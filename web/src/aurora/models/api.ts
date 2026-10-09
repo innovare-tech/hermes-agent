@@ -84,14 +84,16 @@ export type TaskDef = {
   jev?: boolean;
   /** Modelos que o design destaca como "recomendado". */
   rec?: string[];
+  /** A escolha fica salva, mas o canal ainda não usa o modelo próprio (selo "em breve"). */
+  soon?: boolean;
 };
 
 export const TASKS: TaskDef[] = [
   { id: "default", label: "Modelo padrão", desc: "Usado por tudo que não tem escolha própria.", icon: "star", cap: "text", root: true },
   { id: "main", label: "Conversa principal", desc: "Quando você conversa com o Hermes pelo painel.", icon: "messages-square", cap: "text", parent: "default" },
-  { id: "channel.telegram", label: "Telegram", desc: "Conversas com a equipe.", icon: "send", cap: "text", parent: "main", sub: true },
-  { id: "channel.whatsapp", label: "WhatsApp", desc: "Conversas diretas com clientes.", icon: "phone", cap: "text", parent: "main", sub: true },
-  { id: "channel.api", label: "API", desc: "Pedidos de outros sistemas, como o painel da Aibiz.", icon: "braces", cap: "text", parent: "main", sub: true },
+  { id: "channel.telegram", label: "Telegram", desc: "Conversas com a equipe.", icon: "send", cap: "text", parent: "main", sub: true, soon: true },
+  { id: "channel.whatsapp", label: "WhatsApp", desc: "Conversas diretas com clientes.", icon: "phone", cap: "text", parent: "main", sub: true, soon: true },
+  { id: "channel.api", label: "API", desc: "Pedidos de outros sistemas, como o painel da Aibiz.", icon: "braces", cap: "text", parent: "main", sub: true, soon: true },
   { id: "group_analysis", label: "Análise dos grupos", desc: "Lê cada lote de mensagens e escreve a análise.", icon: "scan-search", cap: "text", parent: "default" },
   { id: "triage_jev", label: "Triagem", desc: "Modelo de decisão: classifica e decide rápido e barato, não escreve textos.", icon: "split", cap: "decision", parent: "default", jev: true, rec: ["jev-latest", "jev-1.13", "typesafe/jev-1.13"] },
   { id: "vision", label: "Visão de imagens", desc: "Entende prints, fotos e vídeos enviados nos grupos.", icon: "image", cap: "vision", parent: "default", rec: ["google/gemini-2.5-flash"] },
@@ -107,6 +109,8 @@ export const CAPS: Record<Cap, { icon: string; label: string }> = {
   audio: { icon: "audio-lines", label: "Ouve áudio" },
   decision: { icon: "split", label: "Modelo de decisão" },
 };
+/** Tooltip do selo "em breve" nas linhas de canal. */
+export const SOON_HINT = "A escolha fica salva, mas por enquanto o Hermes usa o modelo da conversa principal nestes canais.";
 export const NEED: Record<Cap, string> = { text: "", vision: "precisa ler imagens", audio: "precisa ouvir áudio", decision: "modelos de decisão primeiro" };
 export const LACKS: Record<Cap, string> = { vision: "não lê imagens", audio: "não ouve áudio", decision: "não é um modelo de decisão", text: "não gera texto" };
 
@@ -274,8 +278,8 @@ export function removalEffects(id: string, cfg: Cfg, provs: Provider[]): Removal
 
 export const ON_LIMIT: { k: OnLimit; label: string; icon: string; color: string; d: string }[] = [
   { k: "notify", label: "Avisar e continuar", icon: "bell", color: "var(--info)", d: "Só avisa. O gasto pode passar do limite." },
-  { k: "pause_non_urgent", label: "Pausar o que não é urgente", icon: "circle-pause", color: "var(--warn)", d: "Para análises de baixa urgência, resumos e tarefas agendadas. Conversas e triagem continuam." },
-  { k: "pause_profile", label: "Pausar o perfil", icon: "octagon-pause", color: "var(--err)", d: "O Hermes para tudo neste perfil até você liberar ou virar o dia/mês." },
+  { k: "pause_non_urgent", label: "Pausar o que não é urgente", icon: "circle-pause", color: "var(--warn)", d: "Só análises críticas e altas usam o modelo; as outras chegam à equipe com as mensagens, sem gastar. Conversas e triagem continuam." },
+  { k: "pause_profile", label: "Pausar o perfil", icon: "octagon-pause", color: "var(--err)", d: "O Hermes para tudo neste perfil e volta sozinho quando o gasto sai do limite (no dia seguinte, ou no mês seguinte se o estouro foi mensal)." },
 ];
 export const ALERT_OPTS = [50, 80, 90];
 export const LIMIT_STEP = { day: 5, month: 50 };

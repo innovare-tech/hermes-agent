@@ -103,6 +103,13 @@ export function Analyses() {
       .finally(() => seq === openSeq.current && setDetailBusy(false));
   };
 
+  // A primeira análise aparece aberta sozinha ao carregar: conta como vista, igual ao clique (e fica selecionada,
+  // para não passar para a próxima quando sair da aba "Não vistas").
+  useEffect(() => {
+    if (selId === null && sel) open(sel.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selId, sel?.id]);
+
   // ---- ações ----
   const act = async (fn: () => Promise<Analysis>, fail: string): Promise<Analysis | null> => {
     try {

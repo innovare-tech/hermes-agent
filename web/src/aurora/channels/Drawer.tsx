@@ -6,6 +6,7 @@ import { whenLabel } from "../live";
 import { channelSubtitle, ChannelAvatar } from "./Row";
 import { windowAppliesNote, type ChannelRow } from "./model";
 import { ModeSegment, SuggestionBar, useEscape } from "./parts";
+import { Participants } from "./Participants";
 import { ChannelWindow } from "./Window";
 
 type Pair = { silenceMin: number; maxMin: number };
@@ -33,7 +34,7 @@ const when = (ts: number) => {
 };
 
 /** Gaveta de detalhes (460 px, à direita): problema, modo, cliente, janela de análise e atividade. */
-export function ChannelDrawer({ row, def, busy, actions, onClose }: { row: ChannelRow; def: Pair | null; busy: boolean; actions: DrawerActions; onClose: () => void }) {
+export function ChannelDrawer({ row, def, busy, actions, onTeamChanged, onClose }: { row: ChannelRow; def: Pair | null; busy: boolean; actions: DrawerActions; onTeamChanged: () => void; onClose: () => void }) {
   useEscape(onClose);
   const note = windowAppliesNote(row.mode);
   const isTeam = row.section === "team";
@@ -107,6 +108,12 @@ export function ChannelDrawer({ row, def, busy, actions, onClose }: { row: Chann
             {note ? <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: "var(--fg2)" }}>{note}</p> : <ChannelWindow key={`${row.id}:${row.window.useDefault}:${row.window.silenceMin}:${row.window.maxMin}`} window={row.window} def={def} onSave={actions.onSaveWindow} />}
             {row.mode === 1 && <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.45, color: "var(--fg3)" }}>Hoje só o Escutar analisa em lote; no Rascunhar a janela fica guardada para quando isso for ligado.</p>}
           </Sec>
+
+          {row.platform === "whatsapp" && row.section === "group" && (
+            <Sec title="Participantes">
+              <Participants key={row.id} channelId={row.id} onTeamChanged={onTeamChanged} />
+            </Sec>
+          )}
 
           <Sec title="Atividade">
             <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "auto minmax(0,1fr)", gap: "8px 16px", fontSize: 13 }}>

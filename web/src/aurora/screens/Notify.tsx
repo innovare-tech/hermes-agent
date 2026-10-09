@@ -407,14 +407,18 @@ function TestFooter({ t, hint, onTest }: { t?: Test; hint: string; onTest: () =>
 
 // ---------------------------------------------------------------- pré-visualização
 
-const PV: Record<Kind, { title: string; lines: { t: string; c: string }[]; link: string; time: string }> = {
+type PvLine = { t: string; c: string; code?: string };
+const PV: Record<Kind, { title: string; lines: PvLine[]; reply?: string; button?: string; link: string; time: string }> = {
   analyses: {
     title: "🔴 Urgência crítica · Bug",
     lines: [
-      { t: "Auto Center Rota · Rota | Suporte Aibiz", c: "var(--tgFg2)" },
+      { t: "👤 Cliente: Auto Center Rota · ", code: "1234", c: "var(--tgFg)" },
+      { t: "💬 Grupo: Rota | Suporte Aibiz", c: "var(--tgFg2)" },
       { t: "Clientes pararam de receber a confirmação de agendamento desde as 8h. 37 mensagens recusadas pelo WhatsApp.", c: "var(--tgFg)" },
-      { t: "Hipótese: modelo v2 reprovado pela Meta às 07:51.", c: "var(--tgFg)" },
+      { t: "🔎 Hipótese: modelo v2 reprovado pela Meta às 07:51.", c: "var(--tgFg)" },
     ],
+    reply: "Oi! Já identificamos o problema nos modelos de mensagem e estamos corrigindo. Avisamos aqui assim que as confirmações voltarem.",
+    button: "📋 Copiar resposta",
     link: "A-2381 · veja em Análises no painel",
     time: "09:30",
   },
@@ -485,16 +489,30 @@ function Preview({ kind, setKind, cfg, tg }: { kind: Kind; setKind: (k: Kind) =>
               <span style={{ fontSize: 13, fontWeight: 600, color: "#e1834f" }}>Hermes{profile ? ` · ${profile.name}` : ""}</span>
               <span style={{ fontWeight: 600 }}>{title}</span>
               {p.lines.map((ln, i) => (
-                <span key={i} style={{ color: ln.c }}>{ln.t}</span>
+                <span key={i} style={{ color: ln.c }}>
+                  {ln.t}
+                  {ln.code && <code style={{ fontFamily: "var(--fm)", fontSize: 12.5, padding: "0 4px", borderRadius: 4, background: "rgba(0,0,0,.22)" }}>{ln.code}</code>}
+                </span>
               ))}
+              {p.reply && (
+                <span style={{ display: "flex", flexDirection: "column", gap: 2, padding: "4px 0 4px 9px", borderLeft: "3px solid #e1834f", color: "var(--tgFg)" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: "#e1834f" }}>💬 Resposta sugerida</span>
+                  <span>{p.reply}</span>
+                </span>
+              )}
               {ids.length > 0 && <span style={{ color: "var(--tgLink)" }}>{mentionLine(ids, tg.members)}</span>}
               <span style={{ color: "var(--tgLink)" }}>{p.link}</span>
               <span style={{ alignSelf: "flex-end", fontSize: 11, color: "var(--tgFg2)" }}>{time}</span>
             </div>
           </div>
+          {p.button && (
+            <div aria-hidden="true" title="Exemplo ilustrativo: este botão não faz nada aqui" style={{ alignSelf: "flex-start", marginLeft: 38, maxWidth: "94%", width: "min(280px,100%)", padding: "8px 12px", borderRadius: 10, background: "rgba(0,0,0,.28)", color: "var(--tgLink)", fontSize: 13, textAlign: "center", userSelect: "none" }}>
+              {p.button}
+            </div>
+          )}
         </div>
       </div>
-      <span style={{ fontSize: 12, color: "var(--fg3)", lineHeight: 1.5 }}>{note} Exemplo ilustrativo do formato.</span>
+      <span style={{ fontSize: 12, color: "var(--fg3)", lineHeight: 1.5 }}>{note} Exemplo ilustrativo do formato{p.button ? ": o botão “Copiar resposta” é só uma amostra" : ""}.</span>
     </aside>
   );
 }

@@ -91,6 +91,8 @@ const an = <T>(path: string, init?: RequestInit) => fetchJSON<T>("/api/analyses"
 export const analysesApi = {
   /** Tudo que aparece na tela (abertas, resolvidas, não relevantes); os filtros são aplicados aqui, no cliente. */
   all: () => an<Analysis[]>("?status=all&limit=500"),
+  /** Só as abertas (o indicador do Início conta o tamanho da lista). */
+  open: () => an<Analysis[]>("?status=open"),
   get: (id: number) => an<Analysis>(`/${id}`),
   resolve: (id: number) => an<Analysis>(`/${id}/resolve`, j("POST")),
   reopen: (id: number) => an<Analysis>(`/${id}/resolve`, j("DELETE")),
