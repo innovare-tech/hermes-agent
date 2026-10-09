@@ -211,7 +211,7 @@ describe("Clientes do Copiloto", () => {
     expect(art.textContent).toContain("Academia Ipê");
     expect(art.textContent).toContain("systemClientId ai7781");
     expect(art.textContent).toContain("Plano Starter");
-    expect(art.querySelector('a[href="/settings/perfis"]')?.textContent).toContain("perfil cli-ai7781");
+    expect(art.querySelector('a[href="/settings/perfis?perfil=cli-ai7781"]')?.textContent).toContain("perfil cli-ai7781");
     expect(q(".cp-banner")?.textContent).toContain("Cliente novo");
     expect(qa(".cp-kpibox").map((k) => k.querySelector("span")?.textContent)).toEqual(["Conversas no mês", "Gasto no mês", "Créditos", "Última atividade"]);
     expect(art.textContent).toContain("nunca usou");
@@ -324,7 +324,7 @@ describe("Clientes do Copiloto", () => {
     expect(q(".cp-foot")?.textContent).toBe("30 clientes");
   });
 
-  it("rotacionar: Agora/Em 24 horas, chave mostrada uma vez com Copiar, e some ao fechar (nem no store nem no localStorage)", async () => {
+  it("rotacionar: padrão Em 24 horas, chave mostrada uma vez com Copiar, Esc e clique fora não fecham, e some ao fechar (nem no store nem no localStorage)", async () => {
     await mount();
     await open("Padaria Sol");
     await click(byText("article button", "Rotacionar chave"));
@@ -332,16 +332,25 @@ describe("Clientes do Copiloto", () => {
     expect(dialog()?.textContent).toContain("Rotacionar a chave de Padaria Sol");
     const radios = qa('[role="radio"]');
     expect(radios.map((r) => r.textContent)).toEqual(["Agora", "Em 24 horas"]);
-    expect(radios[0].getAttribute("aria-checked")).toBe("true");
-    await click(radios[1]);
-    expect(radios[1].getAttribute("aria-checked")).toBe("true");
+    expect(radios.map((r) => r.getAttribute("aria-checked"))).toEqual(["false", "true"]); // a rotina é 24 horas, não "Agora"
+    expect(radios.map((r) => r.tabIndex)).toEqual([-1, 0]);
     expect(dialog()?.textContent).toContain("continua valendo por mais 24 horas");
+    await click(radios[0]);
+    expect(dialog()?.textContent).toContain("Use se a chave vazou");
+    await click(radios[1]);
     await click(byText("button", "Gerar chave nova"));
     await flush();
     expect(calls.find((c) => c.url.endsWith("/rotate-key"))?.body).toEqual({ graceHours: 24 });
     expect(lastKey).toMatch(/^hk_live_/);
     expect(dialog()?.textContent).toContain(lastKey);
     expect(dialog()?.textContent).toContain("Atualize no Aibiz Manager");
+    expect(dialog()?.textContent).toContain("a chave não aparece de novo");
+    // com a chave na tela, Esc e clique fora não fecham
+    await esc();
+    expect(dialog()).not.toBeNull();
+    await act(async () => { q(".cp-scrim")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
+    expect(dialog()).not.toBeNull();
+    expect(byText("[role=dialog] button", "Cancelar")).toBeUndefined();
     await click(byText("button", "Copiar"));
     expect((navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(lastKey);
     expect(dialog()?.textContent).toContain("Chave copiada");
@@ -349,7 +358,7 @@ describe("Clientes do Copiloto", () => {
     expect(toasts()).not.toContain(lastKey);
     expect(JSON.stringify(getState())).not.toContain(lastKey);
     expect(JSON.stringify({ ...localStorage })).not.toContain(lastKey);
-    await click(byText("button", "Fechar"));
+    await click(byText("button", "Já copiei, fechar"));
     expect(dialog()).toBeNull();
     expect(document.body.textContent).not.toContain(lastKey);
     expect(toasts()).toContain("Chave de Padaria Sol rotacionada");
@@ -401,7 +410,10 @@ describe("Clientes do Copiloto", () => {
     await flush();
     expect(calls.some((c) => c.url.endsWith("/reactivate") && c.method === "POST")).toBe(true);
     expect(dialog()?.textContent).toContain(lastKey);
-    await click(byText("button", "Fechar"));
+    await esc();
+    expect(dialog()).not.toBeNull(); // a chave só some pelo botão
+    await click(byText("button", "Já copiei, fechar"));
+    expect(dialog()).toBeNull();
     expect(document.body.textContent).not.toContain(lastKey);
     expect(q(".cp-banner")).toBeNull();
     expect(byText("article button", "Revogar acesso")).toBeTruthy();
@@ -443,6 +455,12 @@ describe("Clientes do Copiloto", () => {
     await click(byText("button", "Adicionar cliente"));
     const d = dialog()!;
     expect(d.textContent).toContain("Adicionar cliente ao Copiloto");
+    // clique fora não fecha em nenhum passo; Esc fecha nos passos 1 e 2
+    await act(async () => { q(".cp-scrim")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); });
+    expect(dialog()).not.toBeNull();
+    await esc();
+    expect(dialog()).toBeNull();
+    await click(byText("button", "Adicionar cliente"));
     await flush();
     const rows = qa(".cp-dirrow");
     expect(rows.map((r) => r.textContent?.includes("já tem Copiloto"))).toEqual([false, false, true]); // sem busca, os sem Copiloto primeiro
@@ -457,6 +475,11 @@ describe("Clientes do Copiloto", () => {
     // passo 2: plano
     expect(dialog()?.textContent).toContain("Restaurante Sabor da Serra");
     const plans = qa('[role="dialog"] [role="radio"]');
+    expect(plans.map((p) => p.tabIndex)).toEqual([0, -1]); // roving: um ponto de Tab só
+    await act(async () => { plans[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); });
+    expect(plans.map((p) => p.getAttribute("aria-checked"))).toEqual(["false", "true"]);
+    expect(plans.map((p) => p.tabIndex)).toEqual([-1, 0]);
+    expect(document.activeElement).toBe(plans[1]);
     expect(plans[0].textContent).toContain("1.000 créditos por mês");
     expect(plans[1].textContent).toContain("5.000 créditos por mês");
     await click(plans[1]);
@@ -468,6 +491,7 @@ describe("Clientes do Copiloto", () => {
     expect(etapas[0].textContent).toContain("cli-restaurante-sabor-da-ser");
     expect(etapas[2].textContent).toContain('systemClientId = "zz9001" em toda consulta');
     expect(etapas[3].textContent).toContain("Pro: 3 ferramentas");
+    expect(etapas[4].textContent).toContain("você faz no Aibiz Manager com a chave abaixo");
     await click(byText("[role=dialog] button", "Criar Copiloto"));
     expect(byText("[role=dialog] button", "Criando…")).toBeTruthy();
     // durante a criação o Esc não fecha
@@ -480,7 +504,12 @@ describe("Clientes do Copiloto", () => {
     expect(calls.find((c) => c.method === "POST" && c.url === "/api/copilot/clients")?.body).toEqual({ systemClientId: "zz9001", plan: "pro" });
     expect(dialog()?.textContent).toContain(lastKey);
     expect(dialog()?.textContent).toContain("Ela aparece só agora");
-    expect(byText("[role=dialog] button", "Ver o cliente")).toBeTruthy();
+    expect(byText("[role=dialog] button", "Já copiei, fechar")).toBeTruthy();
+    expect(byText("[role=dialog] button", "Cancelar")).toBeUndefined();
+    // a etapa do Aibiz Manager é manual: sem ✓ mesmo no fim
+    expect(qa('[aria-label="Etapas"] li').map((li) => li.dataset.done)).toEqual(["true", "true", "true", "true", "false"]);
+    await esc();
+    expect(dialog()).not.toBeNull();
     // o cliente já está no topo, selecionado e com a faixa de cliente novo
     expect(names()[0]).toBe("Restaurante Sabor da Serra");
     expect(qa("button.cp-item")[0].getAttribute("aria-current")).toBe("true");
@@ -488,7 +517,7 @@ describe("Clientes do Copiloto", () => {
     expect(q(".cp-banner")?.textContent).toContain("Cliente novo");
     expect(toasts()).toContain("Restaurante Sabor da Serra no Copiloto");
     expect(toasts()).not.toContain(lastKey);
-    await click(byText("[role=dialog] button", "Ver o cliente"));
+    await click(byText("[role=dialog] button", "Já copiei, fechar"));
     expect(dialog()).toBeNull();
     expect(document.body.textContent).not.toContain(lastKey);
   });
@@ -571,5 +600,74 @@ describe("Clientes do Copiloto", () => {
     await click(byText(".cp-detail button", "Tentar de novo"));
     await flush();
     expect(q("article")?.textContent).toContain("Academia Ipê");
+  });
+
+  it("revogar: placeholder não é o código, 'O código não confere' e o Esc devolve o foco a 'Revogar acesso'", async () => {
+    await mount();
+    await open("Padaria Sol");
+    const btn = byText("article button", "Revogar acesso")!;
+    btn.focus();
+    await click(btn);
+    const input = dialog()!.querySelector<HTMLInputElement>("input")!;
+    expect(input.placeholder).toBe("Digite o código do cliente");
+    expect(dialog()!.querySelector("b.cp-mono")?.textContent).toBe("abc123"); // o código fica acima, em mono, como referência
+    expect(dialog()!.textContent).not.toContain("O código não confere");
+    await type(input, "abc12"); // ainda digitando
+    expect(dialog()!.textContent).not.toContain("O código não confere");
+    await type(input, "abc124");
+    expect(dialog()!.textContent).toContain("O código não confere");
+    await type(input, "abc123");
+    expect(dialog()!.textContent).not.toContain("O código não confere");
+    await esc();
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(btn);
+  });
+
+  it("revogado: Mudar plano e Rotacionar desabilitados dizem como destravar; o link do perfil leva ao perfil", async () => {
+    await mount();
+    await open("Doce Encanto");
+    for (const t of ["Mudar plano", "Rotacionar chave"]) {
+      const b = byText("article button", t) as HTMLButtonElement;
+      expect(b.disabled).toBe(true);
+      expect(b.title).toBe("Reative o Copiloto para mudar");
+    }
+    expect(q("article")?.textContent).toContain("Reative o Copiloto para mudar");
+    expect(q('article a[href="/settings/perfis?perfil=cli-de7731"]')).toBeTruthy();
+    expect(q(".cp-banner")?.textContent).toContain("em 27 dias");
+  });
+
+  it("mudar plano: um ponto de Tab só (roving) e setas trocam o plano", async () => {
+    await mount();
+    await open("Padaria Sol");
+    await click(byText("article button", "Mudar plano"));
+    const cards = qa('[role="dialog"] [role="radio"]');
+    expect(cards.map((c) => c.tabIndex)).toEqual([0, -1]);
+    await act(async () => { cards[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+    expect(cards.map((c) => c.getAttribute("aria-checked"))).toEqual(["false", "true"]);
+    expect(cards.map((c) => c.tabIndex)).toEqual([-1, 0]);
+    expect(document.activeElement).toBe(cards[1]);
+    await act(async () => { cards[1].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })); });
+    expect(cards[0].getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("filtro sem resultado: o detalhe deixa de mostrar o cliente que saiu da lista e a dica só aparece com texto na busca", async () => {
+    await mount();
+    await open("Padaria Sol");
+    expect(q("article")?.textContent).toContain("Padaria Sol");
+    await click(byText('[aria-label="Situação"] button', "Sem saldo"));
+    await flush();
+    expect(names()).toEqual(["Ótica Visão"]);
+    expect(q("article")).toBeNull();
+    expect(q(".cp-detail")?.textContent).toContain("Selecione um cliente");
+    await click(byText('[aria-label="Plano"] button', "Starter"));
+    await flush();
+    expect(q("section")?.textContent).toContain("Nenhum cliente com esses filtros");
+    expect(q("section")?.textContent).not.toContain("Busque pelo nome");
+    await type(q('input[type="search"]') as HTMLInputElement, "zzz");
+    await wait(320);
+    expect(q("section")?.textContent).toContain("Busque pelo nome ou pelo systemClientId");
+    await click(byText("button", "Limpar filtros"));
+    await flush();
+    expect(q("article")?.textContent).toContain("Padaria Sol"); // voltou à lista, volta o detalhe
   });
 });

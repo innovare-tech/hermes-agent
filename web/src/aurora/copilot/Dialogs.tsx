@@ -5,14 +5,16 @@ import { Icon } from "../Icon";
 import { errText } from "../health/api";
 import { copilotApi, type ClientDetail, type CopilotSettings, type Plan } from "./api";
 import { canRevoke, fmtInt, planDiff, planName, PLANS, toolsOf } from "./model";
-import { CpDialog, InlineError, KeyBox, spinIcon } from "./parts";
+import { CpDialog, InlineError, KeyBox, KeyWarn, radioProps, spinIcon } from "./parts";
 
 type Done = (c: ClientDetail) => void;
 
 // ---- Rotacionar ----
 
+const GRACES = [0, 24] as const;
+
 export function RotateDialog({ client, onClose, onDone }: { client: ClientDetail; onClose: () => void; onDone: Done }) {
-  const [grace, setGrace] = useState<0 | 24>(0);
+  const [grace, setGrace] = useState<0 | 24>(24); // a rotina é a troca em 24 horas; "Agora" é para chave vazada
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [key, setKey] = useState<string | null>(null);
@@ -37,19 +39,24 @@ export function RotateDialog({ client, onClose, onDone }: { client: ClientDetail
       icon="key-round"
       lead="Uma chave nova é gerada. Ela continua presa a este cliente e só lê dados dele."
       busy={busy}
+      locked={!!key}
       onClose={onClose}
       footer={
-        <>
-          <button className="au-outline" onClick={onClose} disabled={busy}>
-            {key ? "Fechar" : "Cancelar"}
+        key ? (
+          <button className="au-primary" onClick={onClose}>
+            Já copiei, fechar
           </button>
-          {!key && (
+        ) : (
+          <>
+            <button className="au-outline" onClick={onClose} disabled={busy}>
+              Cancelar
+            </button>
             <button className="au-primary" onClick={run} disabled={busy}>
               {spinIcon(busy, "key-round")}
               {busy ? "Gerando…" : "Gerar chave nova"}
             </button>
-          )}
-        </>
+          </>
+        )
       }
     >
       {!key && (
@@ -57,7 +64,7 @@ export function RotateDialog({ client, onClose, onDone }: { client: ClientDetail
           <span id="cp-rot-l" style={{ fontSize: 13, fontWeight: 600 }}>A chave antiga para de funcionar</span>
           <div className="cp-seg" role="radiogroup" aria-labelledby="cp-rot-l">
             {([[0, "Agora"], [24, "Em 24 horas"]] as const).map(([g, l]) => (
-              <button key={g} role="radio" aria-checked={grace === g} onClick={() => setGrace(g)} disabled={busy}>
+              <button key={g} {...radioProps<0 | 24>(g, GRACES, grace, setGrace)} disabled={busy}>
                 {l}
               </button>
             ))}
@@ -77,6 +84,7 @@ export function RotateDialog({ client, onClose, onDone }: { client: ClientDetail
             Atualize no Aibiz Manager antes de fechar. {grace === 0 ? "A antiga já parou de funcionar." : "A antiga ainda vale por 24 horas."}
           </span>
           <KeyBox value={key} label="Chave nova da API" />
+          <KeyWarn />
         </div>
       )}
     </CpDialog>
@@ -98,10 +106,14 @@ export function RevokeDialog({ client, onClose, onDone }: { client: ClientDetail
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [touched, setTouched] = useState(false);
   const ok = canRevoke(typed, sid);
+  // Não reclama no 1º caractere: só depois de sair do campo ou de digitar o tamanho do código.
+  const mismatch = !ok && !!typed.trim() && (touched || typed.trim().length >= sid.length);
 
   const run = async () => {
-    if (!ok || busy) return;
+    if (busy) return;
+    if (!ok) return setTouched(true);
     setBusy(true);
     setErr("");
     try {
@@ -145,9 +157,14 @@ export function RevokeDialog({ client, onClose, onDone }: { client: ClientDetail
       </ul>
       <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <span style={{ fontSize: 13 }}>
-          Para confirmar, digite <b className="cp-mono" style={{ fontSize: 12.5, padding: "1px 6px", borderRadius: 5, background: "var(--panel2)" }}>{sid}</b>
+          Para confirmar, digite o código do cliente: <b className="cp-mono" style={{ fontSize: 12.5, padding: "1px 6px", borderRadius: 5, background: "var(--panel2)", wordBreak: "break-all" }}>{sid}</b>
         </span>
-        <input autoFocus className="cp-input mono" data-ok={ok} value={typed} placeholder={sid} autoComplete="off" spellCheck={false} onChange={(e) => setTyped(e.target.value)} onKeyDown={(e) => e.key === "Enter" && run()} disabled={busy} />
+        <input autoFocus className="cp-input mono" data-ok={ok} value={typed} placeholder="Digite o código do cliente" aria-invalid={mismatch} aria-describedby={mismatch ? "cp-rev-bad" : undefined} autoComplete="off" spellCheck={false} onChange={(e) => setTyped(e.target.value)} onBlur={() => setTouched(true)} onKeyDown={(e) => e.key === "Enter" && run()} disabled={busy} />
+        {mismatch && (
+          <span id="cp-rev-bad" role="alert" style={{ fontSize: 12.5, color: "var(--err)" }}>
+            O código não confere
+          </span>
+        )}
       </label>
       <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <span style={{ fontSize: 13 }}>
@@ -226,7 +243,7 @@ export function PlanDialog({ client, settings, initial, onClose, onDone }: { cli
     >
       <div className="cp-plans" role="radiogroup" aria-label="Plano">
         {PLANS.map((p) => (
-          <button key={p} role="radio" aria-checked={sel === p} className="cp-plancard" style={{ gap: 5, padding: 12 }} onClick={() => setSel(p)} disabled={busy}>
+          <button key={p} {...radioProps<Plan>(p, PLANS, sel, setSel)} className="cp-plancard" style={{ gap: 5, padding: 12 }} disabled={busy}>
             <span style={{ display: "flex", alignItems: "center", fontFamily: "var(--fd)", fontWeight: 600, fontSize: 16 }}>
               {planName(p, settings.planLabels)}
               {client.plan === p && <span style={{ marginLeft: "auto", fontFamily: "var(--fb)", fontSize: 11, fontWeight: 500, color: "var(--fg3)" }}>atual</span>}
@@ -280,19 +297,24 @@ export function ReactivateDialog({ client, onClose, onDone }: { client: ClientDe
       icon="rotate-ccw"
       lead="O Copiloto volta a funcionar com uma chave nova. A antiga continua inválida e a memória do perfil é mantida."
       busy={busy}
+      locked={!!key}
       onClose={onClose}
       footer={
-        <>
-          <button className="au-outline" onClick={onClose} disabled={busy}>
-            {key ? "Fechar" : "Cancelar"}
+        key ? (
+          <button className="au-primary" onClick={onClose}>
+            Já copiei, fechar
           </button>
-          {!key && (
+        ) : (
+          <>
+            <button className="au-outline" onClick={onClose} disabled={busy}>
+              Cancelar
+            </button>
             <button className="au-primary" onClick={run} disabled={busy}>
               {spinIcon(busy, "rotate-ccw")}
               {busy ? "Reativando…" : "Reativar e gerar chave"}
             </button>
-          )}
-        </>
+          </>
+        )
       }
     >
       {err && <InlineError>{err}</InlineError>}
@@ -301,6 +323,7 @@ export function ReactivateDialog({ client, onClose, onDone }: { client: ClientDe
           <span style={{ fontSize: 13, fontWeight: 600 }}>Acesso reativado. A chave aparece só agora.</span>
           <span style={{ fontSize: 12, color: "var(--fg2)", lineHeight: 1.45 }}>Cadastre a chave nova no Aibiz Manager antes de fechar.</span>
           <KeyBox value={key} label="Chave nova da API" />
+          <KeyWarn />
         </div>
       )}
     </CpDialog>

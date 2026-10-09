@@ -16,7 +16,8 @@ type RawPlaybook = { id: string; name: string; business_id: string | null; trigg
 
 const MODES = ["Observar", "Rascunhar", "Autônomo", "Escutar"];
 export const PLATFORM_ICON: Record<string, string> = { telegram: "send", whatsapp: "phone", discord: "message-circle", email: "mail", slack: "hash", signal: "message-square", api: "plug" };
-const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const BRAND: Record<string, string> = { whatsapp: "WhatsApp", whatsapp_cloud: "WhatsApp Business" };
+const cap = (s: string) => BRAND[s] ?? (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 const json = (method: string, body?: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
 const ops = <T>(path: string, init?: RequestInit) => fetchJSON<T>("/api/ops" + path, init);
@@ -54,7 +55,7 @@ export function severeFromLogs(lines: string[], now = Date.now()): { text: strin
 
 export function healthFrom(st: StatusResponse, platforms: { name: string; enabled: boolean; configured: boolean; error_message?: string | null }[] = [], logs: string[] = []): Health {
   const items = Object.entries(st.gateway_platforms ?? {}).map(([name, p]) => ({
-    name: name[0].toUpperCase() + name.slice(1),
+    name: cap(name),
     status: ["connected", "running", "ready", "ok"].includes(p.state) ? ("ok" as const) : p.error_code ? ("err" as const) : ("warn" as const),
     value: p.error_message ? "erro" : p.state === "connected" ? "conectado" : p.state,
   }));

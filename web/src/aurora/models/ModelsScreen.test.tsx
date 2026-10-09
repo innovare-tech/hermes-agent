@@ -2,6 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api-error";
 import { getState } from "../store";
 
 const net = vi.hoisted(() => ({ fetchJSON: vi.fn() }));
@@ -36,11 +37,12 @@ const LIMITS = { dailyUsd: 15, monthlyUsd: 300, alertPct: 80, onLimit: "pause_no
 const SPEND = { today: 6.9, month: 58.4, dayOfMonth: 8, daysInMonth: 31 };
 
 type RoutingState = { default: unknown; tasks: Record<string, unknown>; taskMeta: unknown };
-let state: { provs: unknown[]; fail: boolean; routing: RoutingState };
+let state: { provs: unknown[]; fail: boolean | "restart"; routing: RoutingState };
 const calls: { url: string; init: Init }[] = [];
 
 function route(url: string, init: Init) {
   calls.push({ url, init });
+  if (state.fail === "restart" && url === "/api/providers") return Promise.reject(new ApiError("Restart required", { status: 503, body: "Restart required", url }));
   if (state.fail && url === "/api/providers") return Promise.reject(new Error("fora do ar"));
   if (url === "/api/providers" && !init) return Promise.resolve(state.provs);
   if (url === "/api/models/routing" && !init) return Promise.resolve(state.routing);
@@ -143,6 +145,20 @@ describe("Modelos", () => {
     state.fail = true;
     await mount();
     expect(document.querySelector("[role=alert]")?.textContent).toContain("Não consegui carregar a configuração de modelos");
+    state.fail = false;
+    await click(byText("button", /Tentar de novo/));
+    await flush();
+    expect(document.body.textContent).toContain("Quem faz o quê");
+    expect(document.querySelector("[role=alert]")).toBeNull();
+  });
+
+  it("503 'Restart required': faixa honesta pedindo para reiniciar o Hermes, em vez de erro genérico", async () => {
+    state.fail = "restart";
+    await mount();
+    const alert = document.querySelector("[role=alert]")!;
+    expect(alert.textContent).toContain("O painel precisa reiniciar");
+    expect(alert.textContent).toContain("O painel foi atualizado e precisa reiniciar para carregar a versão nova. Reinicie o Hermes.");
+    expect(alert.textContent).not.toContain("Não consegui carregar a configuração");
     state.fail = false;
     await click(byText("button", /Tentar de novo/));
     await flush();

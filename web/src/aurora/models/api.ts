@@ -1,6 +1,10 @@
 // Modelos (design A5): contrato com /api/providers, /api/models/routing, /api/usage/spend e /api/limits,
 // tipos e funções puras da tela (herança, custo, efeitos da remoção, limites).
 import { fetchJSON } from "@/lib/api";
+import { ApiError } from "@/lib/api-error";
+
+/** O servidor responde 503 "Restart required" quando o Hermes foi atualizado e o painel ainda roda o código antigo. */
+export const isRestartRequired = (e: unknown) => e instanceof ApiError && e.status === 503 && /restart required/i.test(`${e.message} ${e.body}`);
 
 export type Cap = "text" | "vision" | "audio" | "decision";
 export type ModelEntry = {

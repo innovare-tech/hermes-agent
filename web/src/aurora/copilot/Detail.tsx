@@ -29,6 +29,9 @@ const TOOL_ICON: Record<string, string> = {
 const toolIcon = (key: string) => TOOL_ICON[key] ?? "wrench";
 
 const PROFILES_ROUTE = "/settings/perfis";
+/** Leva a Perfis já destacando o perfil do cliente. */
+const profileHref = (id: string) => `${PROFILES_ROUTE}?perfil=${encodeURIComponent(id)}`;
+const REVOKED_HINT = "Reative o Copiloto para mudar";
 
 export type DetailActions = { onPlan: (initial?: Plan) => void; onRotate: () => void; onRevoke: () => void; onReactivate: () => void };
 
@@ -58,24 +61,26 @@ export function ClientDetailView({ d, now, tab, onTab, planLabels, actions }: { 
   return (
     <article style={{ display: "flex", flexDirection: "column", animation: "hblurin .4s both" }} aria-label={`Cliente ${d.name}`}>
       <div className="cp-dhead">
-        <Avatar id={d.systemClientId} name={d.name} size={46} />
-        <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0, flex: 1 }}>
-          <h2 className="au-display" style={{ margin: 0, fontSize: 22, lineHeight: 1.15 }}>{d.name}</h2>
-          <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12, color: "var(--fg2)" }}>
-            <span className="cp-mono">systemClientId {d.systemClientId}</span>
-            <span style={{ padding: "1px 8px", borderRadius: 999, border: "1px solid var(--line2)", fontSize: 11, fontWeight: 600, color: "var(--fg)" }}>Plano {planName(d.plan, planLabels)}</span>
-            <StatusPill status={d.status} />
-            <Link to={PROFILES_ROUTE} className="cp-mono" title="Abrir Configurações › Perfis" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11 }}>
-              <Icon name="layers" size={11} />
-              perfil {d.profileId}
-            </Link>
-          </span>
+        <div className="cp-who">
+          <Avatar id={d.systemClientId} name={d.name} size={46} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0, flex: 1 }}>
+            <h2 className="au-display" style={{ margin: 0, fontSize: 22, lineHeight: 1.15, overflowWrap: "anywhere" }}>{d.name}</h2>
+            <span className="cp-meta">
+              <span className="cp-mono cp-ellip" title={d.systemClientId}>systemClientId {d.systemClientId}</span>
+              <span style={{ padding: "1px 8px", borderRadius: 999, border: "1px solid var(--line2)", fontSize: 11.5, fontWeight: 600, color: "var(--fg)", whiteSpace: "nowrap" }}>Plano {planName(d.plan, planLabels)}</span>
+              <StatusPill status={d.status} />
+              <Link to={profileHref(d.profileId)} className="cp-mono cp-plink" title={`Abrir o perfil ${d.profileId} em Configurações › Perfis`}>
+                <Icon name="layers" size={11} />
+                <span className="cp-ellip">perfil {d.profileId}</span>
+              </Link>
+            </span>
+          </div>
         </div>
         <div className="cp-acts">
-          <button className="cp-act" disabled={revoked} onClick={() => actions.onPlan()}>
+          <button className="cp-act" disabled={revoked} title={revoked ? REVOKED_HINT : undefined} aria-describedby={revoked ? `${tid}-hint` : undefined} onClick={() => actions.onPlan()}>
             Mudar plano
           </button>
-          <button className="cp-act" disabled={revoked} onClick={actions.onRotate}>
+          <button className="cp-act" disabled={revoked} title={revoked ? REVOKED_HINT : undefined} aria-describedby={revoked ? `${tid}-hint` : undefined} onClick={actions.onRotate}>
             <Icon name="key-round" size={13} />
             Rotacionar chave
           </button>
@@ -87,6 +92,11 @@ export function ClientDetailView({ d, now, tab, onTab, planLabels, actions }: { 
             <button className="cp-act danger" onClick={actions.onRevoke}>
               Revogar acesso
             </button>
+          )}
+          {revoked && (
+            <span id={`${tid}-hint`} className="cp-actnote">
+              {REVOKED_HINT} o plano ou a chave.
+            </span>
           )}
         </div>
       </div>
@@ -154,7 +164,7 @@ function ToolsTab({ d, planLabels }: { d: ClientDetail; planLabels?: Record<stri
               <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0, flex: 1 }}>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>{t.label}</span>
                 <span style={{ fontSize: 11.5, color: "var(--fg2)", lineHeight: 1.4 }}>Gasta {plural(t.weight, "crédito", "créditos")} por uso.</span>
-                <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: on ? "var(--ok)" : "var(--fg3)" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: on ? "var(--ok)" : "var(--fg2)" }}>
                   <Icon name={on ? "circle-check" : "lock"} size={11} />
                   {revoked ? "Sem acesso (revogado)" : t.reason}
                 </span>
@@ -189,7 +199,7 @@ function UsageTab({ d, now }: { d: ClientDetail; now: number }) {
         <div className="cp-bar" role="progressbar" aria-label="Créditos usados no mês" aria-valuemin={0} aria-valuemax={100} aria-valuenow={band.pct} data-tone={band.tone}>
           <span style={{ width: `${band.pct}%`, background: band.color }} />
         </div>
-        <span style={{ fontSize: 11.5, color: "var(--fg3)", lineHeight: 1.45 }}>
+        <span style={{ fontSize: 11.5, color: "var(--fg2)", lineHeight: 1.45 }}>
           Cada consulta gasta o peso da ferramenta{range ? ` (${range} créditos)` : ""} e mais 1 crédito a cada 2.000 tokens da conversa. Renova {renewLabel(now)}.
         </span>
       </div>
@@ -230,7 +240,7 @@ function UsageTab({ d, now }: { d: ClientDetail; now: number }) {
               <span aria-hidden="true">
                 <span style={{ width: `${r.pct}%` }} />
               </span>
-              <span className="cp-mono" style={{ fontSize: 11, color: "var(--fg3)", width: 32, textAlign: "right" }}>{r.pct}%</span>
+              <span className="cp-mono" style={{ fontSize: 11.5, color: "var(--fg2)", width: 34, textAlign: "right" }}>{r.pct}%</span>
             </span>
           </div>
         ))}
@@ -239,7 +249,7 @@ function UsageTab({ d, now }: { d: ClientDetail; now: number }) {
           <span>Gasto com IA: {fmtUsd(m.spendUsd)}</span>
         </div>
       </div>
-      <span style={{ fontSize: 11.5, color: "var(--fg3)" }}>Tokens são os pedaços de texto que a IA lê e escreve; é por eles que o provedor cobra.</span>
+      <span style={{ fontSize: 11.5, color: "var(--fg2)" }}>Tokens são os pedaços de texto que a IA lê e escreve; é por eles que o provedor cobra.</span>
     </div>
   );
 }
@@ -315,7 +325,7 @@ function AuditTab({ d, now }: { d: ClientDetail; now: number }) {
           <span style={{ fontSize: 12.5, color: "var(--fg2)", lineHeight: 1.45 }}>
             {d.status === "revoked" ? "O acesso foi revogado antes de qualquer consulta." : "O gestor ainda não fez nenhuma pergunta. Quando fizer, cada consulta aparece aqui com o filtro do cliente."}
           </span>
-          <Link to={PROFILES_ROUTE} style={{ fontSize: 12.5, fontWeight: 600 }}>
+          <Link to={profileHref(d.profileId)} style={{ fontSize: 12.5, fontWeight: 600 }}>
             Abrir o perfil {d.profileId}
           </Link>
         </div>
@@ -330,19 +340,19 @@ function AuditTab({ d, now }: { d: ClientDetail; now: number }) {
             <button aria-expanded={isOpen} aria-controls={`${base}-${i}`} onClick={() => toggle(i)}>
               <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 <span className="cp-mono" style={{ fontSize: 12 }}>{clock(a.at)}</span>
-                <span style={{ fontSize: 10.5, color: "var(--fg3)" }}>{auditDay(a.at, now)}</span>
+                <span style={{ fontSize: 11.5, color: "var(--fg2)" }}>{auditDay(a.at, now)}</span>
               </span>
               <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-                <span style={{ fontSize: 13, lineHeight: 1.4 }}>{a.question ? `“${a.question}”` : <span style={{ color: "var(--fg3)" }}>pergunta não registrada</span>}</span>
-                <span style={{ fontSize: 11.5, color: "var(--fg3)" }}>{askedBy(a.askedBy)}</span>
+                <span style={{ fontSize: 13, lineHeight: 1.4, overflowWrap: "anywhere" }}>{a.question ? `“${a.question}”` : <span style={{ color: "var(--fg2)" }}>pergunta não registrada</span>}</span>
+                <span style={{ fontSize: 11.5, color: "var(--fg2)" }}>{askedBy(a.askedBy)}</span>
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: v.tone === "ok" ? "var(--fg2)" : color, minWidth: 0, fontWeight: v.scope ? 600 : 400 }}>
                 <Icon name={v.icon} size={13} />
-                <span className="cp-ellip">{v.tool}</span>
+                <span className="cp-ellip" title={v.tool}>{v.tool}</span>
               </span>
               <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
-                <span className="cp-mono" style={{ fontSize: 12.5, color: a.rows ? "var(--fg)" : "var(--fg3)" }}>{rowsLabel(a.rows)}</span>
-                <span style={{ fontSize: 10, color: "var(--fg3)" }}>linhas</span>
+                <span className="cp-mono" style={{ fontSize: 12.5, color: a.rows ? "var(--fg)" : "var(--fg2)" }}>{rowsLabel(a.rows)}</span>
+                <span style={{ fontSize: 11.5, color: "var(--fg2)" }}>linhas</span>
               </span>
               <Icon name={isOpen ? "chevron-up" : "chevron-down"} size={14} color="var(--fg3)" />
             </button>
@@ -353,7 +363,7 @@ function AuditTab({ d, now }: { d: ClientDetail; now: number }) {
                   <Icon name={v.noteIcon} size={13} />
                   {v.note}
                 </span>
-                {a.credits > 0 && <span style={{ fontSize: 11.5, color: "var(--fg3)" }}>{plural(a.credits, "crédito gasto", "créditos gastos")} nesta consulta.</span>}
+                {a.credits > 0 && <span style={{ fontSize: 11.5, color: "var(--fg2)" }}>{plural(a.credits, "crédito gasto", "créditos gastos")} nesta consulta.</span>}
               </div>
             )}
           </div>

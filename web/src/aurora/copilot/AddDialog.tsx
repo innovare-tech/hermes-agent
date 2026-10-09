@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
 import { errText } from "../health/api";
 import { copilotApi, type ClientDetail, type CopilotSettings, type DirectoryClient, type Plan } from "./api";
-import { CREATE_STEPS, directoryInfo, fmtInt, planName, PLANS, plural, profilePreview, stepDetail, toolsOf } from "./model";
-import { Avatar, CpDialog, InlineError, KeyBox, spinIcon } from "./parts";
+import { CREATE_STEPS, directoryInfo, MANUAL_STEP, fmtInt, planName, PLANS, plural, profilePreview, stepDetail, toolsOf } from "./model";
+import { Avatar, CpDialog, InlineError, KeyBox, KeyWarn, radioProps, spinIcon } from "./parts";
 
 const STEP_LABELS = ["Cliente", "Plano", "Criar"];
 const TICK_MS = 550;
@@ -108,6 +108,8 @@ export function AddDialog({ settings, onClose, onCreated }: { settings: CopilotS
       title="Adicionar cliente ao Copiloto"
       width={600}
       busy={running}
+      locked={done || step === 2}
+      outside={false}
       onClose={onClose}
       header={
         <ol className="cp-steps" aria-label="Passos" style={{ listStyle: "none", margin: "0 0 0 auto", padding: 0 }}>
@@ -115,7 +117,7 @@ export function AddDialog({ settings, onClose, onCreated }: { settings: CopilotS
             const cur = step === i;
             const ok = step > i || done;
             return (
-              <li key={l} aria-current={cur ? "step" : undefined} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: cur ? "var(--fg)" : "var(--fg3)" }}>
+              <li key={l} aria-current={cur ? "step" : undefined} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: cur ? "var(--fg)" : "var(--fg2)" }}>
                 <span style={{ width: 20, height: 20, borderRadius: "50%", background: cur || ok ? "var(--acc)" : "var(--panel2)", color: cur || ok ? "var(--accFg)" : "var(--fg3)", display: "grid", placeItems: "center", fontSize: 10.5, fontWeight: 700 }}>
                   {ok ? <Icon name="check" size={11} /> : i + 1}
                 </span>
@@ -132,12 +134,14 @@ export function AddDialog({ settings, onClose, onCreated }: { settings: CopilotS
               Voltar
             </button>
           )}
-          <button className="au-outline" onClick={onClose} disabled={running} style={{ marginLeft: "auto" }}>
-            {done ? "Fechar" : "Cancelar"}
-          </button>
-          <button className="au-primary" onClick={onNext} disabled={nextDisabled} style={{ opacity: nextDisabled ? 0.4 : 1, cursor: nextDisabled ? "not-allowed" : "pointer" }}>
-            {running ? spinIcon(true, "") : <Icon name={done ? "arrow-right" : step === 2 ? "user-plus" : "arrow-right"} size={14} />}
-            {done ? "Ver o cliente" : step === 2 ? (running ? "Criando…" : "Criar Copiloto") : "Continuar"}
+          {!done && (
+            <button className="au-outline" onClick={onClose} disabled={running} style={{ marginLeft: "auto" }}>
+              Cancelar
+            </button>
+          )}
+          <button className="au-primary" onClick={onNext} disabled={nextDisabled} style={{ opacity: nextDisabled ? 0.4 : 1, cursor: nextDisabled ? "not-allowed" : "pointer", ...(done ? { marginLeft: "auto" } : null) }}>
+            {running ? spinIcon(true, "") : <Icon name={done ? "check" : step === 2 ? "user-plus" : "arrow-right"} size={14} />}
+            {done ? "Já copiei, fechar" : step === 2 ? (running ? "Criando…" : "Criar Copiloto") : "Continuar"}
           </button>
         </>
       }
@@ -169,11 +173,11 @@ export function AddDialog({ settings, onClose, onCreated }: { settings: CopilotS
                 <Avatar id={c.systemClientId} name={c.name} size={28} />
                 <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                   <span className="cp-ellip" style={{ fontSize: 13, fontWeight: 500 }}>{c.name}</span>
-                  <span className="cp-mono cp-ellip" style={{ fontSize: 10.5, color: "var(--fg3)" }}>
+                  <span className="cp-mono cp-ellip" title={c.systemClientId} style={{ fontSize: 11.5, color: "var(--fg2)" }}>
                     {c.systemClientId} · {directoryInfo(c)}
                   </span>
                 </span>
-                {c.hasCopilot && <span style={{ fontSize: 11, color: "var(--fg3)" }}>já tem Copiloto</span>}
+                {c.hasCopilot && <span style={{ fontSize: 11.5, color: "var(--fg2)" }}>já tem Copiloto</span>}
                 {picked?.systemClientId === c.systemClientId && <Icon name="circle-check" size={15} color="var(--acc)" />}
               </button>
             ))}
@@ -197,7 +201,7 @@ export function AddDialog({ settings, onClose, onCreated }: { settings: CopilotS
           </span>
           <div className="cp-plans" role="radiogroup" aria-label="Plano">
             {PLANS.map((p) => (
-              <button key={p} role="radio" aria-checked={plan === p} className="cp-plancard" onClick={() => setPlan(p)}>
+              <button key={p} {...radioProps<Plan>(p, PLANS, plan, setPlan)} className="cp-plancard">
                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontFamily: "var(--fd)", fontWeight: 600, fontSize: 18 }}>{planName(p, settings.planLabels)}</span>
                   {plan === p && <Icon name="circle-check" size={16} color="var(--acc)" />}
@@ -226,18 +230,27 @@ export function AddDialog({ settings, onClose, onCreated }: { settings: CopilotS
           <span style={{ fontSize: 13, color: "var(--fg2)" }}>{done ? "Tudo criado:" : "Revise. Ao criar, o Hermes faz isto:"}</span>
           <ol className="cp-table" style={{ listStyle: "none", margin: 0, padding: 0 }} aria-label="Etapas">
             {CREATE_STEPS.map((l, i) => {
-              const fin = prog > i || done;
+              const manual = i === MANUAL_STEP; // o passo do Aibiz Manager é da pessoa: nunca ganha ✓
+              const fin = !manual && (prog > i || done);
               const cur = running && prog === i;
-              const color = fin ? "var(--ok)" : cur ? "var(--acc)" : "var(--fg3)";
+              const color = fin ? "var(--ok)" : cur ? "var(--acc)" : "var(--fg2)";
               return (
-                <li key={l} className="cp-etapa" aria-current={cur ? "step" : undefined}>
+                <li key={l} className="cp-etapa" data-done={fin} aria-current={cur ? "step" : undefined}>
                   <span style={{ width: 22, height: 22, flex: "none", borderRadius: "50%", display: "grid", placeItems: "center", background: fin ? "color-mix(in oklab,var(--ok) 18%,transparent)" : cur ? "var(--accSoft)" : "var(--panel2)", color }}>
-                    <Icon name={fin ? "check" : cur ? "loader-circle" : "circle"} size={12} className={cur ? "au-spin" : undefined} />
+                    <Icon name={fin ? "check" : cur ? "loader-circle" : manual && done ? "user-round" : "circle"} size={12} className={cur ? "au-spin" : undefined} />
                   </span>
                   <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                     <span style={{ fontSize: 13, fontWeight: 500 }}>{l}</span>
-                    <span className={i === 2 ? "cp-mono" : undefined} style={{ fontSize: 11.5, color: "var(--fg2)", wordBreak: "break-all" }}>
-                      {stepDetail(i, { profile: done ? profile : profilePreview(picked.name), sid: picked.systemClientId, plan: planName(plan, settings.planLabels), tools: tools.length, credits })}
+                    <span style={{ fontSize: 12, color: "var(--fg2)", overflowWrap: "break-word" }}>
+                      {i === 2 ? (
+                        <>
+                          systemClientId = "<span className="cp-mono" style={{ wordBreak: "break-all" }}>{picked.systemClientId}</span>" em toda consulta · só leitura
+                        </>
+                      ) : i === 0 ? (
+                        <span className="cp-mono" style={{ wordBreak: "break-all" }}>
+                          {done ? profile : profilePreview(picked.name)}
+                        </span>
+                      ) : stepDetail(i, { profile: done ? profile : profilePreview(picked.name), sid: picked.systemClientId, plan: planName(plan, settings.planLabels), tools: tools.length, credits })}
                     </span>
                   </span>
                 </li>
@@ -250,6 +263,7 @@ export function AddDialog({ settings, onClose, onCreated }: { settings: CopilotS
               <span style={{ fontSize: 13, fontWeight: 600 }}>Pronto. O Copiloto de {picked.name} está criado.</span>
               <span style={{ fontSize: 12, color: "var(--fg2)", lineHeight: 1.45 }}>Cadastre esta chave no Aibiz Manager para o gestor ver o Copiloto. Ela aparece só agora: se fechar sem guardar, é preciso rotacionar.</span>
               <KeyBox value={key} />
+              <KeyWarn />
             </div>
           )}
         </>

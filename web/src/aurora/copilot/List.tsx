@@ -83,7 +83,7 @@ export function ClientList({
         {!loading && !failed && items.length === 0 && filtered && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8, padding: "22px 16px" }}>
             <span style={{ fontSize: 13.5, fontWeight: 600 }}>Nenhum cliente com esses filtros</span>
-            <span style={{ fontSize: 12.5, color: "var(--fg2)" }}>Busque pelo nome ou pelo systemClientId.</span>
+            {filters.q.trim() && <span style={{ fontSize: 12.5, color: "var(--fg2)" }}>Busque pelo nome ou pelo systemClientId.</span>}
             <button className="au-outline" style={{ padding: "6px 11px", fontSize: 12.5 }} onClick={() => onFilters({ q: "", status: "", plan: "" })}>
               Limpar filtros
             </button>
@@ -100,15 +100,15 @@ export function ClientList({
                   <span className="cp-ellip" style={{ fontSize: 13.5, fontWeight: 600 }}>{c.name}</span>
                   <PlanTag plan={c.plan} labels={planLabels} />
                 </span>
-                <span style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--fg3)", whiteSpace: "nowrap" }}>
-                  <span className="cp-mono cp-ellip" style={{ maxWidth: 90 }}>{c.systemClientId}</span>
+                <span style={{ display: "flex", gap: 8, fontSize: 11.5, color: "var(--fg2)", whiteSpace: "nowrap" }}>
+                  <span className="cp-mono cp-ellip" style={{ maxWidth: 90 }} title={c.systemClientId}>{c.systemClientId}</span>
                   <span>{plural(c.month.conversations, "conversa", "conversas")}</span>
                   <span>{fmtUsd(c.month.spendUsd)}</span>
                 </span>
               </span>
               <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
                 <StatusPill status={c.status} />
-                <span style={{ fontSize: 10.5, color: "var(--fg3)", whiteSpace: "nowrap" }}>{rowLast(c, now)}</span>
+                <span style={{ fontSize: 11.5, color: "var(--fg2)", whiteSpace: "nowrap" }}>{rowLast(c, now)}</span>
               </span>
             </button>
           ))}

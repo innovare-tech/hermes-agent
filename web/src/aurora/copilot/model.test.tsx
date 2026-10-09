@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CatalogTool, Client, ClientDetail } from "./api";
 import {
   askedBy, auditView, avatarColor, bannerOf, byLabel, canRevoke, countOf, creditBand, dayBars, directoryInfo, fmtTokens, fmtUsd, initial, isNewClient, kpiRow, lastLabel, lastParts, mergeClients, nextPlan, pageLabel,
-  planDiff, planName, profilePreview, purgeLabel, queryText, replaceClient, rowLast, sortClients, toolUsage, toolsOf,
+  planDiff, planName, profilePreview, purgeDays, purgeLabel, queryText, replaceClient, rowLast, sortClients, toolUsage, toolsOf,
 } from "./model";
 
 const NOW = Date.UTC(2026, 9, 9, 15, 0, 0) / 1000; // 09/10/2026 12:00 em Brasília
@@ -207,12 +207,26 @@ describe("faixa de contexto do detalhe", () => {
     expect(bannerOf(d({ lastActivityAt: null, createdAt: NOW - DAY }), NOW)?.text).toContain("Cliente novo");
     expect(bannerOf(d({}), NOW)).toBeNull();
   });
-  it("prazo da memória e quem revogou", () => {
-    expect(purgeLabel(NOW + DAY / 2, NOW)).toMatch(/^em 1 dia/);
-    expect(purgeLabel(NOW - 10, NOW)).toBe("na próxima limpeza");
-    expect(byLabel("painel")).toBe("a equipe, pelo painel");
-    expect(byLabel("Carla")).toBe("Carla");
-    expect(byLabel(null)).toBe("a equipe, pelo painel");
+  it("prazo da memória: dias por data, estável ao longo do dia, igual aos 30 dias do diálogo", () => {
+    const noon = new Date(2026, 9, 9, 12, 0, 0).getTime() / 1000; // meio-dia local
+    const purge = noon + 30 * DAY;
+    expect(purgeLabel(purge, noon)).toMatch(/^em 30 dias \(\d\d\/\d\d\)$/);
+    expect(purgeLabel(purge, noon + 5 * 3600)).toMatch(/^em 30 dias/); // 5 horas depois: o mesmo número
+    expect(purgeLabel(purge, noon - 3 * 3600)).toMatch(/^em 30 dias/);
+    expect(purgeLabel(purge, noon + DAY)).toMatch(/^em 29 dias/);
+    expect(purgeLabel(noon + 3600, noon)).toBe("na próxima limpeza"); // hoje mesmo
+    expect(purgeLabel(noon - 10, noon)).toBe("na próxima limpeza");
+    expect(purgeDays(noon + 3 * DAY + 600, noon)).toBe(3);
+    const b = bannerOf(d({ status: "revoked", revoked: { at: noon, by: "painel", reason: null, purgeAt: purge } }), noon);
+    expect(b?.text).toContain("em 30 dias");
+  });
+  it("quem revogou, com a preposição: o painel é a equipe", () => {
+    expect(byLabel("painel")).toBe("pela equipe (painel)");
+    expect(byLabel(null)).toBe("pela equipe (painel)");
+    expect(byLabel("Carla")).toBe("por Carla");
+    const b = bannerOf(d({ status: "revoked", revoked: { at: NOW, by: "painel", reason: null, purgeAt: NOW + 30 * DAY } }), NOW);
+    expect(b?.text).toContain("pela equipe (painel)");
+    expect(b?.text).not.toContain("por a equipe");
   });
 });
 

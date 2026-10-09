@@ -9,7 +9,7 @@ export { plural };
 export const STATUS: Record<Status, { label: string; color: string }> = {
   active: { label: "Ativo", color: "var(--ok)" },
   no_credit: { label: "Sem saldo", color: "var(--warn)" },
-  revoked: { label: "Revogado", color: "var(--fg3)" },
+  revoked: { label: "Revogado", color: "var(--fg2)" },
 };
 
 export const STATUS_FILTERS: { key: "" | Status; label: string }[] = [
@@ -116,14 +116,22 @@ export const renewLabel = (now: number) => {
   return `dia 1º de ${new Date(d.getFullYear(), d.getMonth() + 1, 1).toLocaleDateString("pt-BR", { month: "long" })}`;
 };
 
-/** "em 29 dias (08/11)"; passou do prazo: "na próxima limpeza". */
+const dayStart = (ts: number) => {
+  const d = new Date(ts * 1000);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+};
+
+/** Dias de memória que faltam, contados por data (não por horas): o número só muda à meia-noite e a revogação de hoje dá 30. */
+export const purgeDays = (purgeAt: number, now: number) => Math.round((dayStart(purgeAt) - dayStart(now)) / 86400_000);
+
+/** "em 30 dias (08/11)"; passou do prazo: "na próxima limpeza". */
 export function purgeLabel(purgeAt: number, now: number): string {
-  const days = Math.ceil((purgeAt - now) / 86400);
+  const days = purgeDays(purgeAt, now);
   return days <= 0 ? "na próxima limpeza" : `em ${plural(days, "dia", "dias")} (${dm(purgeAt)})`;
 }
 
-/** Quem revogou: "painel" é a própria equipe, pela tela. */
-export const byLabel = (by: string | null | undefined) => (!by || by === "painel" ? "a equipe, pelo painel" : by);
+/** Quem revogou, já com a preposição: "painel" é a própria equipe, pela tela ("pela equipe (painel)"); um nome vira "por Carla". */
+export const byLabel = (by: string | null | undefined) => (!by || by === "painel" ? "pela equipe (painel)" : `por ${by}`);
 
 // ---- créditos ----
 
@@ -241,7 +249,7 @@ export function bannerOf(d: Pick<ClientDetail, "status" | "plan" | "revoked" | "
     return {
       tone: "muted",
       icon: "ban",
-      text: `Acesso revogado ${whenLabel(d.revoked.at, now)} por ${byLabel(d.revoked.by)}${why}. O gestor vê “Copiloto indisponível”. A memória do perfil é apagada ${purgeLabel(d.revoked.purgeAt, now)}.`,
+      text: `Acesso revogado ${whenLabel(d.revoked.at, now)} ${byLabel(d.revoked.by)}${why}. O gestor vê “Copiloto indisponível”. A memória do perfil é apagada ${purgeLabel(d.revoked.purgeAt, now)}.`,
     };
   }
   if (d.status === "no_credit") {
@@ -268,6 +276,9 @@ export const CREATE_STEPS = [
   "Conectar ao Aibiz Manager",
 ] as const;
 
+/** Índice da etapa que a pessoa faz sozinha, no Aibiz Manager: o Hermes não a conclui, então nunca ganha ✓. */
+export const MANUAL_STEP = 4;
+
 /** Descrição de cada etapa na revisão. */
 export function stepDetail(i: number, o: { profile: string; sid: string; plan: string; tools: number; credits: number }): string {
   return [
@@ -275,7 +286,7 @@ export function stepDetail(i: number, o: { profile: string; sid: string; plan: s
     "mostrada uma vez no final",
     `systemClientId = "${o.sid}" em toda consulta · só leitura`,
     `${o.plan}: ${plural(o.tools, "ferramenta", "ferramentas")} · ${fmtInt(o.credits)} créditos por mês`,
-    "cadastre a chave no Aibiz Manager para o gestor ver o Copiloto",
+    "você faz no Aibiz Manager com a chave abaixo",
   ][i];
 }
 

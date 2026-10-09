@@ -17,7 +17,7 @@ describe("healthFrom", () => {
       items: [
         { name: "Gateway de mensagens", status: "ok", value: "ativo" },
         { name: "Telegram", status: "ok", value: "conectado" },
-        { name: "Whatsapp", status: "warn", value: "pairing" },
+        { name: "WhatsApp", status: "warn", value: "pairing" },
         { name: "Discord", status: "err", value: "erro" },
       ],
     });

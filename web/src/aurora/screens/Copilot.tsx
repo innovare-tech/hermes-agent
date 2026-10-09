@@ -197,14 +197,17 @@ export function Copilot() {
   const empty = loaded && !listFailed && counts?.all === 0 && !filtered;
   const fatal = listFailed && !loaded;
   const labels = settings?.planLabels;
+  // Com filtro, o cliente aberto pode sair da lista: o detalhe dele deixa de aparecer até a escolha de outro (ou até voltar).
+  const gone = !!sel && filtered && loaded && !listBusy && !listFailed && !next && !items.some((c) => c.systemClientId === sel);
 
   const needSettings = (title: string) => <NeedSettings title={title} busy={settingsBusy} onClose={close} onRetry={loadSettings} />;
 
   return (
     <div className="cp-root">
+      <div className="cp-cq">
       <div className="cp-page">
         <div className="cp-head">
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 620 }}>
+          <div className="cp-headl">
             <span className="au-label">Operação</span>
             <div className="cp-title">
               <h1 className="au-h1">Clientes do Copiloto</h1>
@@ -215,9 +218,9 @@ export function Copilot() {
             </p>
           </div>
           {!fatal && (
-            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 18, flex: "none" }}>
+            <div className="cp-headr">
               {counts && (
-                <div role="group" aria-label="Resumo do mês" style={{ display: "flex", alignItems: "center", gap: 18 }}>
+                <div role="group" aria-label="Resumo do mês" className="cp-kpirow">
                   <div className="cp-kpi">
                     <b>{k.active}</b>
                     <span>ativos</span>
@@ -273,14 +276,14 @@ export function Copilot() {
               onRetry={() => setRetryTick((t) => t + 1)}
             />
             <div className="cp-detail" aria-busy={!detail && !!sel && !detailFailed}>
-              {!sel && loaded && <Pick text="Escolha um cliente na lista." />}
-              {(!sel && !loaded) || (sel && !detail && !detailFailed) ? <DetailSkeleton /> : null}
-              {sel && detailFailed && (
+              {((!sel && loaded) || gone) && <Pick text="Selecione um cliente na lista." />}
+              {!gone && ((!sel && !loaded) || (sel && !detail && !detailFailed)) ? <DetailSkeleton /> : null}
+              {sel && detailFailed && !gone && (
                 <div style={{ padding: 24 }}>
                   <ErrorState title="Não consegui carregar este cliente" text="Os dados do Copiloto dele não foram alterados. Só esta tela não carregou." busy={false} onRetry={() => setDetailTick((t) => t + 1)} />
                 </div>
               )}
-              {detail && (
+              {detail && !gone && (
                 <ClientDetailView
                   d={detail}
                   now={now}
@@ -298,6 +301,7 @@ export function Copilot() {
             </div>
           </div>
         )}
+      </div>
       </div>
 
       {dlg?.kind === "add" && (settings ? <AddDialog settings={settings} onClose={close} onCreated={created} /> : needSettings("Adicionar cliente ao Copiloto"))}

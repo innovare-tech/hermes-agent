@@ -34,7 +34,8 @@ export function InlineError({ children }: { children: ReactNode }) {
   );
 }
 
-/** Diálogo do painel com ícone, título e descrição. `busy` trava o Esc e o clique fora (ex.: durante a criação). Devolve o foco a quem abriu. */
+/** Diálogo do painel com ícone, título e descrição. `busy` e `locked` travam o Esc e o clique fora (durante a criação; com a chave na tela).
+ *  `outside={false}` desliga só o clique fora. Devolve o foco a quem abriu: o botão é lido na renderização, antes de um `autoFocus` do conteúdo roubar o foco. */
 export function CpDialog({
   title,
   lead,
@@ -43,6 +44,8 @@ export function CpDialog({
   role = "dialog",
   width = 500,
   busy,
+  locked,
+  outside = true,
   onClose,
   children,
   footer,
@@ -55,6 +58,8 @@ export function CpDialog({
   role?: "dialog" | "alertdialog";
   width?: number;
   busy?: boolean;
+  locked?: boolean;
+  outside?: boolean;
   onClose: () => void;
   children: ReactNode;
   footer: ReactNode;
@@ -64,19 +69,20 @@ export function CpDialog({
   const tid = useId();
   const lid = useId();
   const box = useRef<HTMLDivElement>(null);
-  useEscape(() => !busy && onClose());
+  const [back] = useState(() => document.activeElement as HTMLElement | null);
+  const stuck = busy || locked;
+  useEscape(() => !stuck && onClose());
 
   useEffect(() => {
-    const back = document.activeElement as HTMLElement | null;
     const el = box.current;
     if (el && !el.contains(document.activeElement)) el.focus();
     return () => back?.focus?.();
-  }, []);
+  }, [back]);
 
   // Tab fica dentro do diálogo (aria-modal não prende o foco sozinho).
   const trap = (e: KeyboardEvent) => {
     if (e.key !== "Tab" || !box.current) return;
-    const f = [...box.current.querySelectorAll<HTMLElement>('button:not(:disabled),[href],input:not(:disabled),textarea:not(:disabled),[tabindex]:not([tabindex="-1"])')];
+    const f = [...box.current.querySelectorAll<HTMLElement>('button:not(:disabled):not([tabindex="-1"]),[href],input:not(:disabled),textarea:not(:disabled),[tabindex]:not([tabindex="-1"])')];
     if (!f.length) return;
     const first = f[0];
     const last = f[f.length - 1];
@@ -90,7 +96,7 @@ export function CpDialog({
   };
 
   return (
-    <div className="cp-scrim" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
+    <div className="cp-scrim" onMouseDown={(e) => outside && e.target === e.currentTarget && !stuck && onClose()}>
       <div ref={box} tabIndex={-1} role={role} aria-modal="true" aria-labelledby={tid} aria-describedby={lead ? lid : undefined} className="cp-dlg" data-tone={tone} style={{ width: `min(${width}px,100%)` }} onKeyDown={trap}>
         <div className="cp-dlg-body">
           <div style={{ display: "flex", flexDirection: header ? "row" : "column", alignItems: header ? "center" : "flex-start", gap: header ? 12 : 10 }}>
@@ -117,6 +123,33 @@ export function CpDialog({
   );
 }
 
+/** Aviso embaixo da chave: ela não volta, e por isso Esc e clique fora não fecham a janela. */
+export const KeyWarn = () => (
+  <div className="cp-warn">
+    <Icon name="triangle-alert" size={14} />
+    <span>Depois de fechar, a chave não aparece de novo. Esta janela só fecha pelo botão abaixo.</span>
+  </div>
+);
+
+/** Props de um `role="radio"` com roving tabindex: só o marcado entra no Tab; as setas (e Home/End) movem a marcação e o foco. */
+export function radioProps<T>(value: T, all: readonly T[], current: T, set: (v: T) => void) {
+  return {
+    role: "radio" as const,
+    "aria-checked": current === value,
+    tabIndex: current === value ? 0 : -1,
+    onClick: () => set(value),
+    onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
+      const i = all.indexOf(value);
+      const n = e.key === "ArrowRight" || e.key === "ArrowDown" ? i + 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? all.length - 1 : null;
+      if (n === null) return;
+      e.preventDefault();
+      const k = (n + all.length) % all.length;
+      set(all[k]);
+      e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="radio"]')[k]?.focus();
+    },
+  };
+}
+
 /** A chave da API, uma vez. Fica só no estado do diálogo que a gerou: nada vai para o store, o localStorage nem o toast. */
 export function KeyBox({ value, label = "Chave da API" }: { value: string; label?: string }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
@@ -140,7 +173,7 @@ export function KeyBox({ value, label = "Chave da API" }: { value: string; label
           {state === "copied" ? "Copiada" : "Copiar"}
         </button>
       </div>
-      <span role="status" aria-live="polite" style={{ display: "block", minHeight: 16, marginTop: 4, fontSize: 11.5, color: state === "failed" ? "var(--err)" : "var(--fg3)" }}>
+      <span role="status" aria-live="polite" style={{ display: "block", minHeight: 16, marginTop: 4, fontSize: 11.5, color: state === "failed" ? "var(--err)" : "var(--fg2)" }}>
         {state === "copied" ? "Chave copiada." : state === "failed" ? "Não consegui copiar sozinho: selecione a chave e copie." : ""}
       </span>
     </div>
