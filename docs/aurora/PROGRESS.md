@@ -23,7 +23,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | A6 Permissões (tela) | 🧪 | — | matriz, conectores MCP, histórico e pendentes; testes ✅; QA no Chrome |
 | A4 Avisos (1.5) | 🧪 | — | rotas por nível, silêncio, resumo diário (tick no ticker), teste real; QA + Telegram real |
 | A5 Modelos (1.6) | 🧪 | — | provedores, quem faz o quê, triagem Jev, gasto e limites; análise dos grupos usa o modelo escolhido; QA no Chrome |
-| 12 Saúde (A7, Fase 2) | 🧪 | — | 09/10: S1–S11 ✅ no Chrome com dados reais da Aibiz; S12 ✅ com incidente real (INC-1); falta SSH/GKE ligados |
+| 12 Saúde (A7, Fase 2) | 👀 | — | 09/10: S1–S12 ✅ com dados reais; R2 de UX corrigida; SSH (3 VPS) e GKE ligados; microserviços sem /health (outro dia) |
 
 ## Já entregue antes dos specs
 - 🏁 PRs #1–#8: telas Aurora, sem mocks, ops_center, gateway com autonomia, playbooks com horário.
@@ -160,6 +160,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | S12 Ponta a ponta | ✅ | Liv Art Studio bloqueado → INC-1 em 2 ciclos, aviso no Telegram, investigação concluiu banimento pela Meta |
 
 ## Diário
+- **09/10/2026** — Saúde R2 (teste de UX no Chrome): 14 achados (3 graves) corrigidos — linhas responsivas por container query, "O que fazer agora" com Pausar/Abrir Canais, início real do problema, canal certo no "Entendi assim", menu "⋯", Conexões sem eco de segredo, nomes/números legíveis, perfis com incidente no seletor. VPS aibiz1/aibiz2/Innovare e GKE (24 deployments) ligados.
 - **09/10/2026** — Fase 2 (spec 12, A7 Saúde): backend de verificações e incidentes, tela, QA no Chrome com o banco real da Aibiz (35 bots, Mongo, 4 filas de falha). INC-1 real aberto e investigado. Correções do QA: investigação em thread com teto de 3 min, pausar/remover, exemplos do diálogo, sessões internas fora da Sidebar.
 - **08/10/2026** — Fase 1.7 (spec 10): permissões por origem no núcleo, sempre bloqueado, aprovação por botão no Telegram com execução da chamada exata. Regressão: mesmas 163 falhas de ambiente antes e depois.
 - **08/10/2026** — Fase 1.2 (spec 09): captura antes da autorização, lote por janela, triagem Jev, análise silenciosa via cron e aviso à equipe.
