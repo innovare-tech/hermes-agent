@@ -9,6 +9,12 @@ const LEVEL_LABEL: Record<"Tudo" | LogLevel, string> = { Tudo: "Tudo", INFO: "In
 /** Abrir/fechar conexão do painel a cada navegação: ruído, oculto por padrão. */
 export const isConnectionNoise = (msg: string) => /\bws (accepted|closed)\b|reaped_sessions=0/.test(msg);
 
+/** Linhas de ciclo de vida que o Hermes registra como WARNING só para aparecerem no terminal (ex.: conectar ao
+ * Telegram): aqui são informação, não aviso. */
+const LIFECYCLE_WARN = /Connect(ing|ed) to Telegram|Discovering Telegram API fallback IPs/;
+export const displayLevel = <T extends { level: LogLevel; msg: string }>(l: T): T =>
+  l.level === "WARN" && LIFECYCLE_WARN.test(l.msg) ? { ...l, level: "INFO" as LogLevel } : l;
+
 export function Logs() {
   const [paused, setPaused] = useState(false);
   const [level, setLevel] = useState<"Tudo" | LogLevel>("Tudo");
@@ -17,7 +23,7 @@ export function Logs() {
   // Pausado = não busca mais (o stream congela onde está).
   const [lines] = useAgentData(() => agent.logs(), [], 2200, !paused);
   const needle = q.trim().toLowerCase();
-  const rows = lines?.filter((l) => (level === "Tudo" || l.level === level) && (noise || !isConnectionNoise(l.msg)) && (!needle || `${l.src} ${l.msg}`.toLowerCase().includes(needle))) ?? [];
+  const rows = lines?.map(displayLevel).filter((l) => (level === "Tudo" || l.level === level) && (noise || !isConnectionNoise(l.msg)) && (!needle || `${l.src} ${l.msg}`.toLowerCase().includes(needle))) ?? [];
   const download = () => {
     const text = rows.map((l) => [l.t, l.level, l.src, l.msg].filter(Boolean).join("  ")).join(String.fromCharCode(10));
     const a = document.createElement("a");
