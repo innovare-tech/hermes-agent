@@ -113,7 +113,7 @@ def update_check(cid: str, patch: dict) -> dict:
         sets["params"] = json.dumps({**cur["params"], **patch["params"]})
     if "paused" in patch and bool(patch["paused"]) != bool(cur.get("paused")):
         # Pausar fecha o incidente aberto (ninguém mais é chamado); retomar roda no próximo ciclo, do zero.
-        sets.update({"paused": 1, "fails": 0} if patch["paused"] else {"paused": 0, "fails": 0, "last_run_at": None})
+        sets.update({"paused": 1, "fails": 0} if patch["paused"] else {"paused": 0, "fails": 0})
     if sets:
         with store.connect() as c:
             c.execute(f"UPDATE health_checks SET {', '.join(f'{k}=?' for k in sets)} WHERE id=?", (*sets.values(), cid))
@@ -122,6 +122,8 @@ def update_check(cid: str, patch: dict) -> dict:
             r = c.execute("SELECT id FROM incidents WHERE check_id=? AND status='open'", (cid,)).fetchone()
         if r:
             resolve(r[0], "Hermes", "verificação pausada no painel")
+    elif "paused" in sets:  # retomou: roda já
+        return run_check(cid)
     return _api_check(_get(cid))
 
 
@@ -169,7 +171,7 @@ def run_check(cid: str, *, now: Optional[float] = None) -> dict:
     if res.get("value") is not None:
         history = (history + [{"at": now, "value": res["value"]}])[-HISTORY_MAX:]
     fails = c["fails"] + 1 if status == "error" else 0
-    keep = {k: res[k] for k in ("text", "metrics", "state", "impact") if k in res}
+    keep = {k: res[k] for k in ("text", "metrics", "state", "impact", "since") if k in res}
     with store.connect() as con:
         con.execute("UPDATE health_checks SET status=?, result=?, last_run_at=?, history=?, fails=? WHERE id=?",
                     (status, json.dumps(keep), now, json.dumps(history), fails, cid))
@@ -216,7 +218,15 @@ def _api_incident(d: dict) -> dict:
            "ackBy": d["ack_by"], "ackAt": d["ack_at"], "resolvedAt": d["resolved_at"], "resolvedBy": d["resolved_by"],
            "note": d["note"], "timeline": d["timeline"], "hypothesis": d["hypothesis"],
            "investigating": False, "investigationPaused": False, "suggestedAction": d["suggested_action"],
-           "approval": None}
+           "approval": None, "problemSince": d.get("problem_since"), "recommendation": d.get("recommendation"),
+           "checkStatus": None, "checkName": None}
+    if d["check_id"]:
+        try:
+            c = _get(d["check_id"])
+            out["checkStatus"] = "paused" if c.get("paused") else c["status"]
+            out["checkName"] = c["name"]
+        except KeyError:
+            pass
     if not d["investigated"] and d["status"] == "open":
         paused = _paused()
         out["investigating"], out["investigationPaused"] = not paused, paused
@@ -309,6 +319,7 @@ def _incident_step(c: dict, now: float) -> None:
     impact = (c["result"] or {}).get("impact") or ""
     if last and last["resolved_at"] and now - last["resolved_at"] < REOPEN_WINDOW_S:
         _save_inc(last["id"], status="open", resolved_at=None, resolved_by=None, ack_by=None, ack_at=None,
+                  problem_since=(c["result"] or {}).get("since") or last.get("problem_since"),
                   timeline=_event(last, "problem", f"Reaberto: a verificação continua com problema ({text}).", now))
         _notify(last["severity"], f"🔁 INC-{last['id']} reaberto · {c['name']}\n{text}")
         return
@@ -316,9 +327,10 @@ def _incident_step(c: dict, now: float) -> None:
     first = [{"at": now, "result": "problem",
               "text": f"A verificação “{c['name']}” falhou {c['fails']} vezes seguidas: {text}"[:500]}]
     with store.connect() as con:
-        iid = con.execute("INSERT INTO incidents(check_id, severity, title, impact, started_at, timeline) "
-                          "VALUES(?,?,?,?,?,?)", (c["id"], c["severity"], title, impact, now,
-                                                  json.dumps(first, ensure_ascii=False))).lastrowid
+        iid = con.execute("INSERT INTO incidents(check_id, severity, title, impact, started_at, timeline, "
+                          "problem_since) VALUES(?,?,?,?,?,?,?)",
+                          (c["id"], c["severity"], title, impact, now, json.dumps(first, ensure_ascii=False),
+                           (c["result"] or {}).get("since"))).lastrowid
     icon = "🔴" if c["severity"] == "critical" else "🟠"
     _notify(c["severity"], f"{icon} INC-{iid} · {title}" + (f"\nImpacto: {impact}" if impact else "")
             + "\nO Hermes está investigando; veja em Saúde no painel.")
@@ -379,13 +391,19 @@ confirme o problema, procure a causa e descarte hipóteses. Seja breve: no máxi
 roda não tem acesso ao alvo (sem ssh/kubectl/mongosh configurado), não procure mais: diga isso numa linha da timeline
 e responda com o que os dados do incidente já mostram.
 
+Quem lê é a equipe de suporte, não só técnicos: escreva frases curtas em português simples. Nunca mostre ids/UUIDs,
+valores crus de status ('blocked', 'disconnected'…) nem listas de números; diga o que significam ("o número foi
+bloqueado pelo WhatsApp"). Não repita o que a verificação já disse. Limitações suas (sem acesso, comando que falhou)
+vão com result "info", nunca como problema do sistema.
+
 Responda SOMENTE com um objeto JSON, em português do Brasil, sem texto fora dele:
-{"timeline": [{"result": "problem|signal|ruled_out", "text": "o que você olhou e o que achou, com o termo técnico explicado (ex.: OOMKilled = o processo foi morto por falta de memória)"}],
+{"timeline": [{"result": "problem|signal|ruled_out|info", "text": "o que você olhou e o que achou, com o termo técnico explicado (ex.: OOMKilled = o processo foi morto por falta de memória)"}],
  "hypothesis": "a causa mais provável, em uma ou duas frases",
  "suggested_action": {"label": "verbo + objeto curto, ex.: Reiniciar o wa-gateway", "command": "o comando exato de terminal que corrige"} ou null,
+ "recommendation": "o que a equipe deve fazer agora, em 1 ou 2 frases (ex.: falar com o cliente e cadastrar outro número; pausar esta verificação até lá)",
  "impact": "quem é afetado, curto (ex.: 3 clientes · 23 mensagens esperando)" ou ""}
-"problem" = achou problema; "signal" = sinal suspeito; "ruled_out" = hipótese descartada. A correção só roda depois que
-um humano aprovar; sugira só o que for seguro e reversível."""
+"problem" = achou problema; "signal" = sinal suspeito; "ruled_out" = hipótese descartada; "info" = observação neutra.
+A correção só roda depois que um humano aprovar; sugira só o que for seguro e reversível."""
 
 
 def _run_investigation(context: str, cfg: dict) -> str:
@@ -415,6 +433,10 @@ def _public_params(p: dict) -> dict:
     return {k: v for k, v in p.items() if not k.endswith("_env")}
 
 
+def _norm_text(t: Any) -> str:
+    return re.sub(r"\W+", " ", str(t or "").lower()).strip()
+
+
 def investigate(iid: int, *, run: Callable[[str, dict], str] = _run_investigation) -> dict:
     d = _inc(iid)
     try:
@@ -436,10 +458,13 @@ def investigate(iid: int, *, run: Callable[[str, dict], str] = _run_investigatio
     d = _inc(iid)
     tl = d["timeline"]
     now = time.time()
+    seen = {_norm_text(e.get("text")) for e in tl}
     for ev in (data.get("timeline") or [])[:12]:
-        if isinstance(ev, dict) and ev.get("text"):
-            res = ev.get("result") if ev.get("result") in ("problem", "signal", "ruled_out") else "signal"
-            tl.append({"at": now, "result": res, "text": str(ev["text"])[:500]})
+        if isinstance(ev, dict) and ev.get("text") and _norm_text(ev["text"]) not in seen:
+            res = ev.get("result") if ev.get("result") in ("problem", "signal", "ruled_out", "info") else "info"
+            text = re.sub(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", "", str(ev["text"]))
+            tl.append({"at": now, "result": res, "text": re.sub(r"\s*\(\s*(ID\s*)?\)", "", text).strip()[:500]})
+            seen.add(_norm_text(ev["text"]))
     sa = data.get("suggested_action")
     action = None
     if isinstance(sa, dict) and str(sa.get("command") or "").strip():
@@ -449,7 +474,8 @@ def investigate(iid: int, *, run: Callable[[str, dict], str] = _run_investigatio
         if not guardrails.hard_deny(cmd):
             action = {"label": str(sa.get("label") or "Aplicar a correção")[:80], "command": cmd, "needsApproval": True}
     cols: dict[str, Any] = {"investigated": 1, "timeline": tl, "hypothesis": str(data.get("hypothesis") or "")[:1000] or None,
-                            "suggested_action": action}
+                            "suggested_action": action,
+                            "recommendation": str(data.get("recommendation") or "")[:600] or None}
     if data.get("impact") and not d["impact"]:
         cols["impact"] = str(data["impact"])[:160]
     _save_inc(iid, **cols)
@@ -555,7 +581,11 @@ def save_settings(patch: dict) -> dict:
     cur = store.get_meta("health_settings") or {}
     for key in _DICTS:
         if isinstance(patch.get(key), dict):
-            cur[key] = {**(cur.get(key) or {}), **{k: str(v).strip() for k, v in patch[key].items()}}
+            vals = {k: str(v).strip() for k, v in patch[key].items()}
+            for k, v in vals.items():
+                if k.endswith("_env") and v and not re.fullmatch(r"[A-Z_][A-Z0-9_]*", v):
+                    raise ValueError(f"{k}: escreva só o NOME da variável (ex.: AIBIZ_MONGO_URI); o valor vai em Chaves")
+            cur[key] = {**(cur.get(key) or {}), **vals}
     if isinstance(patch.get("servers"), list):
         cur["servers"] = [_server(s) for s in patch["servers"]]
     if isinstance(patch.get("services"), list):
@@ -695,7 +725,8 @@ def _run_mongo(p: dict, prev: dict) -> dict:
         ms = round(lat / n / 1000, 1)
         warn, err = float(p.get("warnMs") or 100), float(p.get("errorMs") or 500)
         return {"status": "error" if ms >= err else "warn" if ms >= warn else "ok",
-                "text": f"consultas levam em média {ms} ms ({n} no intervalo)", "value": ms, "state": {"lat": cur}}
+                "text": f"consultas levam em média {_num(ms, 1)} ms ({_num(n)} no intervalo)", "value": ms,
+                "state": {"lat": cur}}
     if metric == "space":
         st = client[p.get("db") or "admin"].command("dbStats")
         used, total = st.get("fsUsedSize"), st.get("fsTotalSize")
@@ -722,6 +753,12 @@ def _pem(v: str) -> str:
 
 
 _SSH_PROBE ="vmstat 1 2 | tail -1; free -b | sed -n 2p; df -P / | tail -1"
+
+
+_SSH_ERRORS = (("Permission denied", "a chave foi recusada (usuário hermes criado? chave pública certa?)"),
+               ("timed out", "o servidor não respondeu"), ("Connection refused", "a porta SSH recusou a conexão"),
+               ("Could not resolve", "endereço do servidor não encontrado"),
+               ("Host key verification failed", "a identidade do servidor mudou (verifique antes de confiar)"))
 
 
 def parse_resources(out: str) -> dict:
@@ -773,7 +810,8 @@ def _run_ssh(p: dict, _prev: dict) -> dict:
             os.unlink(keyfile)
     if r.returncode != 0:
         err = (r.stderr.strip().splitlines() or ["falha no ssh"])[-1]
-        return {"status": "error", "text": f"não consegui entrar ({err[:160]})"}
+        friendly = next((t for k, t in _SSH_ERRORS if k in err), err[:120])
+        return {"status": "error", "text": f"não consegui entrar por SSH: {friendly}"}
     m = parse_resources(r.stdout)
     worst = max(m.values())
     hot = max(m, key=m.get)
@@ -828,7 +866,20 @@ def _run_k8s(p: dict, prev: dict) -> dict:
     if reasons:
         text += f" · último motivo: {', '.join(sorted(reasons))}"
     status = "error" if want and ready == 0 else "warn" if ready < want or in_hour >= 3 else "ok"
+    wa = _bot_channel_status(p["deployment"])
+    if wa and wa != "ready":
+        text += f" · o WhatsApp deste bot está {BOT_LABEL.get(wa, wa)} (veja Bots de WhatsApp)"
     return {"status": status, "text": text, "value": in_hour, "state": {"marks": marks}}
+
+
+def _bot_channel_status(deployment: str) -> Optional[str]:
+    if not deployment.startswith("bot-"):
+        return None
+    try:
+        ch = _db()[settings()["bots"]["channels"]].find_one({"id": deployment[4:]}, {"status": 1}, max_time_ms=3000)
+    except Exception:  # noqa: BLE001
+        return None
+    return str((ch or {}).get("status") or "") or None
 
 
 def _namespaces() -> list[str]:
@@ -869,6 +920,36 @@ def _hhmm(ts: Any) -> str:
     return d.strftime("%d/%m %H:%M" if d.year == notify._local(time.time(), tz).year else "%d/%m/%Y")
 
 
+def _epoch(ts: Any) -> Optional[float]:
+    """datetime do pymongo (UTC sem fuso) → epoch."""
+    if ts is None or not hasattr(ts, "timestamp"):
+        return None
+    if ts.tzinfo is None:
+        from datetime import timezone
+
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts.timestamp()
+
+
+def fmt_phone(raw: Any) -> str:
+    """"5549988803655" / "+55 49 8812-5153" → "+55 49 98880-3655"; curto demais → ""."""
+    d = re.sub(r"\D", "", str(raw or ""))
+    if len(d) < 8:
+        return ""
+    if d.startswith("55") and d[2:5] == "800":
+        return f"0800 {d[5:8]} {d[8:]}"
+    if d.startswith("55") and len(d) in (12, 13):
+        ddd, rest = d[2:4], d[4:]
+        return f"+55 {ddd} {rest[:-4]}-{rest[-4:]}"
+    return "+" + d
+
+
+def _num(x: float, dec: int = 0) -> str:
+    """Número no formato brasileiro (11.315 · 4,8)."""
+    s = f"{x:,.{dec}f}"
+    return s.replace(",", "_").replace(".", ",").replace("_", ".")
+
+
 def _run_bot(p: dict, _prev: dict) -> dict:
     """Canal em ``system_client_sources`` + mensagens que entraram em ``messages_receive`` na janela."""
     cfg = settings()["bots"]
@@ -887,10 +968,10 @@ def _run_bot(p: dict, _prev: dict) -> dict:
     if st != "ready":
         since = f" desde {_hhmm(ch['updatedAt'])}" if ch.get("updatedAt") else ""
         return {"status": _BOT_STATUS.get(st, "error"), "text": f"{BOT_LABEL.get(st, st)}{since}", "value": n,
-                "impact": impact}
+                "impact": impact, "since": _epoch(ch.get("updatedAt"))}
     if p.get("silenceMin") and n == 0:
         return {"status": "error", "text": f"conectado, mas sem mensagens há mais de {int(win)} min", "value": 0,
-                "impact": impact}
+                "impact": impact, "since": time.time() - win * 60}
     return {"status": "ok", "text": f"conectado · {msgs}", "value": n, "impact": impact}
 
 
@@ -987,8 +1068,10 @@ def recommended() -> tuple[list[dict], list[str]]:
             for ns in _namespaces():
                 for dep in _k8s_get(f"/apis/apps/v1/namespaces/{ns}/deployments").get("items") or []:
                     name = dep["metadata"]["name"]
-                    specs.append({"group": "k8s", "name": _bot_label(name), "kind": "k8s", "interval_sec": 300,
-                                  "detail": f"{ns} · {name}", "params": {"namespace": ns, "deployment": name}})
+                    label, phone = _bot_label(name)
+                    specs.append({"group": "k8s", "name": label, "kind": "k8s", "interval_sec": 300,
+                                  "detail": " · ".join(x for x in (phone, ns, name) if x),
+                                  "params": {"namespace": ns, "deployment": name}})
         except Exception as e:  # noqa: BLE001
             skipped.append(f"Kubernetes: não consegui listar os deployments ({_why(e)})")
     else:
@@ -1018,36 +1101,42 @@ def _bot_specs() -> list[dict]:
         if not client or not ch.get("id"):
             continue  # cliente desativado ou fora do diretório
         engine = _ENGINE.get(engines.get(ch.get("instance")) or "", "")
-        phone = str(ch.get("source") or "")
-        detail = " · ".join(x for x in (engine, str(ch.get("instance") or "")) if x)
-        name = f"{client['name']} · {phone}" if len(phone) > 4 else client["name"]
-        out.append({"group": "whatsapp_bots", "name": name, "kind": "bot", "interval_sec": 300,
+        phone = fmt_phone(ch.get("source"))
+        detail = " · ".join(x for x in (phone or f"canal {str(ch['id'])[:6]}", engine, str(ch.get("instance") or "")) if x)
+        out.append({"group": "whatsapp_bots", "name": client["name"], "kind": "bot", "interval_sec": 300,
                     "client_id": client["system_client_id"], "params": {"channelId": ch["id"]}, "detail": detail})
     return out
 
 
-def _bot_label(deployment: str) -> str:
-    """``bot-<channelId>`` (bots Baileys no cluster) → "Bot · <cliente> · <número>"; outro nome fica como está."""
+def _bot_label(deployment: str) -> tuple[str, str]:
+    """``bot-<channelId>`` (bots Baileys no cluster) → ("Bot · <cliente>", "<número>"); outro nome fica como está."""
     if not deployment.startswith("bot-"):
-        return deployment
+        return deployment, ""
     try:
         ch = _db()[settings()["bots"]["channels"]].find_one({"id": deployment[4:]}, {"systemClientId": 1, "source": 1},
                                                            max_time_ms=3000)
     except Exception:  # noqa: BLE001 — sem banco, fica o nome técnico
-        return deployment
+        return deployment, ""
     client = store.get_client(str((ch or {}).get("systemClientId") or ""))
     if not client:
-        return deployment
-    phone = str(ch.get("source") or "")
-    return f"Bot · {client['name']}" + (f" · {phone}" if len(phone) > 4 else "")
+        return deployment, ""
+    return f"Bot · {client['name']}", fmt_phone(ch.get("source"))
 
 
 def create_recommended() -> dict:
     specs, skipped = recommended()
     have = _existing()
     created = []
+    by_key = {}
+    with store.connect() as c:
+        for r in c.execute("SELECT id, kind, params, name, detail FROM health_checks"):
+            by_key[_identity(r["kind"], json.loads(r["params"] or "{}"))] = dict(r)
     for sp in specs:
         key = _identity(sp["kind"], sp["params"])
+        old = by_key.get(key)
+        if old and (old["name"], old["detail"]) != (sp["name"], sp.get("detail", "")):
+            with store.connect() as c:  # nome/detalhe melhoraram (ex.: número formatado): atualiza sem perder histórico
+                c.execute("UPDATE health_checks SET name=?, detail=? WHERE id=?", (sp["name"], sp.get("detail", ""), old["id"]))
         if key in have:
             continue
         created.append(add_check(**sp))
@@ -1059,7 +1148,7 @@ def create_recommended() -> dict:
 
 PARSE_PROMPT = """Transforme o pedido em UMA verificação de monitoramento. Responda só com um objeto JSON.
 Tipos ("kind") e campos:
-- "bot": bot de WhatsApp de um cliente. {"client": "nome do cliente como escrito", "silenceMin": minutos sem mensagem ou null}
+- "bot": bot de WhatsApp de um cliente. {"client": "nome do cliente como escrito", "phone": "número do bot se o pedido citar (só dígitos) ou null", "silenceMin": minutos sem mensagem ou null}
 - "http": um endereço precisa responder. {"url": "https://...", "slowMs": milissegundos ou null}
 - "ssh": recursos de um servidor (SERVERS). {"server": "nome", "metric": "cpu|ram|disk"}
 - "mongo": o banco. {"metric": "replica|latency|space"}
@@ -1091,6 +1180,24 @@ GROUP_LABEL = {"servers": "Servidores", "mongo": "Banco · MongoDB", "whatsapp_b
                "k8s": "Kubernetes", "dead_letters": "Filas de falha", "services": "Microserviços"}
 
 
+_BOT_RANK = {"ready": 0, "reconnecting": 1, "waiting": 2}
+
+
+def _best_channel(client_id: str, phone: str = "") -> tuple[Optional[dict], int]:
+    """Canal de WhatsApp em uso do cliente: conectado primeiro; nunca um abandonado (mesma regra das recomendadas)."""
+    from datetime import datetime, timedelta
+
+    stale = datetime.utcnow() - timedelta(days=STALE_BOT_DAYS)
+    chans = [c for c in _db()[settings()["bots"]["channels"]].find(
+        {"systemClientId": client_id, "type": "whatsapp", "status": {"$ne": "inactive"}},
+        {"id": 1, "status": 1, "source": 1, "updatedAt": 1}, max_time_ms=5000)
+        if c.get("status") in _BOT_RANK or (c.get("updatedAt") and c["updatedAt"] >= stale)]
+    want = re.sub(r"\D", "", phone or "")[-8:]  # número citado no pedido escolhe o canal
+    chans.sort(key=lambda c: (not (want and re.sub(r"\D", "", str(c.get("source") or "")).endswith(want)),
+                              _BOT_RANK.get(c.get("status"), 9)))
+    return (chans[0] if chans else None), len(chans)
+
+
 def _spec_from(d: dict, interval: int) -> dict:
     """Resposta do modelo → verificação pronta para ``add_check`` (resolve cliente e canal). ``ValueError`` legível."""
     kind = d.get("kind")
@@ -1104,13 +1211,19 @@ def _spec_from(d: dict, interval: int) -> dict:
             raise ValueError(f"não achei o cliente “{d.get('client') or '?'}” no diretório (sincronize em Canais)")
         client = hits[0]
         client_id = client["systemClientId"]
-        ch = _db()[settings()["bots"]["channels"]].find_one(
-            {"systemClientId": client_id, "type": "whatsapp", "status": {"$ne": "inactive"}}, {"id": 1},
-            max_time_ms=5000)
+        ch, total = _best_channel(client_id, str(d.get("phone") or ""))
         if not ch:
-            raise ValueError(f"{client['name']} não tem bot de WhatsApp ativo")
+            raise ValueError(f"{client['name']} não tem bot de WhatsApp em uso (os canais estão desativados ou "
+                             f"caídos há mais de {STALE_BOT_DAYS} dias)")
         params = {"channelId": ch["id"], "silenceMin": int(d["silenceMin"]) if d.get("silenceMin") else None}
+        st = str(ch.get("status") or "unknown")
+        phone = fmt_phone(ch.get("source"))
         d["_client"] = client["name"]
+        d["_detail"] = phone or f"canal {str(ch['id'])[:6]}"
+        d["_channel"] = f"{phone or 'canal ' + str(ch['id'])[:6]} · {BOT_LABEL.get(st, st)}" + \
+            (f" (1 de {total} canais deste cliente)" if total > 1 else "")
+        if st != "ready":
+            d["_warning"] = f"Este bot já está {BOT_LABEL.get(st, st)}: o incidente abre na segunda checagem."
     elif kind == "http":
         if not re.match(r"https?://", str(d.get("url") or "")):
             raise ValueError("faltou o endereço (https://…)")
@@ -1138,7 +1251,7 @@ def _spec_from(d: dict, interval: int) -> dict:
                           "days": [int(x) for x in only.get("days") or [] if 1 <= int(x) <= 7]}
     params = {k: v for k, v in params.items() if v is not None}
     return {"group": _GROUP[kind], "name": str(d.get("name") or d.get("_client") or kind)[:120], "kind": kind,
-            "params": params, "interval_sec": int(interval), "client_id": client_id,
+            "params": params, "interval_sec": int(interval), "client_id": client_id, "detail": d.get("_detail") or "",
             "severity": d.get("severity") if d.get("severity") in SEVERITIES else "critical"}
 
 
@@ -1216,7 +1329,11 @@ def parse_text(text: str, interval: int = 300, *, llm: Callable[[str], str] = _l
         return {"ok": False, "reason": msg[:1].upper() + msg[1:] + "."}
     except Exception as e:  # noqa: BLE001 — banco fora do ar ao resolver o canal
         return {"ok": False, "reason": f"Não consegui consultar o banco para achar o bot ({_why(e)})."}
-    return {"ok": True, "check": {**describe(spec, d.get("_client", "")), "spec": spec}}
+    out = {**describe(spec, d.get("_client", "")), "spec": spec}
+    for k in ("channel", "warning"):
+        if d.get(f"_{k}"):
+            out[k] = d[f"_{k}"]
+    return {"ok": True, "check": out}
 
 
 def create_from_parsed(body: dict) -> dict:
@@ -1225,4 +1342,5 @@ def create_from_parsed(body: dict) -> dict:
                      params=spec.get("params") or {},
                      interval_sec=int(body.get("interval") or spec.get("interval_sec") or 300),
                      severity=spec.get("severity") or "critical", client_id=spec.get("client_id"),
-                     source_text=str(body.get("text") or "")[:1000], parsed=body.get("parsed"))
+                     detail=str(spec.get("detail") or ""), source_text=str(body.get("text") or "")[:1000],
+                     parsed=body.get("parsed"))

@@ -81,7 +81,7 @@ def test_investigation_fills_timeline_and_drops_hard_denied_fix(h):
              "suggested_action": {"label": "Reiniciar", "command": "kubectl rollout restart deploy/wa"}}
     out = h.investigate(inc["id"], run=lambda ctx, cfg: "```json\n" + json.dumps(reply) + "\n```")
     assert out["hypothesis"] == "faltou memória" and out["impact"] == "3 clientes" and not out["investigating"]
-    assert [e["result"] for e in out["timeline"][-2:]] == ["problem", "signal"]
+    assert [e["result"] for e in out["timeline"][-2:]] == ["problem", "info"]  # result desconhecido vira neutro
     assert out["suggestedAction"]["needsApproval"] is True
 
     reply["suggested_action"]["command"] = "kubectl delete namespace default"
@@ -212,4 +212,28 @@ def test_pause_closes_incident_and_stops_running(h):
     with pytest.raises(ValueError):
         h.run_check(c["id"])
     back = h.update_check(c["id"], {"paused": False})
-    assert back["status"] == "error" and back["lastRunAt"] is None
+    assert back["status"] == "error" and back["lastRunAt"]  # retomar já roda
+
+
+def test_timeline_hides_ids_and_dedupes(h):
+    c = _check(h)
+    h.results += [{"status": "error", "text": "x"}] * 2
+    h.run_check(c["id"])
+    h.run_check(c["id"])
+    [inc] = h.list_incidents()
+    ev = {"result": "problem", "text": "Canal do bot (ID 719c3972-7dde-4463-8e4a-3b16d2f5659c) bloqueado"}
+    reply = {"timeline": [ev, dict(ev)], "hypothesis": "h", "recommendation": "Pause a verificação."}
+    out = h.investigate(inc["id"], run=lambda ctx, cfg: json.dumps(reply))
+    texts = [e["text"] for e in out["timeline"]]
+    assert texts.count("Canal do bot bloqueado") == 1 and out["recommendation"] == "Pause a verificação."
+    assert out["checkName"] == "events" and out["checkStatus"] == "error"
+
+
+def test_formatters_and_env_name_validation(h):
+    assert h.fmt_phone("5549988803655") == "+55 49 98880-3655"
+    assert h.fmt_phone("+55 49 8812-5153") == "+55 49 8812-5153"
+    assert h.fmt_phone("+558000005311") == "0800 000 5311" and h.fmt_phone("55") == ""
+    assert h._num(11315) == "11.315" and h._num(4.8, 1) == "4,8"
+    with pytest.raises(ValueError):
+        h.save_settings({"mongo": {"uri_env": "mongodb://u:senha@host"}})
+    assert h.save_settings({"mongo": {"uri_env": "OUTRA_URI"}})["mongo"]["uri_env"] == "OUTRA_URI"

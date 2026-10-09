@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS incidents (
   impact TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', started_at REAL NOT NULL,
   ack_by TEXT, ack_at REAL, resolved_at REAL, resolved_by TEXT, note TEXT,
   timeline TEXT NOT NULL DEFAULT '[]', hypothesis TEXT, suggested_action TEXT, approval_id INTEGER,
-  investigated INTEGER NOT NULL DEFAULT 0
+  investigated INTEGER NOT NULL DEFAULT 0, problem_since REAL, recommendation TEXT
 );
 CREATE INDEX IF NOT EXISTS incidents_status ON incidents(status, started_at);
 CREATE TABLE IF NOT EXISTS clients (
@@ -148,6 +148,10 @@ def _migrate(con: sqlite3.Connection) -> None:
                       ("updated_at", "REAL NOT NULL DEFAULT 0")):
         if name not in cols:
             con.execute(f"ALTER TABLE clients ADD COLUMN {name} {ddl}")
+    cols = {r[1] for r in con.execute("PRAGMA table_info(incidents)")}
+    for name, ddl in (("problem_since", "REAL"), ("recommendation", "TEXT")):
+        if name not in cols:
+            con.execute(f"ALTER TABLE incidents ADD COLUMN {name} {ddl}")
     cols = {r[1] for r in con.execute("PRAGMA table_info(health_checks)")}
     if "paused" not in cols:
         con.execute("ALTER TABLE health_checks ADD COLUMN paused INTEGER NOT NULL DEFAULT 0")
