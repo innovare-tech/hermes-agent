@@ -82,7 +82,7 @@ HARD_DENY = [
         re.compile(r"\b(createUser|dropUser|dropAllUsers|updateUser|grantRolesToUser|revokeRolesFromUser|changeUserPassword)\b", _I),
         re.compile(r"\b(passwd|chpasswd|useradd|usermod|userdel|visudo|ssh-keygen|ssh-copy-id)\b", _I),
         re.compile(r"authorized_keys|/\.ssh/|(^|[\s/'\"])\.env\b|\bsudoers\b", _I)]},
-    {"label": "Mudar estas permissões pelo chat", "reads": True, "patterns": [
+    {"label": "Mexer na configuração do Hermes pelo chat", "reads": True, "patterns": [
         re.compile(r"\bops\.db\b|aurora\.json|\bpermissions?\b.*\b(matrix|enabled)\b", _I)]},
 ]
 
@@ -131,7 +131,15 @@ def origin() -> Optional[str]:
 _READ_CMDS = {"ls", "cat", "head", "tail", "less", "grep", "rg", "egrep", "find", "wc", "df", "du", "free", "uptime",
               "ps", "top", "htop", "pwd", "whoami", "id", "date", "hostname", "uname", "env", "printenv", "which",
               "journalctl", "dmesg", "netstat", "ss", "ip", "ping", "curl", "dig", "nslookup", "stat", "file", "tree",
-              "echo", "jq", "sort", "uniq", "awk", "sed", "lsof", "vmstat", "iostat", "nproc", "lscpu", "lsblk"}
+              "echo", "jq", "sort", "uniq", "awk", "sed", "lsof", "vmstat", "iostat", "nproc", "lscpu", "lsblk",
+              "cut", "tr", "column", "basename", "dirname", "realpath", "readlink", "md5sum", "sha256sum", "base64",
+              "true", "false", ":", "test", "["}
+# curl só é leitura sem enviar dados nem gravar arquivo.
+_CURL_WRITE = re.compile(r"(^|\s)(-X\s*(POST|PUT|PATCH|DELETE)|--request\s+(POST|PUT|PATCH|DELETE)|-d|--data\S*|-F|--form|"
+                         r"-T|--upload-file|-o|--output|-O|--remote-name)(\s|=|$)", _I)
+# Opções que levam valor separado (``kubectl -n ns get``): o valor não é o subcomando.
+_VALUE_FLAGS = {"-n", "--namespace", "--context", "--kubeconfig", "--cluster", "--user", "-l", "--selector", "-o",
+                "--output", "-C", "--project", "--zone", "--region", "-f", "--file", "-c", "--container"}
 _READ_SUBCMDS = {
     "kubectl": {"get", "describe", "logs", "top", "explain", "version", "api-resources", "events", "auth", "cluster-info", "config"},
     "helm": {"list", "ls", "status", "get", "history", "show", "search", "version", "template", "lint"},
@@ -178,9 +186,20 @@ def classify_command(command: str) -> str:
             if len(rest) >= 2 and classify_command(" ".join(rest[1:])).endswith(".write"):
                 return f"{group}.write"
             continue
+        if cmd == "curl" and _CURL_WRITE.search(seg):
+            return f"{group}.write"
         subs = _READ_SUBCMDS.get(cmd)
         if subs is not None:
-            sub = next((w for w in words[1:] if not w.startswith("-")), "")
+            sub, skip = "", False
+            for w in words[1:]:
+                if skip:
+                    skip = False
+                    continue
+                if w.startswith("-"):
+                    skip = w in _VALUE_FLAGS
+                    continue
+                sub = w
+                break
             if sub not in subs:
                 return f"{group}.write"
             continue

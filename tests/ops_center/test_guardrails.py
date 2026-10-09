@@ -54,7 +54,7 @@ def test_classify_command(cmd, key):
     ("kubectl drain node-1", True, "Apagar partes do cluster"),
     ("kubectl create secret generic x --from-literal=a=b", True, "Mexer em chaves e acessos"),
     ("cat /srv/app/.env", False, "Mexer em chaves e acessos"),
-    ("sqlite3 ~/.hermes/ops.db \"update meta set value=1 where key='x'\"", True, "Mudar estas permissões pelo chat"),
+    ("sqlite3 ~/.hermes/ops.db \"update meta set value=1 where key='x'\"", True, "Mexer na configuração do Hermes pelo chat"),
 ])
 def test_hard_deny(text, writes, rule):
     from ops_center.guardrails import hard_deny
@@ -261,3 +261,18 @@ def test_requester_may_approve_own_request_by_default(monkeypatch):
     from ops_center import store
 
     assert "não aprova o próprio" not in guardrails.approval_text(store.get_approval(1))
+
+
+@pytest.mark.parametrize("cmd, key", [
+    ("kubectl get pods 2>&1 | head -n 5 || true", "cluster.read"),
+    ("kubectl -n default get deploy", "cluster.read"),
+    ("kubectl --context prod rollout restart deploy/x", "cluster.write"),
+    ("curl -s https://x/health | jq .status | cut -c1-20", "server.read"),
+    ("curl -X POST https://x/api -d '{}'", "server.write"),
+    ("curl -o /tmp/f https://x/file", "server.write"),
+    ("wget https://x/file", "server.write"),
+])
+def test_classify_command_reads_and_writes(cmd, key):
+    from ops_center.guardrails import classify_command
+
+    assert classify_command(cmd) == key

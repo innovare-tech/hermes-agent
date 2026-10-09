@@ -270,7 +270,7 @@ _HARD_DENY_EXAMPLES = {
     "Apagar arquivos em massa": ["rm -rf", "find … -delete"],
     "Apagar partes do cluster": ["kubectl delete namespace", "kubectl delete pvc", "kubectl drain"],
     "Mexer em chaves e acessos": ["kubectl … secret", ".env", "authorized_keys", "createUser"],
-    "Mudar estas permissões pelo chat": ["ops.db", "permissões"],
+    "Mexer na configuração do Hermes pelo chat": ["ops.db", "permissões"],
 }
 
 
