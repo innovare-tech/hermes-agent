@@ -37,7 +37,7 @@ export function Home() {
   const navigate = useNavigate();
   const f = inBiz(s);
   const needs = s.inbox.filter((x) => f(x) && (x.priority === "urgente" || x.priority === "voce"));
-  const approvals = s.approvals.filter(f).length;
+  const approvals = s.approvals.filter(f).length + s.actionRequests.length; // rascunhos + pedidos de ação
   // Alertas nos grupos = análises abertas (a mesma fila da tela Análises dos grupos); null até a primeira leitura.
   const [openAnalyses, setOpenAnalyses] = useState<number | null>(null);
   useEffect(() => {
