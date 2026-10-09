@@ -303,7 +303,7 @@ def process_due(now: Optional[float] = None, **kw: Any) -> list[int]:
 
 
 def start(stop: threading.Event, homes: Callable[[], Iterable[Any]]) -> threading.Thread:
-    """Thread do gateway: a cada ``TICK_SECONDS`` roda ``process_due`` e ``notify.tick`` em cada perfil servido.
+    """Thread do gateway: a cada ``TICK_SECONDS`` roda ``health.tick``, ``process_due`` e ``notify.tick`` em cada perfil servido.
 
     ponytail: um lote por vez, em série — suficiente para dezenas de grupos; fila/pool se o volume crescer."""
 
@@ -323,7 +323,11 @@ def start(stop: threading.Event, homes: Callable[[], Iterable[Any]]) -> threadin
 
                         # Limites de gasto ANTES da pausa: é aqui que a pausa posta pelo limite é retirada.
                         spend_guard.maybe_check(str(home))
-                        if is_engaged and is_engaged():
+                        paused = bool(is_engaged and is_engaged())
+                        from ops_center import health
+
+                        health.tick(investigate=not paused)  # Saúde: verificações rodam mesmo com o perfil pausado
+                        if paused:
                             continue  # pausado: os itens ficam esperando; nada é analisado
                         from ops_center import clients_sync
 
