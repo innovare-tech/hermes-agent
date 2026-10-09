@@ -173,3 +173,15 @@ def test_overview_availability(h):
         c.execute("INSERT INTO incidents(severity, title, started_at, resolved_at, status) VALUES('critical','x',?,?,'resolved')",
                   (now - 3600 * 7.2, now))
     assert h.overview(now)["availability30d"] == 99.0
+
+
+def test_pem_accepts_base64_and_escaped_newlines():
+    import base64
+
+    from ops_center.health import _pem
+
+    pem = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----"
+    assert _pem(base64.b64encode(pem.encode()).decode()) == pem + "\n"
+    assert _pem(pem.replace("\n", "\n")) == pem + "\n" and _pem("") == ""
+    with pytest.raises(ValueError):
+        _pem("não é base64 !!")

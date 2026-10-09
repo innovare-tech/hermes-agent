@@ -441,7 +441,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
          "groupField": "code"},
     ],
     "k8s": {"server": "", "token_env": "K8S_TOKEN", "ca_env": "K8S_CA_CERT", "namespaces": "default"},
-    "servers": [],  # [{name, host, user, port}] — a chave privada vai em Chaves (HEALTH_SSH_KEY_<NOME>)
+    "servers": [],  # [{name, host, user, port}] — chave privada em Chaves: HEALTH_SSH_KEY (todas) ou HEALTH_SSH_KEY_<NOME>
     "services": [],  # [{name, url}] — endereços de /health
 }
 _DICTS = ("mongo", "bots", "k8s")
@@ -468,7 +468,9 @@ def settings_view() -> dict:
     return {**cfg, "status": {
         "mongo": bool(get_secret_str(cfg["mongo"]["uri_env"])),
         "k8s": bool(k8s.get("server") and get_secret_str(k8s["token_env"])),
-        "servers": {s["name"]: {"keyEnv": ssh_key_env(s["name"]), "key": bool(get_secret_str(ssh_key_env(s["name"])))}
+        "sshKey": bool(get_secret_str("HEALTH_SSH_KEY")),
+        "servers": {s["name"]: {"keyEnv": "HEALTH_SSH_KEY",
+                                "key": bool(get_secret_str(ssh_key_env(s["name"])) or get_secret_str("HEALTH_SSH_KEY"))}
                     for s in cfg["servers"]}}}
 
 
@@ -632,7 +634,20 @@ def _run_mongo(p: dict, prev: dict) -> dict:
     raise ValueError(f"métrica de Mongo desconhecida: {metric}")
 
 
-_SSH_PROBE = "vmstat 1 2 | tail -1; free -b | sed -n 2p; df -P / | tail -1"
+def _pem(v: str) -> str:
+    """Chave/certificado colado como PEM (quebras reais ou ``\\n``) ou como base64 do arquivo, numa linha."""
+    import base64
+
+    v = (v or "").strip()
+    if v and "BEGIN" not in v:
+        try:
+            v = base64.b64decode(v + "=" * (-len(v) % 4)).decode().strip()
+        except Exception:  # noqa: BLE001
+            raise ValueError("chave/certificado ilegível: cole o arquivo em base64 numa linha") from None
+    return v.replace("\\n", "\n") + "\n" if v else ""
+
+
+_SSH_PROBE ="vmstat 1 2 | tail -1; free -b | sed -n 2p; df -P / | tail -1"
 
 
 def parse_resources(out: str) -> dict:
@@ -656,7 +671,7 @@ def _run_ssh(p: dict, _prev: dict) -> dict:
         raise ValueError(f"servidor “{p.get('server')}” não está em Saúde › Conexões")
     from agent.secret_scope import get_secret_str
 
-    key = get_secret_str(ssh_key_env(srv["name"]))
+    key = _pem(get_secret_str(ssh_key_env(srv["name"])) or get_secret_str("HEALTH_SSH_KEY"))
     from hermes_constants import get_hermes_home
 
     known = get_hermes_home() / "health_known_hosts"
@@ -667,7 +682,7 @@ def _run_ssh(p: dict, _prev: dict) -> dict:
         if key:
             fd, keyfile = tempfile.mkstemp(prefix="hermes-ssh-")
             with os.fdopen(fd, "w") as f:
-                f.write(key.replace("\\n", "\n").strip() + "\n")
+                f.write(key)
             os.chmod(keyfile, 0o600)
             args += ["-i", keyfile, "-o", "IdentitiesOnly=yes"]
         args += [f"{srv['user']}@{srv['host']}" if srv["user"] else srv["host"], _SSH_PROBE]
@@ -698,14 +713,13 @@ def _k8s_get(path: str) -> dict:
     cfg = settings()["k8s"]
     if not cfg.get("server"):
         raise ValueError("cluster não configurado em Saúde › Conexões")
-    token = _secret(cfg["token_env"])
+    token = _secret(cfg["token_env"]).strip()
+    if not token.startswith("eyJ"):  # colado como saiu do kubectl (.data.token, em base64)
+        token = base64.b64decode(token + "=" * (-len(token) % 4)).decode().strip()
     from agent.secret_scope import get_secret_str
 
-    ca = get_secret_str(cfg.get("ca_env") or "")
-    ctx = ssl.create_default_context()
-    if ca:
-        pem = ca if "BEGIN" in ca else base64.b64decode(ca).decode()
-        ctx = ssl.create_default_context(cadata=pem.replace("\\n", "\n"))
+    ca = _pem(get_secret_str(cfg.get("ca_env") or ""))
+    ctx = ssl.create_default_context(cadata=ca) if ca else ssl.create_default_context()
     req = urllib.request.Request(cfg["server"].rstrip("/") + path, headers={"Authorization": f"Bearer {token}"})
     with urllib.request.urlopen(req, timeout=15, context=ctx) as r:  # noqa: S310
         return json.loads(r.read().decode())
