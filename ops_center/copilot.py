@@ -197,6 +197,7 @@ def profile_state(home: Path) -> Optional[dict]:
             row = c.execute("SELECT value FROM meta WHERE key='copilot'").fetchone()
         return json.loads(row[0]) if row else None
     except Exception:  # noqa: BLE001
+        logger.warning("copilot: estado de %s ilegível", home, exc_info=True)
         return None
 
 
