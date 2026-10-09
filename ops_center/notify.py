@@ -296,13 +296,16 @@ def telegram() -> dict:
         import contextvars
 
         me = _bot_identity()
-        # Cada thread leva o contexto do perfil (home + segredos): sem isso o token do perfil não é lido.
-        run = lambda *a: contextvars.copy_context().run(_call, *a)  # noqa: E731
+        # Cada thread leva uma cópia do contexto do perfil (home + segredos), feita AQUI, na thread que chamou:
+        # sem isso o token de um perfil nomeado não é lido. Uma cópia por chamada (contexto não é reentrante).
+        def submit(*a):
+            return pool.submit(contextvars.copy_context().run, _call, *a)
+
         with ThreadPoolExecutor(max_workers=4) as pool:
-            f_chat = pool.submit(run, "getChat", {"chat_id": cid})
-            f_count = pool.submit(run, "getChatMemberCount", {"chat_id": cid})
-            f_admins = pool.submit(run, "getChatAdministrators", {"chat_id": cid})
-            f_mine = pool.submit(run, "getChatMember", {"chat_id": cid, "user_id": me["id"]})
+            f_chat = submit("getChat", {"chat_id": cid})
+            f_count = submit("getChatMemberCount", {"chat_id": cid})
+            f_admins = submit("getChatAdministrators", {"chat_id": cid})
+            f_mine = submit("getChatMember", {"chat_id": cid, "user_id": me["id"]})
             chat, count, admins, mine = f_chat.result(), f_count.result(), f_admins.result(), f_mine.result()
     except TelegramError as e:
         status = e.code if e.code in ("no_token", "no_chat") else "error"
