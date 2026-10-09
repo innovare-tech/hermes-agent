@@ -26,7 +26,7 @@ describe("buildSlashMenu", () => {
   });
   it("principais em português; o resto como vem, sem o '(usage: …)'", () => {
     expect(menu.find((c) => c.cmd === "/retry")?.desc).toBe("Gera a última resposta de novo");
-    expect(menu.find((c) => c.cmd === "/curator")?.desc).toBe("Background skill maintenance");
+    expect(menu.find((c) => c.cmd === "/curator")?.desc).toBe("Manutenção de skills em segundo plano (status, executar, fixar, arquivar)");
     expect(menu.find((c) => c.cmd === "/arxiv")?.skill).toBe(true);
   });
   it("skills mais usadas primeiro", () => {
@@ -46,5 +46,15 @@ describe("filterSlash", () => {
     const r = filterSlash(menu, "/a");
     expect(r.map((c) => c.cmd)).toEqual(["/status", "/curator", "/arxiv", "/airtable"]);
     expect(r.findIndex((c) => c.skill)).toBeGreaterThan(r.findIndex((c) => !c.skill));
+  });
+});
+
+describe("descrições em português", () => {
+  const names = ["agents", "approvals", "bg", "blueprint", "branch", "bundles", "focus", "heartbeat", "journey", "moa", "profile", "refine", "rollback", "save"];
+  const menu = buildSlashMenu({ pairs: names.map((n) => ["/" + n, "English description of " + n]), skills: {}, commands: {} } as Parameters<typeof buildSlashMenu>[0]);
+  it("todos os comandos pedidos saem em português, nenhum com o texto em inglês", () => {
+    expect(menu.map((c) => c.cmd).sort()).toEqual(names.map((n) => "/" + n).sort());
+    for (const c of menu) expect(c.desc).not.toMatch(/English|\b(the|and|Show|Run)\b/);
+    expect(menu.find((c) => c.cmd === "/bg")?.desc).toBe("Roda um pedido numa conversa separada, em segundo plano");
   });
 });

@@ -63,3 +63,20 @@ describe("código e fórmulas", () => {
     expect(html("$$ \\sqrt{16} $$")).toContain('class="au-md-mathblock">√16');
   });
 });
+
+describe("fórmulas em listas e frações", () => {
+  it("$$…$$ dentro de item de lista é renderizado, não sai cru", () => {
+    const out = html("1. **Fórmula:**\n   $$x = \\frac{-b}{2a}$$\n2. Outra coisa $$y^2$$ no meio");
+    expect(out).not.toContain("$$");
+    expect(out).toContain("au-md-mathblock");
+    expect(out).toContain("au-frac");
+    expect(html("- item $$a + b$$ fim")).not.toContain("$$");
+  });
+  it("Bhaskara em bloco: fração em duas linhas, com numerador e denominador", () => {
+    const out = html("$$ x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a} $$");
+    expect(out).toContain('<span class="au-frac"><span class="au-frac-n">-b ± √(b²-4ac)</span><span class="au-frac-d">2a</span></span>');
+  });
+  it("fórmula inline continua em linha: a/b", () => {
+    expect(html("vale $\\frac{a}{b}$ aqui")).toContain('<span class="au-md-math">a/b</span>');
+  });
+});

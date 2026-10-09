@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachError, attachKind, checkAttachment, fmtSize, MAX_ATTACH_BYTES, MAX_ATTACHMENTS, withRefs } from "./attachments";
+import { attachError, attachKind, checkAttachment, fmtSize, MAX_ATTACH_BYTES, MAX_ATTACHMENTS, parseAttachRefs, withRefs } from "./attachments";
 
 const f = (name: string, type: string, size = 1000) => ({ name, type, size });
 
@@ -28,5 +28,24 @@ describe("anexos", () => {
     expect(attachError("pdftoppm not installed (poppler-utils package required)")).toMatch(/leitor de PDF/);
     expect(attachError("image too large (30000000 bytes; cap is 25 MB)")).toMatch(/grande demais/);
     expect(attachError("")).toBe("Não consegui anexar.");
+  });
+});
+
+describe("parseAttachRefs", () => {
+  it("o caminho cru do anexo vira chip (ícone + nome), o resto do texto fica", () => {
+    const r = parseAttachRefs("@image:C:\\Users\\Usuario\\AppData\\Local\\hermes\\images\\upload_20261009_170843_2.png [screenshot]\n\nO que tem nesta imagem?");
+    expect(r.attachments).toEqual([{ name: "upload_20261009_170843_2.png", kind: "image" }]);
+    expect(r.text).toBe("O que tem nesta imagem?");
+  });
+  it("@file e @pdf, várias referências e caminho com espaço", () => {
+    const r = parseAttachRefs("@file:/home/u/relatório final.txt @pdf:/tmp/p/doc.pdf [pages]\n\nresuma");
+    expect(r.attachments).toEqual([{ name: "relatório final.txt", kind: "file" }, { name: "doc.pdf", kind: "pdf" }]);
+    expect(r.text).toBe("resuma");
+  });
+  it("no meio da frase o caminho vai até o espaço; sem caminho de verdade não mexe", () => {
+    expect(parseAttachRefs("veja @image:/a/b.png [x] por favor")).toEqual({ text: "veja  por favor", attachments: [{ name: "b.png", kind: "image" }] });
+    const same = "mande @image:isso para o time";
+    expect(parseAttachRefs(same)).toEqual({ text: same, attachments: [] });
+    expect(parseAttachRefs("texto comum")).toEqual({ text: "texto comum", attachments: [] });
   });
 });

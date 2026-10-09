@@ -1,5 +1,5 @@
 // Anexos da Conversa: tipo, limites e leitura do arquivo. O envio em si vai pelo gateway (gateway.ts).
-import type { AttachmentKind } from "./types";
+import type { AttachmentKind, SentAttachment } from "./types";
 
 /** Limite por arquivo (o gateway aceita até 25 MB de imagem e 50 MB de PDF; ficamos no menor para a conversa não travar). */
 export const MAX_ATTACH_BYTES = 25 * 1024 * 1024;
@@ -49,4 +49,37 @@ export function attachError(message: string): string {
   if (/unsupported image/i.test(message)) return "Formato de imagem sem suporte.";
   if (/no session|session not found|not connected/i.test(message)) return "A conversa não está conectada. Tente de novo.";
   return message || "Não consegui anexar.";
+}
+
+const KIND_OF: Record<string, AttachmentKind> = { image: "image", file: "file", pdf: "pdf" };
+const looksLikePath = (p: string) => /[\\/]/.test(p) || /\.\w{1,6}$/.test(p);
+
+/** Nome do arquivo de um caminho (Windows ou Unix). */
+export const baseName = (p: string) => p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || p;
+
+/**
+ * Referências `@image:<caminho> [rótulo]`, `@file:…`, `@pdf:…` que o envio põe no texto: viram chips (kind + nome)
+ * e saem do texto. Linha só de referências aceita caminho com espaço; no meio de uma frase, o caminho vai até o espaço.
+ */
+export function parseAttachRefs(text: string): { text: string; attachments: SentAttachment[] } {
+  if (!text.includes("@")) return { text, attachments: [] };
+  const attachments: SentAttachment[] = [];
+  const add = (kind: string, raw: string) => {
+    const path = raw.replace(/\s*\[[^\]\n]*\]\s*$/, "").trim().replace(/^["']|["']$/g, "");
+    if (!path || !looksLikePath(path)) return false;
+    attachments.push({ name: baseName(path), kind: KIND_OF[kind] });
+    return true;
+  };
+  const lines = text.split("\n").map((line) => {
+    if (!/^\s*@(?:image|file|pdf):/.test(line)) return line.replace(/@(image|file|pdf):(\S+)(?:[ \t]+\[[^\]\n]*\])?/g, (all, k: string, p: string) => (add(k, p) ? "" : all));
+    // Linha só de referências: parte em cada "@tipo:" e tira o rótulo "[…]" do fim de cada uma.
+    const parts = line.split(/(?=@(?:image|file|pdf):)/).filter((s) => s.trim());
+    const left = parts.filter((part) => {
+      const m = part.match(/^@(image|file|pdf):([\s\S]*)$/);
+      return !(m && add(m[1], m[2]));
+    });
+    return left.join(" ");
+  });
+  if (!attachments.length) return { text, attachments };
+  return { text: lines.join("\n").replace(/^\s*\n/, "").replace(/\n{3,}/g, "\n\n").trim(), attachments };
 }

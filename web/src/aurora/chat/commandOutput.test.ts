@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cmdName, commandError, parseCommandOutput } from "./commandOutput";
+import { cmdName, commandError, parseCommandOutput, ptNumbers, ptWarning, withWarning } from "./commandOutput";
 
 // Textos reais do gateway (inglês, formato de terminal).
 const STATUS = "Hermes TUI Status\n\nSession ID: 20261009_161220_4c21a4\nPath: ~/AppData/Local/hermes\nModel: gemini-3.8-flash (gemini)\nCreated: 2026-10-09 16:12\nLast Activity: 2026-10-09 16:12\nTokens: 0\nAgent Running: No";
@@ -16,9 +16,9 @@ describe("parseCommandOutput", () => {
   it("/usage", () => {
     const c = parseCommandOutput("/usage", USAGE);
     expect(c.title).toBe("Uso de tokens desta conversa");
-    expect(c.lines).toContain("Entrada: 1,200");
-    expect(c.lines).toContain("Total: 1,540");
-    expect(c.lines).toContain("Contexto agora: ~18,894 / 1,048,576 (~2%)");
+    expect(c.lines).toContain("Entrada: 1.200");
+    expect(c.lines).toContain("Total: 1.540");
+    expect(c.lines).toContain("Contexto agora: ~18.894 / 1.048.576 (~2%)");
   });
 
   it("/reasoning: consulta e troca", () => {
@@ -38,7 +38,7 @@ describe("parseCommandOutput", () => {
     expect(parseCommandOutput("/undo 3", "↶ Undid 3 turns (6 message(s)). Edit.").title).toBe("Voltou 3 perguntas");
     expect(parseCommandOutput("/compress", "Compressed: 13 → 10 messages\nApprox request size: ~9,000 → ~7,000 tokens")).toMatchObject({
       title: "Conversa compactada: 13 → 10 mensagens",
-      lines: ["Tamanho estimado: ~9,000 → ~7,000 tokens"],
+      lines: ["Tamanho estimado: ~9.000 → ~7.000 tokens"],
     });
     expect(parseCommandOutput("/compact", "No changes from compression: 0 messages\nApprox request size: ~0 tokens (unchanged)").title).toBe("Nada para compactar");
     expect(parseCommandOutput("/title Teste", "  Session title queued: Teste (will be saved on first message)")).toMatchObject({ title: "Título da conversa: Teste", lines: ["Será salvo quando você enviar a primeira mensagem."] });
@@ -66,5 +66,50 @@ describe("commandError", () => {
     expect(commandError("/retry", "retry cannot safely reconstruct or combine attached media").lines?.[0]).toMatch(/anexos/);
     expect(commandError("/model x", "Hermes is busy: turn in progress").title).toBe("O Hermes está respondendo");
     expect(commandError("/zzz", "boom").title).toBe("Não consegui rodar /zzz");
+  });
+});
+
+describe("números no formato brasileiro", () => {
+  it("vírgula de milhar do inglês vira ponto", () => {
+    expect(ptNumbers("Entrada: 85,903")).toBe("Entrada: 85.903");
+    expect(ptNumbers("20,508 / 1,048,576")).toBe("20.508 / 1.048.576");
+    expect(ptNumbers("~22,097 → ~21,519 tokens")).toBe("~22.097 → ~21.519 tokens");
+    expect(ptNumbers("a, b, 12 e 1,5")).toBe("a, b, 12 e 1,5");
+  });
+  it("nos cartões de /usage e /compress", () => {
+    const u = parseCommandOutput("/usage", "Session Token Usage\nInput tokens:  85,903\nTotal tokens:  90,000\nCurrent context:  20,508 / 1,048,576 (~2%)");
+    expect(u.lines).toContain("Entrada: 85.903");
+    expect(u.lines).toContain("Contexto agora: 20.508 / 1.048.576 (~2%)");
+    expect(parseCommandOutput("/compress", "Compressed: 13 → 10 messages\nApprox request size: ~22,097 → ~21,519 tokens").lines).toEqual(["Tamanho estimado: ~22.097 → ~21.519 tokens"]);
+  });
+});
+
+describe("/model", () => {
+  const NOTE = "Note: `gemini-9` was not found in the Google AI Studio curated catalog and the /models endpoint was unreachable. The model may still work if it exists on the provider.";
+  it("a nota de modelo fora do catálogo vira aviso âmbar em português", () => {
+    expect(ptWarning(NOTE)).toBe("Atenção: **gemini-9** não está no catálogo deste provedor e não deu para conferir. Se o nome estiver errado, a próxima mensagem vai falhar.");
+    expect(ptWarning("Note: `x` was not found in the live /v1/models listing but exists in the curated catalog — accepted.")).toMatch(/está no catálogo/);
+    expect(ptWarning("outro aviso")).toBe("outro aviso");
+  });
+  it("o cartão mantém 'Modelo da conversa: X' e ganha o aviso", () => {
+    const c = withWarning(parseCommandOutput("/model gemini-9", "Modelo da conversa: gemini-9"), NOTE);
+    expect(c).toMatchObject({ kind: "card", title: "Modelo da conversa: gemini-9" });
+    expect(c.warn).toMatch(/^Atenção: \*\*gemini-9\*\*/);
+    expect(c.lines).toEqual([]);
+    expect(parseCommandOutput("/model x", "Modelo da conversa: x (vale a partir da próxima mensagem)").lines).toEqual(["Vale a partir da próxima mensagem."]);
+    expect(withWarning(parseCommandOutput("/model x", "Modelo da conversa: x"), "").warn).toBeUndefined();
+  });
+});
+
+describe("/title e outras mensagens de comando", () => {
+  it("título repetido", () => {
+    const msg = "Title 'Teste QA' is already in use by session 20261009_161220_4c21a4";
+    expect(commandError("/title Teste QA", msg)).toMatchObject({ kind: "error", title: "Título já em uso", lines: ["Já existe uma conversa com o título “Teste QA”. Escolha outro."] });
+    expect(parseCommandOutput("/title Teste QA", msg).lines).toEqual(["Já existe uma conversa com o título “Teste QA”. Escolha outro."]);
+  });
+  it("outras mensagens óbvias", () => {
+    expect(commandError("/title x", "Title too long (140 chars, max 100)").lines).toEqual(["O título tem 140 caracteres; o máximo é 100."]);
+    expect(commandError("/queue", "usage: /queue <prompt>").lines).toEqual(["Faltou o texto depois de /queue."]);
+    expect(commandError("/x", "empty command").lines?.[0]).toMatch(/Digite/);
   });
 });

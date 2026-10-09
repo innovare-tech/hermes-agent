@@ -60,3 +60,26 @@ export function classifyError(message: string, o: { code?: string; retryable?: b
   const model = (kind === "model" && modelFromText(detail)) || o.model || "";
   return { kind, title: c.title(model), body: c.body, detail, retryable: o.retryable ?? c.retryable, switchModel: c.switchModel };
 }
+
+/** Linha de transição que o backend grava quando o turno acaba sem resposta ("Your request was not processed…"). */
+const FAILED_NOTICE = /^\s*(?:your (?:request|message) (?:was|were) not (?:processed|completed|answered)|this turn did not complete)\b/i;
+const PARTIAL_NOTICE = /^\s*this turn did not complete\b/i;
+const NOTICE_FULL = /(?:your (?:request|message) (?:was|were) not (?:processed|completed|answered)\.?(?:\s+send it again[^.]*\.)?|this turn did not complete\.?(?:\s+some actions may already have run[^.]*\.)?)/gi;
+
+export const isFailedTurnText = (t: string) => FAILED_NOTICE.test(t);
+
+/** Texto do aviso do backend tirado da resposta (sobra o que o agente tenha escrito antes dele). */
+export const stripFailedTurn = (t: string) => t.replace(NOTICE_FULL, "").trim();
+
+/** Turno sem resposta no histórico (o backend grava só o aviso em inglês) → cartão em português. */
+export function failedTurnError(notice: string): ChatError {
+  const partial = PARTIAL_NOTICE.test(notice);
+  return {
+    kind: "other",
+    title: partial ? "Este turno não terminou" : "Esta pergunta não foi respondida",
+    body: partial ? "Algumas ações podem já ter sido feitas. Confira o resultado antes de enviar de novo." : "Envie de novo se ainda quiser.",
+    detail: notice.trim(),
+    retryable: true,
+    switchModel: false,
+  };
+}

@@ -265,6 +265,13 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-tk-k{color:var(--acc)}.au-tk-s{color:var(--ok)}.au-tk-n{color:var(--warn)}.au-tk-l{color:var(--warn)}.au-tk-c{color:var(--fg3);font-style:italic}
 .au-md-math{font-family:var(--fd);font-style:italic;font-size:1.06em;white-space:nowrap}
 .au-md-mathblock{font-family:var(--fd);font-style:italic;font-size:1.2em;text-align:center;padding:6px 0;overflow-x:auto}
+.au-md-mathinline{display:inline-block;max-width:100%;vertical-align:middle;padding:2px 4px}
+.au-frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 .3em;font-size:.95em;line-height:1.2}
+.au-frac-n{padding:0 .3em .08em;border-bottom:1px solid currentColor}
+.au-frac-d{padding:.08em .3em 0}
+.au-toolsum{display:block;margin:2px 0 4px;font-size:12.5px;color:var(--fg)}
+.au-syswarn{display:flex;align-items:flex-start;gap:7px;margin-top:6px;padding:7px 10px;border:1px solid color-mix(in oklab,var(--warn) 45%,var(--line));border-radius:var(--r2);background:color-mix(in oklab,var(--warn) 9%,transparent);color:var(--fg);font-size:12.5px;line-height:1.5}
+.au-syswarn svg{flex:none;margin-top:2px;color:var(--warn)}
 .au-menurow{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:8px 10px;border-radius:var(--r2)}
 .au-chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
 .au-achip{display:flex;align-items:center;gap:7px;max-width:240px;padding:4px 6px 4px 6px;border:1px solid var(--line2);border-radius:var(--r2);background:var(--panel2);font-size:12px;color:var(--fg)}

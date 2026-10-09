@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../Icon";
 import { fmtElapsed } from "./toolLabels";
+import { useReveal } from "./useReveal";
 
 type Props = { text: string; ms?: number; since?: number; live: boolean };
 
 /** "Pensamento" da resposta: recolhido por padrão, mostra quanto o modelo pensou. */
 export function Reasoning({ text, ms, since, live }: Props) {
   const [open, setOpen] = useState(false);
+  const body = useReveal<HTMLDivElement>(open);
   const thinking = live && ms == null;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -22,7 +24,7 @@ export function Reasoning({ text, ms, since, live }: Props) {
         {label}
         <Icon name={open ? "chevron-up" : "chevron-down"} size={12} />
       </button>
-      {open && <div className="au-think-body">{text}</div>}
+      {open && <div ref={body} className="au-think-body">{text}</div>}
     </div>
   );
 }

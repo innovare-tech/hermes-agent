@@ -26,7 +26,26 @@ const yn = (v?: string) => (!v ? "—" : /^(yes|true|on)$/i.test(v) ? "sim" : /^
 
 const system = (cmd: string, output: string): CommandCard => ({ kind: "system", icon: "info", title: "Resposta de " + (cmd.trim().split(/\s+/)[0] || "/comando"), raw: output.trim() });
 
+/** "85,903" (inglês) → "85.903": só vírgula entre grupos de 3 dígitos é separador de milhar. */
+export const ptNumbers = (s: string) => s.replace(/\d{1,3}(?:,\d{3})+(?![\d,])/g, (n) => n.replace(/,/g, "."));
+
+/** Aviso do backend (inglês) → aviso em português (markdown curto). Desconhecido passa como veio. */
+export function ptWarning(w: string): string {
+  const m = w.match(/Note:\s*`([^`]+)`\s+(?:was not found in|is not named in|is not declared by)/i);
+  if (!m) return w.trim();
+  if (/exists in the curated catalog|accepted/i.test(w)) return `Atenção: **${m[1]}** não apareceu na lista ao vivo do provedor, mas está no catálogo. Deve funcionar.`;
+  return `Atenção: **${m[1]}** não está no catálogo deste provedor e não deu para conferir. Se o nome estiver errado, a próxima mensagem vai falhar.`;
+}
+
+/** Cartão + aviso do backend (ex.: modelo fora do catálogo). */
+export const withWarning = (card: CommandCard, warning?: string): CommandCard => (warning?.trim() ? { ...card, warn: ptWarning(warning) } : card);
+
 export function parseCommandOutput(cmd: string, output: string): CommandCard {
+  const c = parseRaw(cmd, output);
+  return { ...c, title: ptNumbers(c.title), ...(c.lines ? { lines: c.lines.map(ptNumbers) } : {}) };
+}
+
+function parseRaw(cmd: string, output: string): CommandCard {
   const text = output.replace(/\r/g, "").trim();
   if (!text) return { kind: "system", icon: "check", title: `${cmd.trim().split(/\s+/)[0]} executado` };
   const name = cmdName(cmd);
@@ -108,12 +127,15 @@ export function parseCommandOutput(cmd: string, output: string): CommandCard {
       break;
 
     case "title":
+      if ((m = text.match(/^Title '(.+)' is already in use/im))) return { kind: "error", icon: "circle-alert", title: "Título já em uso", lines: [`Já existe uma conversa com o título “${m[1]}”. Escolha outro.`], raw: text };
       if ((m = text.match(/title (set|queued):\s*(.+?)(?:\s*\(will be saved[^)]*\))?\s*$/im))) {
         return { kind: "card", icon: "pencil", title: `Título da conversa: ${m[2]}`, lines: m[1].toLowerCase() === "queued" ? ["Será salvo quando você enviar a primeira mensagem."] : [], raw: text };
       }
       break;
 
     case "model":
+      if ((m = text.match(/^Modelo da conversa:\s*(.+?)(\s*\(vale a partir da próxima mensagem\))?\s*$/im)))
+        return { kind: "card", icon: "cpu", title: `Modelo da conversa: ${m[1]}`, lines: m[2] ? ["Vale a partir da próxima mensagem."] : [], raw: text };
       if ((m = text.match(/Current model:\s*(.+)/i))) return { kind: "card", icon: "cpu", title: `Modelo atual: ${m[1].replace(/^\(unknown\)$/, "não definido")}`, lines: ["Para trocar, use o seletor de modelo no campo de mensagem."], raw: text };
       break;
 
@@ -131,6 +153,7 @@ export function parseCommandOutput(cmd: string, output: string): CommandCard {
 export function commandError(cmd: string, message: string): CommandCard {
   const name = cmdName(cmd);
   const msg = message.trim();
+  let m: RegExpMatchArray | null;
   let title = "Não consegui rodar " + (cmd.trim().split(/\s+/)[0] || "o comando");
   let line = msg;
   if (/no user messages to undo|no previous user message/i.test(msg)) {
@@ -144,6 +167,21 @@ export function commandError(cmd: string, message: string): CommandCard {
     line = "Digite / para ver os comandos disponíveis.";
   } else if (/attached media|attachment/i.test(msg)) {
     line = "Não dá para refazer uma mensagem com anexos. Envie de novo com os anexos.";
+  } else if ((m = msg.match(/Title '(.+)' is already in use/i))) {
+    title = "Título já em uso";
+    line = `Já existe uma conversa com o título “${m[1]}”. Escolha outro.`;
+  } else if ((m = msg.match(/Title too long \((\d+) chars?, max (\d+)\)/i))) {
+    title = "Título comprido demais";
+    line = `O título tem ${m[1]} caracteres; o máximo é ${m[2]}.`;
+  } else if (/canonical Bot Chat/i.test(msg)) {
+    title = "Esta conversa não pode ser renomeada";
+    line = "É a conversa principal do bot: o nome dela é fixo.";
+  } else if ((m = msg.match(/usage: (\/\w+)/i))) {
+    line = `Faltou o texto depois de ${m[1]}.`;
+  } else if (/empty command/i.test(msg)) {
+    line = "Digite um comando depois da barra.";
+  } else if (/no active session|session not found|not connected/i.test(msg)) {
+    line = "A conversa não está conectada. Tente de novo em instantes.";
   }
   return { kind: "error", icon: "circle-alert", title, lines: [line], raw: msg === line ? undefined : msg };
 }

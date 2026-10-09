@@ -1,6 +1,10 @@
 import type { Session } from "../adapter";
 
-export type StepStatus = "run" | "ok" | "err";
+/** `denied`: o usuário negou a aprovação — a ferramenta não rodou (não é falha). */
+export type StepStatus = "run" | "ok" | "err" | "denied";
+
+/** Resumo em português da saída da ferramenta; o texto/JSON original fica no detalhe. */
+export type ToolSummary = { line: string; /** Conteúdo recolhido (lista de arquivos, texto lido…). */ more?: string; moreLabel?: string; /** Mostra `more` já aberto. */ open?: boolean };
 
 export type ToolStep = {
   id: string;
@@ -15,6 +19,7 @@ export type ToolStep = {
   args?: Record<string, unknown> | null;
   /** Quando começou (ms), para o tempo correndo. */
   startedAt?: number;
+  summary?: ToolSummary;
 };
 
 export type Block =
@@ -70,6 +75,8 @@ export type CommandCard = {
   icon: string;
   title: string;
   lines?: string[];
+  /** Aviso âmbar (markdown curto, ex.: modelo fora do catálogo). */
+  warn?: string;
   /** Saída original, recolhida. */
   raw?: string;
 };

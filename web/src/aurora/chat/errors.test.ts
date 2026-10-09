@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { approvalCopy } from "./approvalCopy";
-import { classifyError, isErrorText, modelFromText } from "./errors";
+import { classifyError, failedTurnError, isErrorText, isFailedTurnText, modelFromText, stripFailedTurn } from "./errors";
 
 describe("classifyError", () => {
   it("modelo inexistente (o caso do Gemini 404) vira cartão em português", () => {
@@ -42,5 +42,21 @@ describe("approvalCopy", () => {
     expect(approvalCopy("git force push (rewrites remote history)").title).toBe("Mudança destrutiva no git");
     expect(approvalCopy("recursive delete").title).toBe("Apagar arquivos ou pastas");
     expect(approvalCopy("something nobody mapped").title).toBe("Executar um comando");
+  });
+});
+
+describe("turno sem resposta no histórico", () => {
+  const NOTICE = "Your request was not processed. Send it again if you still want me to carry it out.";
+  it("reconhece o aviso do backend e as variações", () => {
+    expect(isFailedTurnText(NOTICE)).toBe(true);
+    expect(isFailedTurnText("Your message was not processed.")).toBe(true);
+    expect(isFailedTurnText("This turn did not complete. Some actions may already have run; verify their effects before resending.")).toBe(true);
+    expect(isFailedTurnText("Seu pedido foi processado")).toBe(false);
+    expect(stripFailedTurn("Comecei a ver.\n\n" + NOTICE)).toBe("Comecei a ver.");
+    expect(stripFailedTurn(NOTICE)).toBe("");
+  });
+  it("vira cartão em português, com o original no detalhe e 'Tentar de novo'", () => {
+    expect(failedTurnError(NOTICE)).toMatchObject({ title: "Esta pergunta não foi respondida", body: "Envie de novo se ainda quiser.", detail: NOTICE, retryable: true, switchModel: false });
+    expect(failedTurnError("This turn did not complete. Some actions may already have run.").title).toBe("Este turno não terminou");
   });
 });

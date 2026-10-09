@@ -78,7 +78,8 @@ export function summarizeArgs(name: string, args?: Record<string, unknown> | nul
     case "search_files": {
       const pat = first(a, "pattern", "query");
       const where = first(a, "path");
-      return squash([pat, where && "em " + tail(where)].filter(Boolean).join(" "), 120);
+      const what = !pat || pat === "*" ? "todos os arquivos" : a.target === "files" ? `arquivos com ${pat}` : `texto “${pat}”`;
+      return squash(`${what} ${!where || where === "." || where === "./" ? "na pasta atual" : "em " + tail(where)}`, 120);
     }
     case "read_file":
     case "write_file":
@@ -112,4 +113,11 @@ export function limitOutput(text: string, all = false, maxLines = 40, maxChars =
   const lines = text.split("\n");
   if (lines.length <= maxLines && text.length <= maxChars) return { text, cut: false };
   return { text: lines.slice(0, maxLines).join("\n").slice(0, maxChars), cut: true };
+}
+
+/** Código ou comando completo, com as quebras de linha, para o bloco mono do passo expandido. */
+export function argBlock(name: string, args?: Record<string, unknown> | null): string {
+  if (!args || typeof args !== "object") return "";
+  const v = name === "terminal" ? first(args, "command", "cmd") : name === "execute_code" ? first(args, "code", "script") : "";
+  return v.trim();
 }

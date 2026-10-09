@@ -6,9 +6,10 @@ import { chat } from "../chat";
 import { AgentBubble, UserBubble } from "../chat/Bubbles";
 import { checkAttachment, attachError, attachKind, withRefs } from "../chat/attachments";
 import { CommandCard } from "../chat/CommandCard";
-import { cmdName, commandError, EFFORT_PT, parseCommandOutput } from "../chat/commandOutput";
+import { cmdName, commandError, EFFORT_PT, parseCommandOutput, ptWarning, withWarning } from "../chat/commandOutput";
 import { Composer } from "../chat/Composer";
 import { ContextPanel } from "../chat/ContextPanel";
+import { saveExtras } from "../chat/persist";
 import { plural } from "../chat/sources";
 import { answered, applyEvent, interrupted, keepForRetry, keepForUndo, lastUserIndex, planEdit, visibleCount } from "../chat/turn";
 import type { AgentMessage, ApprovalChoice, Attachment, ChatMessage, ContextBreakdown, SessionInfo, SlashCommand } from "../chat/types";
@@ -154,6 +155,11 @@ export function Chat() {
     if (stick.current) requestAnimationFrame(() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight }));
   }, [messages]);
 
+  // Cartões de comando, pensamento, tokens e "interrompido" não vêm do histórico do backend: guarda aqui para o recarregar.
+  useEffect(() => {
+    if (sid && !loading && !running && messages.length) saveExtras(sid, messages);
+  }, [sid, loading, running, messages]);
+
   const updateLive = (f: (m: AgentMessage) => AgentMessage) => setMessages((list) => list.map((m) => (m.role === "agent" && m.live ? f(m) : m)));
 
   // Cria a sessão sob demanda (primeira mensagem, primeiro anexo, escolha de esforço): uma só, mesmo com várias chamadas juntas.
@@ -254,7 +260,7 @@ export function Chat() {
       return startTurn(r.message, { user: { text } });
     }
     const card =
-      r.type === "error" ? commandError(text, r.message) : r.type === "prefill" ? parseCommandOutput("/undo", r.notice) : { ...parseCommandOutput(text, r.output), ...(r.warning ? { lines: [r.warning] } : {}) };
+      r.type === "error" ? commandError(text, r.message) : r.type === "prefill" ? parseCommandOutput("/undo", r.notice) : withWarning(parseCommandOutput(text, r.output), r.warning);
     if (r.type === "prefill") setPrefill({ text: r.message, id: Date.now() });
     setMessages((list) => list.map((m) => (m.id === ph ? { ...m, pending: false, card } : m)));
     // Comando que mexe na sessão (/model, /reasoning, /fast, /personality…): relê o que ficou valendo.
@@ -343,7 +349,7 @@ export function Chat() {
     if (model === info.model && provider === info.provider && !pendingModel) return;
     try {
       const sw = await chat.setModel(sid, provider, model);
-      if (sw.warning) toast(sw.warning);
+      if (sw.warning) toast(ptWarning(sw.warning).replaceAll("**", ""));
       if (sw.state === "pending") {
         setPendingModel(sw.model);
         toast("Troca agendada: " + sw.model, "O Hermes está respondendo; o modelo novo vale a partir da próxima mensagem.");
@@ -528,7 +534,7 @@ export function Chat() {
           </div>
         </header>
 
-        <div ref={scroller} onScroll={onScroll} style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div ref={scroller} onScroll={onScroll} style={{ flex: 1, overflow: "auto", minHeight: 0, scrollPaddingBottom: 56 }}>
           {loading && (
             <div className="au-chat-skel" role="status" aria-label="Carregando a conversa">
               <div className="au-skel" style={{ height: 44, width: "46%", marginLeft: "auto" }} />
@@ -572,7 +578,7 @@ export function Chat() {
             </div>
           )}
 
-          <div style={{ maxWidth: 780, margin: "0 auto", padding: "30px 26px 28px", display: "flex", flexDirection: "column", gap: 30 }}>
+          <div style={{ maxWidth: 780, margin: "0 auto", padding: "30px 26px 80px", display: "flex", flexDirection: "column", gap: 30 }}>
             {messages.map((m, i) =>
               m.role === "user" ? (
                 <UserBubble key={m.id} m={m} canEdit={!running && !!sid} onEdit={(t) => edit(m, t)} />

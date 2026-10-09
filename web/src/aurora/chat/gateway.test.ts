@@ -96,7 +96,8 @@ describe("formatação", async () => {
 });
 
 describe("transcrição (recarregar /chat/<id>)", async () => {
-  const { fromTranscript, withInflightError, turnStat, statLine, usageOf, toolFailed } = await import("./gateway");
+  const { fromTranscript, withInflightError, turnStat, statLine, usageOf, toolFailed, stepResult } = await import("./gateway");
+  const { applyExtras } = await import("./persist");
   const T = 1_000_000;
   const rows = [
     { role: "user", text: "Quanto é 17 x 23?", row_id: 1, timestamp: T },
@@ -148,6 +149,39 @@ describe("transcrição (recarregar /chat/<id>)", async () => {
     expect(usageOf(u as never)?.cost).toBeNull();
     expect(usageOf({ ...u, cost_status: "estimated", cost_usd: 0.12 } as never)?.cost).toBe(0.12);
     expect(statLine({ model: "m", secs: 12, tokens: 1500 })).toBe("m · 12,0s · 1,5k tokens");
+  });
+
+  it("turno que o backend fechou com o aviso em inglês volta como cartão em português; a pergunta fica", () => {
+    const NOTICE = "Your request was not processed. Send it again if you still want me to carry it out.";
+    const msgs = fromTranscript([{ role: "user", text: "faça X", row_id: 1, timestamp: T }, { role: "assistant", text: NOTICE, row_id: 2, timestamp: T + 1 }] as never, { model: "m" });
+    expect(msgs.map((m) => m.role)).toEqual(["user", "agent"]);
+    expect(msgs[0]).toMatchObject({ text: "faça X", rowId: 1 });
+    expect(msgs[1]).toMatchObject({ text: "", error: { title: "Esta pergunta não foi respondida", retryable: true } });
+  });
+
+  it("recarregar devolve cartões de comando, pensamento e 'interrompido' guardados", () => {
+    const rows = [
+      { role: "user", text: "p1", row_id: 1, timestamp: T },
+      { role: "assistant", text: "r1", row_id: 2, timestamp: T + 1 },
+      { role: "user", text: "p2", row_id: 3, timestamp: T + 2 },
+      { role: "assistant", text: "Your request was not processed. Send it again if you still want me to carry it out.", row_id: 4, timestamp: T + 3 },
+    ];
+    const card = { kind: "card" as const, icon: "gauge", title: "Estado da conversa" };
+    const extras = { cards: [{ n: 2, after: 1, cmd: "/status", card }], turns: { "1": { n: 1, r: "pensei", ms: 4000, tok: 900 }, "3": { n: 3, st: "i" as const } } };
+    const out = applyExtras(fromTranscript(rows as never, { model: "m" }), extras);
+    expect(out.map((m) => m.role)).toEqual(["user", "agent", "system", "user", "agent"]);
+    expect(out[1]).toMatchObject({ reasoning: "pensei", thinkMs: 4000, stat: { model: "m", tokens: 900 } });
+    expect(out[2]).toMatchObject({ cmd: "/status", card });
+    expect(out[4]).toMatchObject({ interrupted: true, error: undefined });
+  });
+
+  it("ferramenta negada não é 'executada' nem erro; ganha resumo quando conhecida", () => {
+    const denied = stepResult("execute_code", '{"error":"BLOCKED: User denied execute_code script execution."}');
+    expect(denied.status).toBe("denied");
+    expect(stepResult("search_files", '{"total_count":2,"files":["a","b"]}')).toMatchObject({ status: "ok", summary: { line: "2 arquivos encontrados" } });
+    expect(stepResult("terminal", '{"error":"falhou"}').status).toBe("err");
+    const [, a] = fromTranscript([{ role: "user", text: "x", row_id: 1 }, { role: "tool", name: "execute_code", tool_call_id: "t", args: { code: "a\nb" }, content: "BLOCKED: User denied this command." }, { role: "assistant", text: "ok", row_id: 3 }] as never, {});
+    expect((a as { steps: { status: string }[] }).steps[0].status).toBe("denied");
   });
 
   it("ferramenta que devolveu erro fica vermelha", () => {

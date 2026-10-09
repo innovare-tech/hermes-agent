@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtElapsed, limitOutput, summarizeArgs, toolLabel } from "./toolLabels";
+import { argBlock, fmtElapsed, limitOutput, summarizeArgs, toolLabel } from "./toolLabels";
 
 describe("toolLabel", () => {
   it("rótulos em português para as ferramentas comuns, no gerúndio enquanto rodam", () => {
@@ -19,11 +19,22 @@ describe("toolLabel", () => {
 describe("summarizeArgs", () => {
   it("resumo de uma linha do que a ferramenta está fazendo", () => {
     expect(summarizeArgs("terminal", { command: "ls -la\n  *.md" })).toBe("ls -la *.md");
-    expect(summarizeArgs("search_files", { pattern: "*.md", path: "C:\\x\\web" })).toBe("*.md em C:\\x\\web");
+    expect(summarizeArgs("search_files", { pattern: "*.md", path: "C:\\x\\web" })).toBe("texto “*.md” em C:\\x\\web");
     expect(summarizeArgs("execute_code", { code: "print(1)\nprint(2)" })).toBe("print(1) print(2)");
     expect(summarizeArgs("web_extract", { urls: ["https://a.dev/x"] })).toBe("https://a.dev/x");
     expect(summarizeArgs("memory", { action: "add" })).toBe("add");
     expect(summarizeArgs("terminal", null)).toBe("");
+  });
+  it("search_files: padrão e pasta claros, nunca '* em .'", () => {
+    expect(summarizeArgs("search_files", { pattern: "*.py", target: "files", path: "./src" })).toBe("arquivos com *.py em ./src");
+    expect(summarizeArgs("search_files", { pattern: "*", target: "files", path: "." })).toBe("todos os arquivos na pasta atual");
+    expect(summarizeArgs("search_files", { pattern: "TODO", target: "content" })).toBe("texto “TODO” na pasta atual");
+  });
+  it("argBlock: código e comando completos, com as quebras de linha", () => {
+    expect(argBlock("execute_code", { code: "a = 1\nprint(a)\n" })).toBe("a = 1\nprint(a)");
+    expect(argBlock("terminal", { command: "ls\npwd" })).toBe("ls\npwd");
+    expect(argBlock("read_file", { path: "/x" })).toBe("");
+    expect(argBlock("terminal", null)).toBe("");
   });
   it("corta texto longo e caminho comprido", () => {
     expect(summarizeArgs("terminal", { command: "x".repeat(300) })).toHaveLength(120);

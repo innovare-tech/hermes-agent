@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../Icon";
 import { ApprovalCard } from "../ops/ApprovalCard";
 import { toast } from "../store";
 import { approvalCopy } from "./approvalCopy";
+import { parseAttachRefs } from "./attachments";
 import { ErrorCard } from "./ErrorCard";
 import { statLine } from "./gateway";
 import { Markdown } from "./Markdown";
@@ -27,7 +28,11 @@ export function UserBubble({ m, canEdit, onEdit }: { m: UserMessage; canEdit: bo
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.text);
   const area = useRef<HTMLTextAreaElement>(null);
-  const long = isLong(m.text);
+  // Depois de recarregar, os anexos voltam como "@image:caminho" no texto: viram chips iguais aos do envio.
+  const parsed = useMemo(() => parseAttachRefs(m.text), [m.text]);
+  const shown = parsed.text;
+  const chips = m.attachments?.length ? m.attachments : parsed.attachments;
+  const long = isLong(shown);
   useEffect(() => {
     if (editing) {
       area.current?.focus();
@@ -63,9 +68,9 @@ export function UserBubble({ m, canEdit, onEdit }: { m: UserMessage; canEdit: bo
         </div>
       ) : (
         <div style={{ maxWidth: "80%", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-          {!!m.attachments?.length && (
+          {!!chips.length && (
             <div className="au-sentatt">
-              {m.attachments.map((a, i) => (
+              {chips.map((a, i) => (
                 <span key={i} className="au-achip" title={a.name}>
                   {a.preview ? <img src={a.preview} alt="" /> : <Icon name={a.kind === "pdf" ? "file-text" : "paperclip"} size={14} />}
                   <span className="au-achip-name">{a.name}</span>
@@ -73,20 +78,22 @@ export function UserBubble({ m, canEdit, onEdit }: { m: UserMessage; canEdit: bo
               ))}
             </div>
           )}
+          {(shown || !chips.length) && (
           <div className="au-ubody" style={{ padding: "12px 16px", borderRadius: "var(--r) var(--r) 4px var(--r)", background: "var(--panel2)", fontSize: 14.5, lineHeight: 1.55, textWrap: "pretty", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-            {long && !more ? previewOf(m.text) + "…" : m.text}
+            {long && !more ? previewOf(shown) + "…" : shown}
             {long && (
               <button className="au-more" aria-expanded={more} onClick={() => setMore(!more)} style={{ display: "block", marginTop: 8 }}>
-                {more ? "Mostrar menos" : `Mostrar mais · ${m.text.length.toLocaleString("pt-BR")} caracteres`}
+                {more ? "Mostrar menos" : `Mostrar mais · ${shown.length.toLocaleString("pt-BR")} caracteres`}
               </button>
             )}
           </div>
+          )}
           {canEdit && (
             <div className="au-uactions">
               <button className="au-mini" title="Editar e enviar de novo" aria-label="Editar a mensagem" onClick={() => { setDraft(m.text); setEditing(true); }}>
                 <Icon name="pencil" size={12} />
               </button>
-              <button className="au-mini" title="Copiar" aria-label="Copiar a mensagem" onClick={() => navigator.clipboard.writeText(m.text).then(() => toast("Copiado"), () => {})}>
+              <button className="au-mini" title="Copiar" aria-label="Copiar a mensagem" onClick={() => navigator.clipboard.writeText(shown || m.text).then(() => toast("Copiado"), () => {})}>
                 <Icon name="copy" size={12} />
               </button>
             </div>

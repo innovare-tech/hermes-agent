@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { Icon } from "../Icon";
+import { inline } from "./Markdown";
 import type { CommandCard as Card } from "./types";
+import { useReveal } from "./useReveal";
 
 /** Resposta de um comando "/": cartão curto (estado, uso, esforço…) ou bloco de sistema discreto — nunca fala do agente. */
 export function CommandCard({ cmd, card, pending }: { cmd: string; card?: Card; pending?: boolean }) {
   const [open, setOpen] = useState(false);
+  const rawRef = useReveal<HTMLPreElement>(open);
   if (pending || !card)
     return (
       <div className="au-syscard pending" role="status" aria-label={`Executando ${cmd}`}>
@@ -29,6 +32,12 @@ export function CommandCard({ cmd, card, pending }: { cmd: string; card?: Card; 
           {card.lines?.map((l) => (
             <span key={l} style={{ fontSize: 12.5, color: "var(--fg2)", lineHeight: 1.5 }}>{l}</span>
           ))}
+          {card.warn && (
+            <span className="au-syswarn" role="note">
+              <Icon name="triangle-alert" size={13} />
+              <span>{inline(card.warn)}</span>
+            </span>
+          )}
         </div>
         {card.raw && !system && (
           <button className="au-mini" aria-expanded={open} title={open ? "Esconder o texto original" : "Ver o texto original (em inglês)"} aria-label="Texto original do comando" onClick={() => setOpen(!open)}>
@@ -36,7 +45,7 @@ export function CommandCard({ cmd, card, pending }: { cmd: string; card?: Card; 
           </button>
         )}
       </div>
-      {rawVisible && <pre className="au-pre" style={{ margin: "8px 0 0" }}>{card.raw}</pre>}
+      {rawVisible && <pre ref={rawRef} className="au-pre" style={{ margin: "8px 0 0" }}>{card.raw}</pre>}
       {system && rawLines > 6 && (
         <button className="au-more" onClick={() => setOpen(!open)}>
           {open ? "Esconder a saída" : `Ver a saída (${rawLines} linhas)`}

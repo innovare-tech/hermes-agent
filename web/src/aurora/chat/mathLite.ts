@@ -44,7 +44,8 @@ export function texToText(tex: string): string {
       if (cmd === "frac" || cmd === "dfrac" || cmd === "tfrac") {
         const [a, j] = group(s, i);
         const [b, k] = group(s, j);
-        const wrap = (t: string) => (/^[\w.]+$/.test(t) ? t : `(${t})`);
+        // Sem parênteses só número ou uma letra ("a/b"); "2b", "a+1" e afins levam parênteses para não mudar o sentido.
+        const wrap = (t: string) => (/^(?:\d+(?:[.,]\d+)?|\p{L})$/u.test(t) ? t : `(${t})`);
         out += `${wrap(texToText(a))}/${wrap(texToText(b))}`;
         i = k;
       } else if (cmd === "sqrt") {
@@ -70,4 +71,38 @@ export function texToText(tex: string): string {
     }
   }
   return out.replace(/\s+/g, " ").trim();
+}
+
+export type MathPart = string | { n: string; d: string };
+
+/**
+ * Fórmula em bloco: texto + frações de nível de cima separadas (numerador sobre denominador, desenhadas em CSS).
+ * Fração dentro de raiz/potência e frações aninhadas continuam "a/b" em linha (texToText).
+ */
+export function texToParts(tex: string): MathPart[] {
+  const s = tex.trim();
+  const out: MathPart[] = [];
+  let depth = 0;
+  let from = 0;
+  for (let i = 0; i < s.length; ) {
+    const c = s[i];
+    if (c === "\\" && depth === 0) {
+      const m = s.slice(i + 1).match(/^[dt]?frac(?![A-Za-z])/);
+      if (m) {
+        const [a, j] = group(s, i + 1 + m[0].length);
+        const [b, k] = group(s, j);
+        if (i > from) out.push(texToText(s.slice(from, i)));
+        out.push({ n: texToText(a), d: texToText(b) });
+        i = from = k;
+        continue;
+      }
+      i += 2; // \{ \} \ …
+      continue;
+    }
+    if (c === "{") depth++;
+    else if (c === "}") depth = Math.max(0, depth - 1);
+    i++;
+  }
+  if (from < s.length) out.push(texToText(s.slice(from)));
+  return out.filter((p) => typeof p !== "string" || p);
 }

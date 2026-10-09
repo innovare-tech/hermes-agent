@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Icon } from "../Icon";
 import type { ChatError } from "./types";
+import { useReveal } from "./useReveal";
 
 type Props = { error: ChatError; onRetry?: () => void; onSwitchModel?: () => void };
 
 /** Erro do provedor em português: o que houve, o que fazer, e o texto técnico original recolhido. */
 export function ErrorCard({ error, onRetry, onSwitchModel }: Props) {
   const [open, setOpen] = useState(false);
+  const detail = useReveal<HTMLPreElement>(open);
   return (
     <div className="au-errcard" role="alert">
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
@@ -40,7 +42,7 @@ export function ErrorCard({ error, onRetry, onSwitchModel }: Props) {
           <Icon name={open ? "chevron-up" : "chevron-down"} size={12} />
         </button>
       </div>
-      {open && <pre className="au-pre" style={{ margin: 0, userSelect: "text" }}>{error.detail}</pre>}
+      {open && <pre ref={detail} className="au-pre" style={{ margin: 0, userSelect: "text" }}>{error.detail}</pre>}
     </div>
   );
 }

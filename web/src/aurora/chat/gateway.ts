@@ -6,11 +6,13 @@ import { ask } from "../store";
 import { GatewayClient } from "@/lib/gatewayClient";
 import type { Session } from "../adapter";
 import { fileToDataUrl } from "./attachments";
-import { classifyError, isErrorText } from "./errors";
+import { classifyError, failedTurnError, isErrorText, isFailedTurnText, stripFailedTurn } from "./errors";
+import { applyExtras, loadExtras } from "./persist";
 import { shortWhen, sourceIcon, sourceLabel } from "./sources";
 import { buildSlashMenu } from "./slashMenu";
 import { summarizeArgs } from "./toolLabels";
-import type { AgentMessage, ApprovalChoice, ChatAdapter, ChatMessage, ModelSwitch, SendOpts, SessionInfo, SessionUsage, SlashResult, ToolStep, TurnStat } from "./types";
+import { summarizeOutput, toolDenied } from "./toolSummary";
+import type { AgentMessage, ApprovalChoice, ChatAdapter, ChatMessage, ModelSwitch, SendOpts, SessionInfo, SessionUsage, SlashResult, StepStatus, ToolStep, TurnStat } from "./types";
 
 let gw: GatewayClient | null = null;
 let connecting: Promise<void> | null = null;
@@ -94,6 +96,12 @@ export function toolFailed(raw: unknown): boolean {
   }
 }
 
+/** Desfecho do passo: negado por você (não rodou), erro da ferramenta ou ok — e o resumo da saída. */
+export function stepResult(name: string, raw: unknown): Pick<ToolStep, "status" | "summary"> {
+  const status: StepStatus = toolDenied(raw) ? "denied" : toolFailed(raw) ? "err" : "ok";
+  return { status, summary: status === "ok" ? summarizeOutput(name, raw) : undefined };
+}
+
 /** "US$ 0,16". */
 export const money = (usd: number) => "US$ " + usd.toFixed(2).replace(".", ",");
 
@@ -131,6 +139,11 @@ export function fromTranscript(rows: TranscriptMessage[], o: { model?: string; r
   const close = (last: boolean) => {
     const a = agent;
     if (!a) return;
+    // O backend fecha o turno sem resposta com um aviso em inglês: vira o cartão em português (ou "interrompido", se guardamos isso).
+    if (a.text && isFailedTurnText(a.text)) {
+      a.error = failedTurnError(a.text);
+      a.text = stripFailedTurn(a.text);
+    }
     if (a.text && isErrorText(a.text) && !a.steps.length) {
       a.error = classifyError(a.text, { model: o.model });
       a.text = "";
@@ -158,7 +171,7 @@ export function fromTranscript(rows: TranscriptMessage[], o: { model?: string; r
     if (r.timestamp) t1 = Math.max(t1 ?? 0, r.timestamp);
     if (r.role === "tool") {
       const name = r.name ?? "tool";
-      agent.steps.push({ id: r.tool_call_id ?? id, kind: toolKind(name), name, target: ptPreview(r.context ?? argsPreview(r.args)), dur: "", status: "ok", output: toolOutput(r.text ?? r.content ?? ""), args: r.args ?? null });
+      agent.steps.push({ id: r.tool_call_id ?? id, kind: toolKind(name), name, target: ptPreview(r.context ?? argsPreview(r.args)), dur: "", ...stepResult(name, r.text ?? r.content ?? ""), output: toolOutput(r.text ?? r.content ?? ""), args: r.args ?? null });
     } else {
       const think = typeof r.reasoning === "string" ? r.reasoning.trim() : "";
       if (think) agent.reasoning = agent.reasoning ? agent.reasoning + "\n\n" + think : think;
@@ -280,7 +293,7 @@ export const gatewayChat: ChatAdapter = {
     const rows = (r.messages ?? []).map((x) => (x.role === "tool" && x.tool_call_id && outputs.has(x.tool_call_id) && x.content == null ? { ...x, content: outputs.get(x.tool_call_id) } : x));
     const info = fromLiveInfo(r.info);
     const model = info.model || m?.model || "";
-    const messages = fromTranscript(rows, { model, running: !!r.running });
+    const messages = applyExtras(fromTranscript(rows, { model, running: !!r.running }), loadExtras(sessionId));
     if (r.inflight?.error && !r.running) withInflightError(messages, r.inflight, model);
     // Contadores da sessão (tokens, custo, contexto): o resume de sessão "preguiçosa" não manda.
     const u = await call("session.usage", { session_id: r.session_id }).catch(() => null);
@@ -337,7 +350,7 @@ export const gatewayChat: ChatAdapter = {
           const p = e.payload;
           const base = started.get(p.tool_id) ?? { id: p.tool_id, kind: toolKind(p.name), name: p.name, target: argsPreview(p.args), dur: "", status: "run" as const, output: "", args: p.args ?? null };
           const raw = p.result_text ?? p.summary ?? p.result ?? "";
-          on({ type: "step", step: { ...base, status: toolFailed(raw) ? "err" : "ok", dur: fmtDur(p.duration_s), output: toolOutput(raw) } });
+          on({ type: "step", step: { ...base, ...stepResult(p.name, raw), dur: fmtDur(p.duration_s), output: toolOutput(raw) } });
         }),
         c.on("message.delta", (e) => {
           if (e.session_id === sid && e.payload?.text) {
