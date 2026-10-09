@@ -25,15 +25,18 @@ export function worstStatus(list: Status[]): Status {
 
 // ---- grupos ----
 
-export type GroupDef = { key: GroupKey; label: string; desc: string; icon: string; /** Quantas linhas mostrar antes de "Ver todos". */ limit?: number };
+export type GroupDef = { key: GroupKey; label: string; desc: string; icon: string; /** Quantas linhas mostrar antes de "Ver todos". */ limit?: number; /** O que o "Ver todos os N …" conta. */ unit?: string };
+
+/** "1 normal" / "3 normais". */
+export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export const BOT_LIMIT = 6;
 
 export const GROUPS: GroupDef[] = [
   { key: "servers", label: "Servidores", desc: "CPU, memória e disco das máquinas", icon: "server" },
   { key: "mongo", label: "Banco · MongoDB", desc: "Réplicas, velocidade e espaço", icon: "database" },
-  { key: "whatsapp_bots", label: "Bots de WhatsApp", desc: "Um por cliente: conectado ou caído e a última mensagem", icon: "phone", limit: BOT_LIMIT },
-  { key: "k8s", label: "Kubernetes", desc: "Pods (partes do sistema rodando) e reinícios", icon: "container" },
+  { key: "whatsapp_bots", label: "Bots de WhatsApp", desc: "Um por cliente: conectado ou caído e a última mensagem", icon: "phone", limit: BOT_LIMIT, unit: "bots" },
+  { key: "k8s", label: "Kubernetes", desc: "Pods (partes do sistema rodando) e reinícios", icon: "container", limit: BOT_LIMIT, unit: "itens" },
   { key: "dead_letters", label: "Filas de falha", desc: "Dead letters: o que não conseguiu ser entregue, volume e tendência", icon: "inbox" },
   { key: "services", label: "Microserviços", desc: "Cada serviço responde ao “você está bem?” (health)", icon: "network" },
 ];
@@ -55,13 +58,13 @@ export function groupPills(c: Counts): Pill[] {
   if (c.warn) out.push({ status: "warn", label: `${c.warn} atenção` });
   if (c.pending) out.push({ status: "pending", label: `${c.pending} aguardando` });
   if (c.ok) out.push({ status: "ok", label: `${c.ok} ok` });
-  if (c.paused) out.push({ status: "paused", label: `${c.paused} pausada${c.paused > 1 ? "s" : ""}` });
+  if (c.paused) out.push({ status: "paused", label: plural(c.paused, "pausada", "pausadas") });
   return out;
 }
 
 /** "2 com problema · 1 em atenção · 40 normais" (ou só "43 normais"). */
 export function checksSummary(c: Counts): string {
-  return [c.error && `${c.error} com problema`, c.warn && `${c.warn} em atenção`, c.pending && `${c.pending} aguardando`, c.ok && `${c.ok} normais`, c.paused && `${c.paused} pausada${c.paused > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
+  return [c.error && `${c.error} com problema`, c.warn && `${c.warn} em atenção`, c.pending && `${c.pending} aguardando`, c.ok && plural(c.ok, "normal", "normais"), c.paused && plural(c.paused, "pausada", "pausadas")].filter(Boolean).join(" · ");
 }
 
 /** Borda do grupo pelo pior status: vermelho, âmbar ou a linha neutra. */
@@ -69,17 +72,23 @@ export function groupBorder(worst: Status): string {
   return worst === "error" ? "color-mix(in oklab,var(--err) 45%,transparent)" : worst === "warn" ? "color-mix(in oklab,var(--warn) 35%,transparent)" : "var(--line)";
 }
 
+/** Linhas que a prévia nunca esconde: com problema, em atenção ou pausadas (a pessoa precisa ver e poder retomar). */
+const pinned = (r: Pick<Check, "status">) => r.status === "error" || r.status === "warn" || r.status === "paused";
+
 /**
- * Linhas visíveis de um grupo com limite (bots): `limit` linhas, mas SEMPRE todas as que têm problema ou atenção.
- * `rows` já vem com os problemas primeiro. `toggle` diz se existe o botão "Ver todos / Mostrar menos".
+ * Linhas visíveis de um grupo com limite (bots, Kubernetes): as `limit` primeiras e, além delas, SEMPRE todas as
+ * que têm problema, atenção ou estão pausadas. `rows` já vem com os problemas primeiro.
+ * `toggle` diz se existe o botão "Ver todos / Mostrar menos".
  */
 export function visibleRows<T extends Pick<Check, "status">>(rows: T[], limit: number | undefined, expanded: boolean): { shown: T[]; hidden: number; toggle: boolean } {
   if (!limit) return { shown: rows, hidden: 0, toggle: false };
-  const problems = rows.filter((r) => r.status === "error" || r.status === "warn").length;
-  const cut = Math.max(limit, problems);
-  const hidden = Math.max(0, rows.length - cut);
-  return { shown: expanded ? rows : rows.slice(0, cut), hidden, toggle: hidden > 0 };
+  const preview = rows.filter((r, i) => i < limit || pinned(r));
+  const hidden = rows.length - preview.length;
+  return { shown: expanded ? rows : preview, hidden, toggle: hidden > 0 };
 }
+
+/** Detalhe da linha sem UUID: "default · bot-b89f1c2e-…-…" vira "default · bot-b89f…" (8 caracteres + …). */
+export const shortDetail = (d: string) => d.replace(/\S*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\S*/gi, (t) => `${t.slice(0, 8)}…`);
 
 // ---- medidores (CPU / memória / disco) ----
 
@@ -257,15 +266,58 @@ export const serverSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9
 
 // ---- resultado de "Rodar agora" ----
 
+/** Junta frases: põe o ponto que faltar ("Caído desde 07/10 23:11" + "O incidente…" não pode colar). */
+export function sentences(...parts: (string | false | null | undefined)[]): string {
+  return parts
+    .filter((p): p is string => !!p && !!p.trim())
+    .map((p, i, a) => (i < a.length - 1 && !/[.!?:]$/.test(p.trim()) ? `${p.trim()}.` : p.trim()))
+    .join(" ");
+}
+
 /** Toast honesto depois de rodar uma verificação: o que o servidor devolveu, nada inventado. */
 export function runToast(prev: Pick<Check, "status" | "name">, next: Pick<Check, "status" | "name" | "result">, hasOpenIncident: boolean): { text: string; sub: string } {
   const out = next.result.text ?? "";
   if (prev.status === "pending") return { text: "Primeira execução feita", sub: out || "O Hermes segue checando na frequência escolhida." };
   if (next.status === "error") {
     return prev.status === "error"
-      ? { text: `${next.name}: continua com problema`, sub: `${out} ${hasOpenIncident ? "O incidente segue aberto." : "Se continuar assim, o Hermes abre um incidente."}`.trim() }
-      : { text: `${next.name}: deu problema agora`, sub: `${out} O Hermes abre um incidente se o erro se repetir.`.trim() };
+      ? { text: `${next.name}: continua com problema`, sub: sentences(out, hasOpenIncident ? "O incidente segue aberto." : "Se continuar assim, o Hermes abre um incidente.") }
+      : { text: `${next.name}: deu problema agora`, sub: sentences(out, "O Hermes abre um incidente se o erro se repetir.") };
   }
   if (next.status === "warn") return { text: `${next.name}: em atenção`, sub: out };
-  return prev.status === "ok" ? { text: `${next.name}: ok`, sub: out || "Rodei agora, sem mudança." } : { text: `${next.name}: voltou ao normal`, sub: `${out} ${hasOpenIncident ? "O incidente fechou sozinho." : ""}`.trim() };
+  return prev.status === "ok" ? { text: `${next.name}: ok`, sub: out || "Rodei agora, sem mudança." } : { text: `${next.name}: voltou ao normal`, sub: sentences(out, hasOpenIncident && "O incidente fechou sozinho.") };
 }
+
+// ---- duração do incidente ----
+
+/**
+ * Duração e "desde quando" de um incidente. `problemSince` (quando o problema começou de verdade) pode vir bem antes de
+ * `startedAt` (quando o Hermes detectou): aí mostra as duas coisas. Sem `problemSince`, só o início do incidente.
+ */
+export function incidentSpan(inc: Pick<Incident, "startedAt"> & { problemSince?: number | null }, now: number): { dur: string; since: string } {
+  const ps = inc.problemSince;
+  if (ps && ps < inc.startedAt) {
+    const hm = dayGap(inc.startedAt, now) <= 0 ? `às ${clock(inc.startedAt)}` : whenLabel(inc.startedAt, now);
+    return { dur: fmtDuration(now - ps), since: `com problema desde ${sinceLabel(ps, now)} · detectado ${hm}` };
+  }
+  return { dur: fmtDuration(now - inc.startedAt), since: `desde ${sinceLabel(inc.startedAt, now)}` };
+}
+
+// ---- criar verificação ----
+
+/** Exemplos do diálogo Criar com nomes reais (primeiro bot, servidor e fila); sem eles, exemplos genéricos. */
+export function createExamples(checks: Pick<Check, "group" | "name">[]): string[] {
+  const first = (g: GroupKey) => checks.find((c) => c.group === g)?.name;
+  const bot = first("whatsapp_bots");
+  const srv = first("servers");
+  const dl = first("dead_letters");
+  return [
+    `Avise se o bot ${bot ? `de ${bot}` : "de um cliente"} ficar mais de 10 min sem mandar mensagem em horário comercial`,
+    `Avise se o disco ${srv ? `da ${srv}` : "de um servidor"} ficar cheio`,
+    dl ? `Avise se a fila “${dl}” passar de 500 mensagens no dia` : "Avise se as mensagens de uma fila de falha passarem de 500 no dia",
+  ];
+}
+
+// ---- nomes de variável (Conexões) ----
+
+/** O backend só aceita nome de variável de ambiente; a URI ou o token em si não podem ser digitados ali. */
+export const isEnvName = (v: string) => /^[A-Z_][A-Z0-9_]*$/.test(v.trim());

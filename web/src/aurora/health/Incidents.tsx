@@ -3,9 +3,9 @@ import { useState } from "react";
 import { NavLink } from "react-router";
 import { Modal } from "../channels/parts";
 import { Icon } from "../Icon";
-import type { Incident, Overview } from "./api";
+import type { Check, Incident, Overview } from "./api";
 import { HIcon } from "./icons";
-import { clock, fixState, fmtDuration, sinceLabel, TIMELINE, whenLabel } from "./model";
+import { clock, fixState, fmtDuration, incidentSpan, TIMELINE, whenLabel } from "./model";
 
 const SEV = {
   critical: { label: "Crítico", color: "var(--err)", icon: "siren" },
@@ -14,7 +14,9 @@ const SEV = {
 
 const soft = (c: string, p: number) => `color-mix(in oklab,${c} ${p}%,transparent)`;
 
-export type IncidentBusy = { ack?: boolean; fix?: boolean };
+export type IncidentBusy = { ack?: boolean; fix?: boolean; pause?: boolean };
+
+const NO_FIX_TEXT = "O Hermes não tem uma correção automática para isto. Veja a hipótese e decida com a equipe.";
 
 function FixBlock({ inc, now, busy, onFix, critical }: { inc: Incident; now: number; busy: boolean; onFix: () => void; critical: boolean }) {
   const f = fixState(inc, now);
@@ -66,8 +68,36 @@ function FixBlock({ inc, now, busy, onFix, critical }: { inc: Incident; now: num
   );
 }
 
-export function IncidentCard({ inc, now, busy, onAck, onFix, onResolve }: { inc: Incident; now: number; busy: IncidentBusy; onAck: () => void; onFix: () => void; onResolve: () => void }) {
+/** Sem correção automática: diz o que fazer agora e oferece os dois caminhos que o painel sabe fazer. */
+function NoFixBlock({ inc, check, busy, onPause }: { inc: Incident; check: Check | null; busy: boolean; onPause: () => void }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "11px 13px", borderRadius: "var(--r2)", background: "var(--panel2)" }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 600 }}>
+        <Icon name="circle-alert" size={14} color="var(--warn)" />
+        O que fazer agora
+      </span>
+      <span style={{ fontSize: 13, lineHeight: 1.5, color: "var(--fg2)" }}>{inc.recommendation?.trim() || NO_FIX_TEXT}</span>
+      {check && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {check.status !== "paused" && (
+            <button className="hl-mini" style={{ flex: "none" }} disabled={busy} onClick={onPause} title="Para de rodar e de chamar a equipe; o incidente aberto é fechado">
+              {busy ? "Pausando…" : "Pausar verificação"}
+            </button>
+          )}
+          {check.group === "whatsapp_bots" && (
+            <NavLink to="/channels" className="hl-mini" style={{ flex: "none", display: "inline-block", textDecoration: "none", textAlign: "center" }}>
+              Abrir Canais
+            </NavLink>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function IncidentCard({ inc, now, busy, check, onAck, onFix, onResolve, onPause }: { inc: Incident; now: number; busy: IncidentBusy; check?: Check | null; onAck: () => void; onFix: () => void; onResolve: () => void; onPause?: () => void }) {
   const sev = SEV[inc.severity];
+  const span = incidentSpan(inc, now);
   const critical = inc.severity === "critical";
   return (
     <article aria-label={`${inc.code}: ${inc.title}`} className="hl-inc" style={{ border: `1px solid ${critical ? "var(--err)" : soft("var(--warn)", 45)}` }}>
@@ -78,7 +108,7 @@ export function IncidentCard({ inc, now, busy, onAck, onFix, onResolve }: { inc:
         <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span className="hl-sev" style={{ background: sev.color }}>{sev.label}</span>
-            <span className="hl-mono" style={{ fontSize: 11, color: "var(--fg3)" }}>{inc.code}</span>
+            <span className="hl-mono" style={{ fontSize: 11.5, color: "var(--fg3)" }}>{inc.code}</span>
             {inc.ackBy && (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "var(--fg2)" }}>
                 <Icon name="eye" size={12} />
@@ -91,8 +121,8 @@ export function IncidentCard({ inc, now, busy, onAck, onFix, onResolve }: { inc:
           {inc.impact && <span style={{ fontSize: 12.5, color: "var(--fg2)" }}>{inc.impact}</span>}
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flex: "none" }}>
-          <span aria-live="off" className="hl-mono" style={{ fontSize: 13, color: sev.color }}>{fmtDuration(now - inc.startedAt)}</span>
-          <span style={{ fontSize: 11, color: "var(--fg3)" }}>desde {sinceLabel(inc.startedAt, now)}</span>
+          <span aria-live="off" className="hl-mono" style={{ fontSize: 13, color: sev.color }}>{span.dur}</span>
+          <span style={{ fontSize: 11.5, color: "var(--fg3)", textAlign: "right", maxWidth: 230 }}>{span.since}</span>
         </div>
       </div>
 
@@ -136,16 +166,22 @@ export function IncidentCard({ inc, now, busy, onAck, onFix, onResolve }: { inc:
         <div className="hl-inc-act">
           <span className="au-label">Ações</span>
           <FixBlock inc={inc} now={now} busy={!!busy.fix} onFix={onFix} critical={critical} />
+          {!inc.suggestedAction && <NoFixBlock inc={inc} check={check ?? null} busy={!!busy.pause} onPause={() => onPause?.()} />}
           <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
             {!inc.ackBy && (
               <button className="hl-mini" disabled={!!busy.ack} onClick={onAck}>
                 {busy.ack ? "Reconhecendo…" : "Reconhecer"}
               </button>
             )}
-            <button className="hl-mini" onClick={onResolve}>
+            <button className="hl-mini" onClick={onResolve} aria-describedby={inc.checkStatus === "error" ? `still-${inc.id}` : undefined}>
               Resolver
             </button>
           </div>
+          {inc.checkStatus === "error" && (
+            <span id={`still-${inc.id}`} style={{ fontSize: 11.5, lineHeight: 1.4, color: "var(--warn)" }}>
+              Ainda com problema: vai reabrir se continuar.
+            </span>
+          )}
           <NavLink to="/logs" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 5 }}>
             <Icon name="scroll-text" size={12} />
             Ver registros

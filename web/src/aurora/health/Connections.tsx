@@ -1,12 +1,12 @@
 // Conexões (S9): de onde o Hermes lê servidores, serviços, cluster e banco. Aqui só entram NOMES de variável;
 // a chave, o token e a URI do banco ficam em Chaves deste perfil e nunca aparecem na tela.
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { Modal } from "../channels/parts";
 import { Icon } from "../Icon";
 import { toast } from "../store";
 import { errText, healthApi, type HealthSettings, type ServerCfg, type ServiceCfg, type SettingsPatch } from "./api";
-import { serverSlug, SSH_KEY_ENV } from "./model";
+import { isEnvName, serverSlug, SSH_KEY_ENV } from "./model";
 
 type Draft = { mongo: HealthSettings["mongo"]; k8s: HealthSettings["k8s"]; servers: ServerCfg[]; services: ServiceCfg[] };
 
@@ -27,6 +27,14 @@ function toPatch(d: Draft): SettingsPatch {
     services: d.services.map((s) => ({ name: t(s.name), url: t(s.url) })),
   };
 }
+
+const DEFAULT_ENV = { uri: "AIBIZ_MONGO_URI", token: "K8S_TOKEN", ca: "K8S_CA_CERT" } as const;
+
+/** Campo de NOME de variável preenchido com outra coisa (a URI, o token…): vazio é aceito, o backend decide. */
+const envBad = (v: string) => v.trim() !== "" && !isEnvName(v);
+const envMsg = (ex: string) => `isso parece o valor; coloque-o em Chaves e escreva aqui só o nome (ex.: ${ex})`;
+/** Nome para mostrar no texto de ajuda: nunca o que foi digitado se estiver inválido (pode ser um segredo). */
+const envShown = (v: string, fallback: string) => (envBad(v) ? fallback : v);
 
 function State({ on, yes, no }: { on: boolean; yes: string; no: string }) {
   const c = on ? "var(--ok)" : "var(--fg3)";
@@ -54,11 +62,13 @@ function Section({ icon, title, state, hint, children }: { icon: string; title: 
 
 const Env = ({ name }: { name: string }) => <code className="hl-mono" style={{ padding: "1px 6px", borderRadius: 6, background: "var(--code)", fontSize: 11.5 }}>{name || "…"}</code>;
 
-function Field({ label, value, onChange, mono, placeholder, type }: { label: string; value: string | number; onChange: (v: string) => void; mono?: boolean; placeholder?: string; type?: string }) {
+function Field({ label, value, onChange, mono, placeholder, type, error }: { label: string; value: string | number; onChange: (v: string) => void; mono?: boolean; placeholder?: string; type?: string; error?: string }) {
+  const id = useId();
   return (
     <label className="hl-field">
       <span>{label}</span>
-      <input className={"hl-input" + (mono ? " mono" : "")} value={value} placeholder={placeholder} type={type} onChange={(e) => onChange(e.target.value)} spellCheck={false} autoComplete="off" />
+      <input className={"hl-input" + (mono ? " mono" : "")} value={value} placeholder={placeholder} type={type} onChange={(e) => onChange(e.target.value)} spellCheck={false} autoComplete="off" aria-invalid={error ? true : undefined} aria-describedby={error ? id : undefined} />
+      {error && <span id={id} role="alert" className="hl-field-err">{error}</span>}
     </label>
   );
 }
@@ -86,11 +96,12 @@ export function Connections({ onClose, onSaved }: { onClose: () => void; onSaved
     };
   }, [tries]);
 
+  const invalid = !!draft && (envBad(draft.mongo.uri_env) || envBad(draft.k8s.token_env) || envBad(draft.k8s.ca_env));
   const dirty = !!cfg && !!draft && JSON.stringify(toPatch(draft)) !== JSON.stringify(toPatch(toDraft(cfg)));
   const set = (f: (d: Draft) => Draft) => setDraft((d) => (d ? f(d) : d));
 
   const save = async () => {
-    if (!draft || saving) return;
+    if (!draft || saving || invalid) return;
     setSaving(true);
     try {
       const next = await healthApi.saveSettings(toPatch(draft));
@@ -195,10 +206,10 @@ export function Connections({ onClose, onSaved }: { onClose: () => void; onSaved
             state={<State on={cfg.status.k8s} yes="ligado" no="desligado" />}
             hint={
               <>
-                O Hermes consulta a API do cluster só para ler pods e reinícios. Coloque o token de leitura em Chaves como <Env name={draft.k8s.token_env} />
+                O Hermes consulta a API do cluster só para ler pods e reinícios. Coloque o token de leitura em Chaves como <Env name={envShown(draft.k8s.token_env, DEFAULT_ENV.token)} />
                 {draft.k8s.ca_env.trim() && (
                   <>
-                    {" "}e o certificado do cluster como <Env name={draft.k8s.ca_env} />
+                    {" "}e o certificado do cluster como <Env name={envShown(draft.k8s.ca_env, DEFAULT_ENV.ca)} />
                   </>
                 )}
                 . Os dois podem ficar em base64, como saem do kubectl.
@@ -208,8 +219,8 @@ export function Connections({ onClose, onSaved }: { onClose: () => void; onSaved
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 8 }}>
               <Field label="Endereço da API (server)" value={draft.k8s.server} onChange={(v) => set((d) => ({ ...d, k8s: { ...d.k8s, server: v } }))} mono placeholder="https://k8s.exemplo.com:6443" />
               <Field label="Namespaces (separados por vírgula)" value={draft.k8s.namespaces} onChange={(v) => set((d) => ({ ...d, k8s: { ...d.k8s, namespaces: v } }))} placeholder="default" />
-              <Field label="Variável do token" value={draft.k8s.token_env} onChange={(v) => set((d) => ({ ...d, k8s: { ...d.k8s, token_env: v } }))} mono placeholder="K8S_TOKEN" />
-              <Field label="Variável do certificado (CA)" value={draft.k8s.ca_env} onChange={(v) => set((d) => ({ ...d, k8s: { ...d.k8s, ca_env: v } }))} mono placeholder="K8S_CA_CERT" />
+              <Field label="Variável do token" value={draft.k8s.token_env} onChange={(v) => set((d) => ({ ...d, k8s: { ...d.k8s, token_env: v } }))} mono placeholder="K8S_TOKEN" error={envBad(draft.k8s.token_env) ? envMsg(DEFAULT_ENV.token) : undefined} />
+              <Field label="Variável do certificado (CA)" value={draft.k8s.ca_env} onChange={(v) => set((d) => ({ ...d, k8s: { ...d.k8s, ca_env: v } }))} mono placeholder="K8S_CA_CERT" error={envBad(draft.k8s.ca_env) ? envMsg(DEFAULT_ENV.ca) : undefined} />
             </div>
           </Section>
 
@@ -219,12 +230,12 @@ export function Connections({ onClose, onSaved }: { onClose: () => void; onSaved
             state={<State on={cfg.status.mongo} yes="ligado" no="desligado" />}
             hint={
               <>
-                Leitura apenas. Coloque a URI de conexão em Chaves como <Env name={draft.mongo.uri_env} />; ela não é mostrada aqui.
+                Leitura apenas. Coloque a URI de conexão em Chaves como <Env name={envShown(draft.mongo.uri_env, DEFAULT_ENV.uri)} />; ela não é mostrada aqui.
               </>
             }
           >
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 8 }}>
-              <Field label="Variável da URI" value={draft.mongo.uri_env} onChange={(v) => set((d) => ({ ...d, mongo: { ...d.mongo, uri_env: v } }))} mono placeholder="AIBIZ_MONGO_URI" />
+              <Field label="Variável da URI" value={draft.mongo.uri_env} onChange={(v) => set((d) => ({ ...d, mongo: { ...d.mongo, uri_env: v } }))} mono placeholder="AIBIZ_MONGO_URI" error={envBad(draft.mongo.uri_env) ? envMsg(DEFAULT_ENV.uri) : undefined} />
               <Field label="Nome do banco" value={draft.mongo.db} onChange={(v) => set((d) => ({ ...d, mongo: { ...d.mongo, db: v } }))} mono placeholder="aibiz_mrz" />
             </div>
           </Section>
@@ -236,7 +247,7 @@ export function Connections({ onClose, onSaved }: { onClose: () => void; onSaved
         <button className="au-outline" onClick={onClose} disabled={saving}>
           {dirty ? "Cancelar" : "Fechar"}
         </button>
-        <button className="au-primary" disabled={!dirty || saving} onClick={save} style={{ opacity: dirty && !saving ? 1 : 0.4 }}>
+        <button className="au-primary" disabled={!dirty || saving || invalid} onClick={save} style={{ opacity: dirty && !saving && !invalid ? 1 : 0.4 }}>
           {saving && <Icon name="loader-circle" size={14} className="au-spin" />}
           Salvar conexões
         </button>

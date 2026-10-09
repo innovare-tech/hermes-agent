@@ -1,6 +1,7 @@
 // Incidentes abertos para a Sidebar: badge vermelho (crítico) ou âmbar (só atenção) em Saúde e "Incidente crítico" no perfil.
 import { useSyncExternalStore } from "react";
 import { getManagementProfile } from "@/lib/api";
+import { getState } from "../store";
 import { healthApi, type Incident } from "./api";
 import { badgeOf } from "./model";
 
@@ -31,6 +32,7 @@ export function useHealthBadge(): HealthBadge {
 
 /** Lê os incidentes abertos; falha em silêncio (mantém o que já estava). */
 export async function refreshHealthBadge() {
+  void refreshCriticalProfiles(); // os pontos vermelhos do seletor de perfil, no mesmo ciclo de 60 s
   const pid = getManagementProfile();
   try {
     const list = await healthApi.incidents("open");
@@ -38,6 +40,40 @@ export async function refreshHealthBadge() {
   } catch {
     /* sem leitura nova: mantém o badge anterior */
   }
+}
+
+// Perfis (inclusive os outros) com incidente crítico aberto: o seletor de perfil mostra um ponto vermelho neles.
+let crit: ReadonlySet<string> = new Set();
+const critSubs = new Set<() => void>();
+
+export function setCriticalProfiles(next: ReadonlySet<string>) {
+  if (next.size === crit.size && [...next].every((id) => crit.has(id))) return;
+  crit = next;
+  critSubs.forEach((f) => f());
+}
+
+export function useCriticalProfiles(): ReadonlySet<string> {
+  return useSyncExternalStore(
+    (f) => {
+      critSubs.add(f);
+      return () => critSubs.delete(f);
+    },
+    () => crit,
+  );
+}
+
+/** Um GET por perfil (`profile=` explícito); quem falhar mantém o que já tinha. */
+export async function refreshCriticalProfiles() {
+  const ids = getState().profiles.map((p) => p.id);
+  const got = await Promise.all(
+    ids.map((id) =>
+      healthApi.incidentsOf(id, "open").then(
+        (list) => badgeOf(list).critical > 0,
+        () => crit.has(id),
+      ),
+    ),
+  );
+  setCriticalProfiles(new Set(ids.filter((_, i) => got[i])));
 }
 
 /** Troca de perfil: o badge do perfil anterior não vale mais. */

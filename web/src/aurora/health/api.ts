@@ -62,6 +62,13 @@ export type Incident = {
   impact: string;
   status: "open" | "resolved";
   startedAt: number;
+  /** Quando o problema começou de fato (pode ser bem antes de `startedAt`, a detecção). */
+  problemSince?: number | null;
+  /** "O que fazer agora", em português, quando não há correção automática. */
+  recommendation?: string | null;
+  /** Status atual da verificação ligada. */
+  checkStatus?: Status | null;
+  checkName?: string | null;
   ackBy: string | null;
   ackAt: number | null;
   resolvedAt: number | null;
@@ -86,6 +93,10 @@ export type Parsed = {
   groupLabel: string;
   severity: Severity;
   notify: string;
+  /** Canal escolhido, ex.: "+55 43 3378-8888 · conectado". */
+  channel?: string;
+  /** Aviso do que acontece já ao criar, ex.: "este bot já está caído; o incidente abre em 10 min". */
+  warning?: string;
   spec: unknown;
 };
 export type ParseResult = { ok: true; check: Parsed } | { ok: false; reason: string };
@@ -120,6 +131,8 @@ export const healthApi = {
   settings: () => fetchJSON<HealthSettings>("/api/health/settings"),
   saveSettings: (patch: SettingsPatch) => fetchJSON<HealthSettings>("/api/health/settings", j("PUT", patch)),
   incidents: (status: "open" | "resolved" = "open") => fetchJSON<Incident[]>(`/api/incidents?status=${status}`),
+  /** Incidentes de OUTRO perfil: o `profile=` explícito vence o do perfil ativo. */
+  incidentsOf: (profile: string, status: "open" | "resolved" = "open") => fetchJSON<Incident[]>(`/api/incidents?status=${status}&profile=${encodeURIComponent(profile)}`),
   ack: (id: number) => fetchJSON<Incident>(`/api/incidents/${id}/ack`, j("POST", {})),
   resolve: (id: number, note: string) => fetchJSON<{ incident: Incident; stillFailing: boolean }>(`/api/incidents/${id}/resolve`, j("POST", { note })),
   action: (id: number) => fetchJSON<Incident>(`/api/incidents/${id}/action`, j("POST", {})),

@@ -2,7 +2,7 @@
 import { Icon } from "../Icon";
 import type { Incident, Overview } from "./api";
 import { HIcon } from "./icons";
-import { agoLabel, fmtDuration, pct, sinceLabel, type Counts } from "./model";
+import { agoLabel, incidentSpan, pct, type Counts } from "./model";
 
 /** Rola até os incidentes sem mexer na URL e leva o foco junto (leitor de tela). */
 function goToIncidents() {
@@ -14,6 +14,7 @@ function goToIncidents() {
 }
 
 export function CriticalHero({ inc, now, acking, onAck }: { inc: Incident; now: number; acking: boolean; onAck: () => void }) {
+  const span = incidentSpan(inc, now);
   return (
     <div role="alert" className="hl-hero crit">
       <span className="hl-siren" aria-hidden="true">
@@ -29,8 +30,8 @@ export function CriticalHero({ inc, now, acking, onAck }: { inc: Incident; now: 
       </div>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flex: "none" }}>
         {/* aria-live="off": o relógio anda sozinho e não pode ser lido de novo a cada atualização */}
-        <span aria-live="off" className="au-display" style={{ fontSize: 30, color: "var(--err)", lineHeight: 1 }}>{fmtDuration(now - inc.startedAt)}</span>
-        <span style={{ fontSize: 11.5, color: "var(--fg2)" }}>desde {sinceLabel(inc.startedAt, now)}</span>
+        <span aria-live="off" className="au-display" style={{ fontSize: 30, color: "var(--err)", lineHeight: 1 }}>{span.dur}</span>
+        <span style={{ fontSize: 11.5, color: "var(--fg2)", textAlign: "right", maxWidth: 240 }}>{span.since}</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: "none" }}>
         <button className="hl-solid" onClick={goToIncidents}>
@@ -53,7 +54,8 @@ export function CalmHero({ overview, counts, now }: { overview: Overview | null;
   const total = overview?.checks ?? counts.error + counts.warn + counts.pending + counts.ok;
   const stats = [
     { v: overview ? pct(overview.availability30d) : "—", l: "no ar em 30 dias" },
-    { v: overview && overview.botsTotal ? `${overview.botsConnected} de ${overview.botsTotal}` : "—", l: "bots conectados" },
+    // Sem nenhum bot cadastrado, "— bots conectados" só confunde: esconde.
+    ...(overview?.botsTotal === 0 ? [] : [{ v: overview ? `${overview.botsConnected} de ${overview.botsTotal}` : "—", l: "bots conectados" }]),
     { v: overview?.lastRunAt ? agoLabel(now - overview.lastRunAt) : "—", l: "última checagem" },
   ];
   return (

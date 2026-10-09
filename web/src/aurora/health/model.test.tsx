@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Check, Incident, Status } from "./api";
 import {
   agoLabel, badgeOf, BOT_LIMIT, checksSummary, clock, countStatuses, fixState, fmtDuration, freqLabel, groupBorder, groupPills, healthCount, heroIncident, meters, meterTone,
-  runToast, serverSlug, SSH_KEY_ENV, sinceLabel, sortChecks, sparkPoints, targetLabel, visibleRows, whenLabel, worstStatus,
+  createExamples, incidentSpan, isEnvName, plural, runToast, sentences, serverSlug, shortDetail, SSH_KEY_ENV, sinceLabel, sortChecks, sparkPoints, targetLabel, visibleRows, whenLabel, worstStatus,
 } from "./model";
 
 const chk = (name: string, status: Status): Check => ({ id: name, group: "whatsapp_bots", name, detail: "", kind: "bot", status, severity: "critical", result: {}, intervalSec: 60, lastRunAt: 0, history: [], historyLabel: "", clientId: null, sourceText: null, createdAt: 0 });
@@ -62,6 +62,13 @@ describe("bots: 6 linhas, sempre todas as com problema", () => {
   it("atenção também conta como problema", () => {
     const rows = sortChecks([...ok(10), chk("w", "warn"), chk("w2", "warn")]);
     expect(visibleRows(rows, BOT_LIMIT, false).shown.slice(0, 2).map((x) => x.name)).toEqual(["w", "w2"]);
+  });
+  it("pausadas ficam sempre visíveis, mesmo depois do corte", () => {
+    const p = chk("pausada", "paused");
+    const r = visibleRows(sortChecks([...ok(10), p]), BOT_LIMIT, false);
+    expect(r.shown).toHaveLength(7);
+    expect(r.shown).toContain(p);
+    expect(r.hidden).toBe(4);
   });
   it("expandido mostra todos e o botão continua para 'Mostrar menos'", () => {
     const r = visibleRows(sortChecks(ok(18)), BOT_LIMIT, true);
@@ -176,12 +183,75 @@ describe("toast do 'Rodar agora' (só o que o servidor devolveu)", () => {
     expect(runToast({ name: "x", status: "pending" }, next("ok", "Tudo certo"), false)).toEqual({ text: "Primeira execução feita", sub: "Tudo certo" });
   });
   it("continua com problema: diz se o incidente segue aberto", () => {
-    expect(runToast({ name: "x", status: "error" }, next("error", "2 de 3 prontos"), true)).toEqual({ text: "wa-gateway: continua com problema", sub: "2 de 3 prontos O incidente segue aberto." });
+    expect(runToast({ name: "x", status: "error" }, next("error", "2 de 3 prontos"), true)).toEqual({ text: "wa-gateway: continua com problema", sub: "2 de 3 prontos. O incidente segue aberto." });
     expect(runToast({ name: "x", status: "error" }, next("error", "fora"), false).sub).toContain("abre um incidente");
   });
   it("voltou ao normal, atenção e ok", () => {
     expect(runToast({ name: "x", status: "error" }, next("ok", "3 de 3"), true).text).toBe("wa-gateway: voltou ao normal");
     expect(runToast({ name: "x", status: "ok" }, next("warn", "lento"), false).text).toBe("wa-gateway: em atenção");
     expect(runToast({ name: "x", status: "ok" }, next("ok"), false)).toEqual({ text: "wa-gateway: ok", sub: "Rodei agora, sem mudança." });
+  });
+});
+
+describe("fmtDuration com dias", () => {
+  it("1 d 12 h, 2 d e dias sem horas", () => {
+    expect(fmtDuration(36 * 3600)).toBe("1 d 12 h");
+    expect(fmtDuration(2 * 86400 + 59 * 60)).toBe("2 d");
+  });
+});
+
+describe("concordância", () => {
+  it("1 normal / N normais", () => {
+    expect(plural(1, "normal", "normais")).toBe("1 normal");
+    expect(plural(3, "normal", "normais")).toBe("3 normais");
+    expect(checksSummary(countStatuses([chk("a", "ok")]))).toBe("1 normal");
+    expect(checksSummary(countStatuses([chk("a", "ok"), chk("b", "paused")]))).toBe("1 normal · 1 pausada");
+  });
+});
+
+describe("pontuação dos toasts", () => {
+  it("põe o ponto que falta entre as frases", () => {
+    expect(sentences("Caído desde 07/10 23:11", "O incidente segue aberto.")).toBe("Caído desde 07/10 23:11. O incidente segue aberto.");
+    expect(sentences("Já tem ponto.", "Outra.")).toBe("Já tem ponto. Outra.");
+    expect(sentences("", false, "Só esta.")).toBe("Só esta.");
+  });
+});
+
+describe("nome de variável (Conexões)", () => {
+  it("aceita só MAIÚSCULAS, dígitos e _ (sem começar por dígito)", () => {
+    expect(isEnvName("AIBIZ_MONGO_URI")).toBe(true);
+    expect(isEnvName("_K8S_TOKEN2")).toBe(true);
+    expect(isEnvName("mongodb://user:senha@host/db")).toBe(false);
+    expect(isEnvName("eyJhbGciOi.token")).toBe(false);
+    expect(isEnvName("2TOKEN")).toBe(false);
+    expect(isEnvName("")).toBe(false);
+  });
+});
+
+describe("duração do incidente", () => {
+  const now = new Date(2026, 9, 9, 12, 0).getTime() / 1000;
+  const at = (d: number, h: number, m: number) => new Date(2026, 9, d, h, m).getTime() / 1000;
+  it("com problemSince antes da detecção: mostra a duração do problema e quando foi detectado", () => {
+    const r = incidentSpan({ startedAt: at(9, 10, 54), problemSince: at(7, 23, 11) }, now);
+    expect(r.dur).toBe("1 d 12 h");
+    expect(r.since).toBe("com problema desde 07/10 23:11 · detectado às 10:54");
+  });
+  it("sem problemSince (ou igual à detecção): só desde quando o incidente abriu", () => {
+    expect(incidentSpan({ startedAt: at(9, 10, 54) }, now)).toEqual({ dur: "1 h 6 min", since: "desde 10:54" });
+    expect(incidentSpan({ startedAt: at(9, 10, 54), problemSince: at(9, 10, 54) }, now).since).toBe("desde 10:54");
+  });
+});
+
+describe("Kubernetes e detalhes", () => {
+  it("esconde o UUID: 8 caracteres + …", () => {
+    expect(shortDetail("default · bot-b89f1c2e-1a2b-4c3d-8e9f-0123456789ab")).toBe("default · bot-b89f…");
+    expect(shortDetail("default · wa-gateway")).toBe("default · wa-gateway");
+  });
+  it("exemplos do diálogo vêm dos dados reais; sem dados, genéricos", () => {
+    const ex = createExamples([{ group: "whatsapp_bots", name: "Padaria Sol" }, { group: "servers", name: "vps1" }, { group: "dead_letters", name: "ignoradas pelo socket" }]);
+    expect(ex[0]).toContain("Padaria Sol");
+    expect(ex[1]).toContain("vps1");
+    expect(ex[2]).toContain("ignoradas pelo socket");
+    expect(createExamples([]).join(" ")).not.toMatch(/Padaria|vps1/);
   });
 });

@@ -10,7 +10,7 @@ import { IncidentCard, NoIncidents, ResolveDialog, type IncidentBusy } from "../
 import { HealthEmpty, HealthError, HealthSkeleton, RecommendedResultCard } from "../health/States";
 import { errText, healthApi, type Check, type Incident, type Overview, type RecommendedResult } from "../health/api";
 import { setHealthIncidents } from "../health/badge";
-import { checksSummary, countStatuses, GROUPS, heroIncident, nowSec, runToast, targetLabel } from "../health/model";
+import { checksSummary, countStatuses, GROUPS, heroIncident, nowSec, plural, runToast, sentences, targetLabel } from "../health/model";
 import "../health/health.css";
 import { toast } from "../store";
 
@@ -109,11 +109,14 @@ export function Health() {
   };
 
   const pause = async (c: Check, paused: boolean) => {
+    const hadIncident = incsRef.current.some((i) => i.checkId === c.id && i.status === "open");
     setRunning((s) => new Set(s).add(c.id));
     try {
       const next = await healthApi.setPaused(c.id, paused);
       setChecks((cs) => cs && cs.map((x) => (x.id === next.id ? next : x)));
-      toast(paused ? `“${c.name}” pausada` : `“${c.name}” retomada`, paused ? "Não roda nem chama a equipe; um incidente aberto dela foi fechado." : "Roda no próximo ciclo (até 30 s).");
+      // Retomar já roda a verificação (o PATCH devolve com `lastRunAt` real): mostra o que ela achou, sem prometer ciclo.
+      const resumed = next.lastRunAt ? sentences(next.result.text, "Rodei agora.") : "Roda no próximo ciclo (até 30 s).";
+      toast(paused ? `“${c.name}” pausada` : `“${c.name}” retomada`, paused ? (hadIncident ? "Não roda nem chama a equipe; o incidente aberto dela foi fechado." : "Não roda nem chama a equipe.") : resumed);
       load(true);
     } catch (e) {
       toast(errText(e, `Não consegui ${paused ? "pausar" : "retomar"} “${c.name}”`));
@@ -124,6 +127,13 @@ export function Health() {
         return n;
       });
     }
+  };
+
+  // "Pausar verificação" do cartão do incidente (sem correção automática): mesmo caminho da linha.
+  const pauseFromIncident = async (inc: Incident, c: Check) => {
+    busyOf(inc.id, { pause: true });
+    await pause(c, true);
+    busyOf(inc.id, { pause: false });
   };
 
   const remove = async (c: Check) => {
@@ -206,7 +216,7 @@ export function Health() {
     try {
       const r = await healthApi.recommended();
       setRecs(r);
-      toast(r.created.length ? `${r.created.length} verificações criadas` : "Nenhuma verificação nova", r.skipped.length ? "Veja o que falta configurar logo abaixo." : "Elas começam a rodar sozinhas.");
+      toast(r.created.length ? plural(r.created.length, "verificação criada", "verificações criadas") : "Nenhuma verificação nova", r.skipped.length ? "Veja o que falta configurar logo abaixo." : "Elas começam a rodar sozinhas.");
       await load(true);
     } catch (e) {
       toast(errText(e, "Não consegui criar as recomendadas"));
@@ -278,7 +288,7 @@ export function Health() {
               </div>
               {incs.length === 0 && <NoIncidents last={overview?.lastIncident} now={now} />}
               {incs.map((inc) => (
-                <IncidentCard key={inc.id} inc={inc} now={now} busy={incBusy[inc.id] ?? {}} onAck={() => ack(inc)} onFix={() => fix(inc)} onResolve={() => setResolving(inc)} />
+                <IncidentCard key={inc.id} inc={inc} now={now} busy={incBusy[inc.id] ?? {}} check={checks?.find((c) => c.id === inc.checkId) ?? null} onAck={() => ack(inc)} onFix={() => fix(inc)} onResolve={() => setResolving(inc)} onPause={() => { const c = checks?.find((x) => x.id === inc.checkId); if (c) pauseFromIncident(inc, c); }} />
               ))}
             </section>
 
@@ -287,13 +297,19 @@ export function Health() {
                 <h2 className="hl-h2">Verificações</h2>
                 <span style={{ fontSize: 12.5, color: "var(--fg2)" }}>{checksSummary(counts)}</span>
               </div>
-              <ChecksGroups checks={checks ?? []} now={now} busy={running} freshIds={fresh} actions={{ onRun: run, onPause: pause, onRemove: remove }} />
+              <ChecksGroups checks={checks ?? []} now={now} busy={running} freshIds={fresh} actions={{ onRun: run, onPause: pause, onRemove: remove }} onConnections={() => setConnections(true)} />
+              {(checks?.length ?? 0) < 5 && (
+                <button className="au-ghost" disabled={usingRecs} onClick={useDefaults} style={{ alignSelf: "flex-start", color: "var(--acc)", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {usingRecs && <Icon name="loader-circle" size={13} className="au-spin" />}
+                  {usingRecs ? "Criando…" : "Usar as recomendadas"}
+                </button>
+              )}
             </section>
           </>
         )}
       </div>
 
-      {creating && <CreateDialog onClose={() => setCreating(false)} onCreated={created} />}
+      {creating && <CreateDialog checks={checks ?? []} onClose={() => setCreating(false)} onCreated={created} />}
       {connections && <Connections onClose={() => setConnections(false)} onSaved={() => load(true)} />}
       {resolving && (
         <ResolveDialog

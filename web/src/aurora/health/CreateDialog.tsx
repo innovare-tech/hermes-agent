@@ -1,20 +1,17 @@
 // Criar verificação em português: o Hermes mostra o que entendeu ("Entendi assim:") antes de criar.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Modal } from "../channels/parts";
 import { Icon } from "../Icon";
 import { toast } from "../store";
 import { errText, healthApi, INTERVALS, INTERVAL_SHORT, type Check, type ParseResult } from "./api";
-import { freqLabel } from "./model";
-
-const EXAMPLES = [
-  "Avise se o bot da Padaria Sol ficar mais de 10 min sem mandar mensagem em horário comercial",
-  "Avise se o disco da vps1 ficar cheio",
-  "Avise se as mensagens ignoradas pelo socket passarem de 500 no dia",
-];
+import { createExamples, freqLabel } from "./model";
 
 const soft = (c: string, p: number) => `color-mix(in oklab,${c} ${p}%,transparent)`;
 
-export function CreateDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (c: Check) => void }) {
+const SEVERITY = { critical: "Crítico", warning: "Atenção" } as const;
+
+export function CreateDialog({ checks, onClose, onCreated }: { checks: Check[]; onClose: () => void; onCreated: (c: Check) => void }) {
+  const examples = useMemo(() => createExamples(checks), [checks]);
   const [text, setText] = useState("");
   const [interval, setIntervalSec] = useState<number>(300);
   const [res, setRes] = useState<ParseResult | null>(null);
@@ -50,14 +47,16 @@ export function CreateDialog({ onClose, onCreated }: { onClose: () => void; onCr
   };
 
   const ok = res?.ok ? res.check : null;
-  const rows = ok
+  const rows: [string, string][] = ok
     ? [
         ["Vou checar", ok.target],
         ["Avisar quando", ok.condition],
         ["Só em", !ok.window || ok.window === "sempre" ? "qualquer horário" : ok.window],
         ["Frequência", parsedAt === interval ? ok.frequency || freqLabel(interval) : freqLabel(interval)],
         ["Grupo", ok.groupLabel],
+        ...(ok.channel ? [["Canal", ok.channel] as [string, string]] : []),
         ["Avisa em", ok.notify],
+        ["Importância", SEVERITY[ok.severity] ?? ok.severity],
       ]
     : [];
 
@@ -74,14 +73,14 @@ export function CreateDialog({ onClose, onCreated }: { onClose: () => void; onCr
         rows={3}
         maxLength={1000}
         aria-label="O que o Hermes deve vigiar"
-        placeholder="Ex.: Avise se o bot da Padaria Sol ficar mais de 10 minutos sem mandar mensagem em horário comercial"
+        placeholder={`Ex.: ${examples[0]}`}
         onChange={(e) => {
           setText(e.target.value);
           setRes(null);
         }}
       />
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {EXAMPLES.map((e) => (
+        {examples.map((e) => (
           <button
             key={e}
             className="hl-ex"
@@ -105,7 +104,7 @@ export function CreateDialog({ onClose, onCreated }: { onClose: () => void; onCr
         </div>
       </div>
 
-      <div aria-live="polite">
+      <div aria-live="polite" className="hl-parsed-slot">
         {res && (
           <div className="hl-parsed" style={{ border: `1px solid ${soft(res.ok ? "var(--ok)" : "var(--err)", 40)}`, background: soft(res.ok ? "var(--ok)" : "var(--err)", 7) }}>
             <span role={res.ok ? undefined : "alert"} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, fontWeight: 600, color: res.ok ? "var(--fg)" : "var(--err)", lineHeight: 1.4 }}>
@@ -121,6 +120,12 @@ export function CreateDialog({ onClose, onCreated }: { onClose: () => void; onCr
                   </div>
                 ))}
               </dl>
+            )}
+            {res.ok && ok?.warning && (
+              <div className="hl-warn" role="note">
+                <Icon name="triangle-alert" size={14} />
+                {ok.warning}
+              </div>
             )}
           </div>
         )}

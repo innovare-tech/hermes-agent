@@ -49,6 +49,18 @@ vi.mock("@/lib/api", async (orig) => ({
       checks = [check({ id: "r1", name: "Bot da Padaria" })];
       return { created: checks, skipped: ["Kubernetes: falta o endereço do cluster"] };
     }
+    const one = /^\/api\/health\/checks\/(\w+)$/.exec(url);
+    if (one && method === "PATCH") {
+      const c = checks.find((x) => x.id === one[1])!;
+      const next = { ...c, status: body.paused ? ("paused" as const) : ("ok" as const), lastRunAt: body.paused ? c.lastRunAt : NOW, result: body.paused ? c.result : { text: "Conectado" } };
+      checks = checks.map((x) => (x.id === c.id ? next : x));
+      if (body.paused) incidents = incidents.filter((i) => i.checkId !== c.id);
+      return next;
+    }
+    if (one && method === "DELETE") {
+      checks = checks.filter((x) => x.id !== one[1]);
+      return { ok: true };
+    }
     const run = /^\/api\/health\/checks\/(\w+)\/run$/.exec(url);
     if (run) return checks.find((c) => c.id === run[1])!;
     const act = /^\/api\/incidents\/(\d+)\/(ack|resolve|action)$/.exec(url);
@@ -130,7 +142,7 @@ describe("Saúde", () => {
 
   it("grupos recolhíveis com aria-expanded, borda pelo pior status e bots cortados em 6 com o problema primeiro", async () => {
     await mount();
-    const heads = [...container.querySelectorAll<HTMLElement>("button[aria-expanded]")];
+    const heads = [...container.querySelectorAll<HTMLElement>("button.hl-ghead")];
     expect(heads).toHaveLength(3); // servidores, bots, kubernetes (os outros grupos não têm verificação)
     expect(heads.every((h) => h.getAttribute("aria-expanded") === "true")).toBe(true);
     const botHead = heads.find((h) => h.textContent?.includes("Bots de WhatsApp"))!;
@@ -186,6 +198,96 @@ describe("Saúde", () => {
     expect(card.querySelector('[role="status"][aria-live="polite"]')).toBeTruthy();
   });
 
+  it("sem correção: 'O que fazer agora' com a recomendação e 'Pausar verificação' que avisa do incidente fechado", async () => {
+    incidents = [incident({ suggestedAction: null, recommendation: "Peça ao cliente para reconectar o WhatsApp.", checkStatus: "error", problemSince: NOW - 36 * 3600, startedAt: NOW - 600 })];
+    await mount();
+    const card = q("article")!;
+    expect(card.textContent).toContain("O que fazer agora");
+    expect(card.textContent).toContain("Peça ao cliente para reconectar o WhatsApp.");
+    expect(card.textContent).toContain("Ainda com problema: vai reabrir se continuar.");
+    expect(card.textContent).toContain("1 d 12 h");
+    expect(card.textContent).toContain("detectado");
+    expect(byText("a", "Abrir Canais")).toBeUndefined(); // a verificação ligada é do Kubernetes
+    await click(byText("article button", "Pausar verificação"));
+    await flush();
+    expect(calls.some((c) => c.method === "PATCH" && c.url === "/api/health/checks/k1" && (c.body as { paused: boolean }).paused)).toBe(true);
+    expect(toasts().some((t) => t.includes("o incidente aberto dela foi fechado"))).toBe(true);
+  });
+
+  it("sem correção e sem recomendação: texto genérico; verificação de bot ganha 'Abrir Canais'", async () => {
+    incidents = [incident({ checkId: "b7", suggestedAction: null })];
+    await mount();
+    const card = q("article")!;
+    expect(card.textContent).toContain("O Hermes não tem uma correção automática para isto.");
+    expect(byText("article a", "Abrir Canais")?.getAttribute("href")).toBe("/channels");
+  });
+
+  it("menu '⋯': Pausar sem incidente não fala em incidente; Remover confirma dentro do menu; Esc fecha e devolve o foco", async () => {
+    incidents = [];
+    await mount();
+    const more = () => q('button[aria-label="Mais ações: Cliente 1"]')!;
+    expect(more().getAttribute("aria-haspopup")).toBe("menu");
+    await click(more());
+    expect(q('[role="menu"]')).toBeTruthy();
+    await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    expect(q('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(more());
+
+    await click(more());
+    await click(byText('[role="menuitem"]', "Pausar"));
+    await flush();
+    expect(toasts().some((t) => t.startsWith("“Cliente 1” pausada") && !t.includes("incidente"))).toBe(true);
+    expect(q('button[aria-label="Retomar: Cliente 1"]')).toBeTruthy();
+    expect(container.textContent).toContain("pausada");
+
+    await click(q('button[aria-label="Mais ações: Cliente 2"]'));
+    await click(byText('[role="menuitem"]', "Remover…"));
+    expect(q('[role="menu"]')?.textContent).toContain("Remover esta verificação? O histórico some.");
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    await click(byText('[role="menuitem"]', "Remover"));
+    await flush();
+    expect(calls.some((c) => c.method === "DELETE" && c.url === "/api/health/checks/b2")).toBe(true);
+  });
+
+  it("Retomar usa a verificação devolvida pelo PATCH (já rodada)", async () => {
+    checks = checks.map((c) => (c.id === "b1" ? { ...c, status: "paused" as const } : c));
+    incidents = [];
+    await mount();
+    await click(q('button[aria-label="Retomar: Cliente 1"]'));
+    await flush();
+    expect(toasts().some((t) => t.startsWith("“Cliente 1” retomada | Conectado. Rodei agora."))).toBe(true);
+  });
+
+  it("Microserviços vazio mostra o convite e abre Conexões; com poucas verificações aparece 'Usar as recomendadas'", async () => {
+    incidents = [];
+    checks = [check({ id: "only", name: "Bot único" })];
+    await mount();
+    expect(container.textContent).toContain("Nenhum serviço ainda. Adicione os endereços de /health em Conexões.");
+    expect(byText("button", "Usar as recomendadas")).toBeTruthy();
+    await click(byText("button", "Abrir Conexões"));
+    await flush();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Onde o Hermes olha");
+  });
+
+  it("Conexões: nome de variável inválido não ecoa o valor, bloqueia o Salvar e mostra a dica", async () => {
+    incidents = [];
+    await mount();
+    await click(byText("button", "Conexões"));
+    await flush();
+    const dlg = document.querySelector('[role="dialog"]')!;
+    const uri = [...dlg.querySelectorAll<HTMLInputElement>("input")].find((i) => i.value === "AIBIZ_MONGO_URI")!;
+    await type(uri, "mongodb://root:segredo@host/db");
+    await flush();
+    expect(dlg.textContent).toContain("isso parece o valor; coloque-o em Chaves e escreva aqui só o nome (ex.: AIBIZ_MONGO_URI)");
+    expect(dlg.textContent).not.toContain("segredo");
+    expect(uri.getAttribute("aria-invalid")).toBe("true");
+    const save = [...dlg.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.includes("Salvar conexões"))!;
+    expect(save.disabled).toBe(true);
+    await type(uri, "MINHA_URI");
+    await flush();
+    expect(save.disabled).toBe(false);
+  });
+
   it("Resolver: diálogo com nota, aviso da verificação ainda com erro e toast honesto (stillFailing)", async () => {
     stillFailing = true;
     await mount();
@@ -236,7 +338,7 @@ describe("Saúde", () => {
     await click(create());
     await flush();
     const post = calls.find((c) => c.url === "/api/health/checks" && c.method === "POST");
-    expect(post?.body).toMatchObject({ text: "Avise se o disco da vps1 ficar cheio", interval: 900, parsed: { groupLabel: "Servidores", spec: { kind: "ssh" } } });
+    expect(post?.body).toMatchObject({ text: "Avise se o disco da VPS2 ficar cheio", interval: 900, parsed: { groupLabel: "Servidores", spec: { kind: "ssh" } } });
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(container.textContent).toContain("Aguardando a primeira execução");
     expect(container.querySelector(".hl-row.fresh")?.textContent).toContain("Disco da VPS1");
