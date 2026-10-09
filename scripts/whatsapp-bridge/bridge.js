@@ -1101,6 +1101,37 @@ app.post('/read', async (req, res) => {
   }
 });
 
+// Participantes de um grupo (painel › Canais › Participantes): id, número, se é admin, nome que o
+// WhatsApp expõe e a foto de perfil (URL temporária do WhatsApp; null quando a pessoa esconde a foto).
+// Só leitura — nada é enviado ao grupo.
+app.get('/group/:id/participants', async (req, res) => {
+  const chatId = req.params.id;
+  if (!sock || connectionState !== 'connected') return res.status(503).json({ error: 'Not connected' });
+  if (!chatId.endsWith('@g.us')) return res.status(400).json({ error: 'not a group' });
+  try {
+    const metadata = await sock.groupMetadata(chatId);
+    const people = (metadata.participants || []).slice(0, 300);
+    const withTimeout = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), ms))]);
+    const participants = await Promise.all(people.map(async (p) => {
+      const rawId = String(p.id || '');
+      const lidNum = rawId.endsWith('@lid') ? rawId.replace(/@.*/, '') : '';
+      const phone = String(p.phoneNumber || p.jid || '').replace(/@.*/, '')
+        || (rawId.endsWith('@s.whatsapp.net') ? rawId.replace(/@.*/, '') : '')
+        || (lidNum && lidToPhone[lidNum]) || '';
+      const jid = phone ? `${phone}@s.whatsapp.net` : rawId;
+      let photo = null;
+      try { photo = await withTimeout(sock.profilePictureUrl(jid, 'preview'), 4000); } catch { photo = null; }
+      return {
+        id: rawId, jid, phone, lid: lidNum ? rawId : (p.lid || ''),
+        admin: p.admin || null, name: p.name || p.notify || p.verifiedName || '', photo,
+      };
+    }));
+    res.json({ name: metadata.subject || '', size: (metadata.participants || []).length, participants });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Assunto dos grupos em cache (1 h): uma consulta ao WhatsApp por grupo, não uma por mensagem.
 const groupSubjects = new Map();
 async function groupSubject(chatId) {

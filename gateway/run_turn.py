@@ -1921,7 +1921,7 @@ class GatewayTurnMixin:
         """Final delivery decisions: intentional silence, voice reply, streamed-turn media/footer.
         Returns the text for the adapter to send, or ``None`` when already delivered."""
         _ops = getattr(event, "_ops", None)
-        if _ops and not agent_result.get("failed") and not _intentional_silence:
+        if _ops and not agent_result.get("failed") and not agent_result.get("gateway_error") and not _intentional_silence:
             from gateway import ops_hooks
             if _ops["mode"] == ops_hooks.DRAFT:  # vira rascunho para aprovação; nada é enviado
                 if response:

@@ -243,3 +243,32 @@ def ops_send_verb(runner: Any) -> Callable[..., dict]:
             return {"sent": False, "error": str(e)[:300]}
 
     return _handler
+
+
+def ops_participants_verb(runner: Any) -> Callable[..., dict]:
+    """``ops-participants``: ``{"platform", "chat_id", "profile"?}`` → participantes do grupo pelo adaptador
+    vivo do perfil dono do canal (só leitura). ``{ok, name, size, participants[]}`` ou ``{ok: False, error}``."""
+
+    def _handler(params: Optional[dict] = None) -> dict:
+        import asyncio
+
+        params = params or {}
+        platform, chat_id = str(params.get("platform") or ""), str(params.get("chat_id") or "")
+        profile = str(params.get("profile") or "").strip() or None
+        if not (platform and chat_id):
+            return {"ok": False, "error": "platform e chat_id são obrigatórios"}
+        try:
+            from gateway.config import Platform
+
+            adapter = runner._authorization_adapter(Platform(platform), None if profile == "default" else profile)
+            if adapter is None or not hasattr(adapter, "group_participants"):
+                return {"ok": False, "error": f"o {platform} deste perfil não lista participantes"}
+            loop = getattr(runner, "_gateway_loop", None)
+            if loop is None:
+                return {"ok": False, "error": "o gateway ainda está iniciando"}
+            data = asyncio.run_coroutine_threadsafe(adapter.group_participants(chat_id), loop).result(45)
+            return {"ok": True, **(data or {})}
+        except Exception as e:  # noqa: BLE001 — o motivo vai para a tela
+            return {"ok": False, "error": str(e)[:300]}
+
+    return _handler

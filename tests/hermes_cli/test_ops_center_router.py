@@ -268,3 +268,22 @@ def test_channels_a2_contract_and_clients_directory(client):
     assert client.patch("/api/ops/channels/nope:1", json={"notClient": True}).status_code == 404
     acts = [a["action"] for a in client.get("/api/ops/activity").json()]
     assert any("vinculado ao cliente Padaria Sol" in a for a in acts) and any("janela de análise" in a for a in acts)
+
+
+def test_team_and_group_participants(client, monkeypatch):
+    from ops_center import store
+
+    out = client.post("/api/ops/team", json={"id": "554989235817@s.whatsapp.net", "name": "Kelvin", "aliases": ["1438@lid"]}).json()
+    assert out["id"] == "554989235817" and out["aliases"] == ["1438@lid"]
+    assert [m["id"] for m in client.get("/api/ops/team").json()] == ["554989235817"]
+    store.touch_channel("whatsapp", "g1@g.us", "Padaria", "group")
+    answer = {"ok": True, "name": "Padaria", "size": 2, "participants": [
+        {"id": "1438@lid", "jid": "554989235817@s.whatsapp.net", "phone": "554989235817", "lid": "1438@lid", "admin": "admin", "name": "", "photo": None},
+        {"id": "999@lid", "jid": "999@lid", "phone": "", "lid": "999@lid", "admin": None, "name": "Cliente", "photo": "https://pps.whatsapp.net/x"}]}
+    monkeypatch.setattr("gateway.control_socket.query_gateway_control", lambda *a, **k: answer)
+    p = client.get("/api/ops/channels/whatsapp:g1@g.us/participants").json()
+    assert [(x["key"], x["team"]) for x in p["participants"]] == [("554989235817", True), ("999@lid", False)]
+    monkeypatch.setattr("gateway.control_socket.query_gateway_control", lambda *a, **k: None)
+    assert client.get("/api/ops/channels/whatsapp:g1@g.us/participants").status_code == 400
+    assert client.delete("/api/ops/team/554989235817").json() == {"ok": True}
+    assert client.get("/api/ops/team").json() == []

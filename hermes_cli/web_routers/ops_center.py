@@ -198,6 +198,70 @@ async def put_listen(body: dict):
     return out
 
 
+# ---- Equipe e participantes dos grupos ----
+
+def _participants(cid: str, profile: Optional[str]) -> dict:
+    """Participantes do grupo pelo gateway (verbo ``ops-participants``) + quem é da equipe + nomes já vistos."""
+    from gateway.control_socket import query_gateway_control
+    from hermes_constants import get_process_hermes_home
+
+    store = _store()
+    platform, _, chat_id = cid.partition(":")
+    if not chat_id:
+        raise KeyError(cid)
+    answer = query_gateway_control(get_process_hermes_home(), "ops-participants", timeout=50.0,
+                                   params={"platform": platform, "chat_id": chat_id, "profile": profile or ""})
+    if answer is None:
+        raise ValueError("o gateway não está rodando: ligue-o para ver os participantes")
+    if not answer.get("ok"):
+        raise ValueError(answer.get("error") or "o gateway não listou os participantes")
+    keys = store.team_keys()
+    with store.connect() as c:  # nome com que cada pessoa já apareceu nas mensagens deste canal
+        seen = {store._person_key(r[0]): r[1] for r in c.execute(
+            "SELECT sender_id, sender_name FROM inbox WHERE channel_id=? AND COALESCE(sender_name,'')<>'' "
+            "GROUP BY sender_id", (cid,))}
+    people = []
+    for p in answer.get("participants") or []:
+        ids = [p.get("phone"), p.get("jid"), p.get("lid"), p.get("id")]
+        key = next((store._person_key(i) for i in ids if store._person_key(i)), "")
+        people.append({**p, "key": key, "name": p.get("name") or next((seen[store._person_key(i)] for i in ids
+                       if store._person_key(i) in seen), ""),
+                       "team": any(store.is_team(i, keys) for i in ids if i)})
+    people.sort(key=lambda x: (not x["team"], not x.get("admin"), (x.get("name") or x["key"]).lower()))
+    return {"name": answer.get("name") or "", "size": answer.get("size") or len(people), "participants": people}
+
+
+@ops.get("/channels/{cid}/participants")
+async def channel_participants(cid: str):
+    return await _run(_participants, cid, _PROFILE.get())
+
+
+@ops.get("/team")
+async def get_team():
+    return await _run(_store().list_team)
+
+
+class TeamBody(BaseModel):
+    id: str
+    name: str = ""
+    aliases: list[str] = []
+    photo: Optional[str] = None
+
+
+@ops.post("/team")
+async def add_team(body: TeamBody):
+    out = await _run(_store().add_team_member, body.id, body.name, body.aliases, body.photo)
+    await _act(f"Marcou {out['name'] or out['id']} como equipe (vale em todos os grupos)")
+    return out
+
+
+@ops.delete("/team/{member_id}")
+async def remove_team(member_id: str):
+    await _run(_store().remove_team_member, member_id)
+    await _act(f"Tirou {member_id} da equipe")
+    return {"ok": True}
+
+
 # ---- Permissões (design A6) ----
 
 _HARD_DENY_EXAMPLES = {

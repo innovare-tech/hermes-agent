@@ -79,6 +79,10 @@ CREATE TABLE IF NOT EXISTS approvals (
   decided_by TEXT, decided_by_id TEXT, decided_at REAL, note TEXT, result TEXT
 );
 CREATE INDEX IF NOT EXISTS approvals_status ON approvals(status, at);
+CREATE TABLE IF NOT EXISTS team_members (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', aliases TEXT NOT NULL DEFAULT '[]',
+  photo TEXT, added_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS clients (
   system_client_id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT '',
   name_norm TEXT NOT NULL DEFAULT '', updated_at REAL NOT NULL DEFAULT 0
@@ -836,3 +840,54 @@ def expire_approvals(now: Optional[float] = None) -> int:
     with connect() as c:
         return c.execute("UPDATE approvals SET status='expired', decided_at=? WHERE status='pending' "
                          "AND expires_at IS NOT NULL AND expires_at <= ?", (now or time.time(), now or time.time())).rowcount
+
+
+# ---- Equipe: quem é do time do negócio nos grupos de clientes (vale para todo grupo do perfil) ----
+
+def _person_key(value: Any) -> str:
+    """``554989235817@s.whatsapp.net`` / ``+55 49 8923-5817`` → ``554989235817``; ``123@lid`` → ``123@lid``."""
+    v = str(value or "").strip()
+    if v.endswith("@lid"):
+        return v
+    digits = "".join(ch for ch in v.split("@", 1)[0] if ch.isdigit())
+    return digits
+
+
+def list_team() -> list[dict]:
+    with connect() as c:
+        rows = _rows(c.execute("SELECT * FROM team_members ORDER BY name, id"))
+    for r in rows:
+        r["aliases"] = json.loads(r.get("aliases") or "[]")
+    return rows
+
+
+def add_team_member(ident: Any, name: str = "", aliases: Optional[list] = None, photo: Optional[str] = None) -> dict:
+    key = _person_key(ident)
+    if not key:
+        raise ValueError("informe o número de WhatsApp da pessoa")
+    al = sorted({_person_key(a) for a in (aliases or []) if _person_key(a)} - {key})
+    with connect() as c:
+        c.execute("INSERT INTO team_members(id, name, aliases, photo, added_at) VALUES(?,?,?,?,?) "
+                  "ON CONFLICT(id) DO UPDATE SET name=CASE WHEN excluded.name<>'' THEN excluded.name ELSE team_members.name END, "
+                  "aliases=excluded.aliases, photo=COALESCE(excluded.photo, team_members.photo)",
+                  (key, name.strip(), json.dumps(al), photo, time.time()))
+    return next(m for m in list_team() if m["id"] == key)
+
+
+def remove_team_member(ident: Any) -> None:
+    with connect() as c:
+        c.execute("DELETE FROM team_members WHERE id=?", (_person_key(ident),))
+
+
+def team_keys() -> set[str]:
+    """Todos os identificadores (número e LID) de quem é da equipe."""
+    keys: set[str] = set()
+    for m in list_team():
+        keys.add(m["id"])
+        keys.update(m["aliases"])
+    return keys
+
+
+def is_team(sender: Any, keys: Optional[set] = None) -> bool:
+    k = _person_key(sender)
+    return bool(k) and k in (keys if keys is not None else team_keys())

@@ -89,3 +89,28 @@ def test_held_batch_skips_the_model_but_tells_the_team(warns):
     urgent = {**tri, "category": "bug", "urgency": "critica"}
     a = listen.analyze(aid, triage=lambda s, c: urgent, run=lambda *x: '{"summary": "fora do ar"}', notify=lambda a: None)
     assert a["status"] == "open"
+
+
+def test_limit_pause_lifts_itself_but_manual_pause_stays(warns, tmp_path):
+    from agent import estop
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    from ops_center import spend_guard, store
+
+    home = tmp_path / ".hermes" / "profiles" / "aibiz"
+    home.mkdir(parents=True)
+    token = set_hermes_home_override(home)
+    try:
+        _limits("pause_profile")
+        spend_guard.check(spend={"today": 20, "month": 50})
+        assert (home / "ESTOP").exists()
+        spend_guard.check(spend={"today": 20, "month": 50})  # ainda estourado: segue pausado
+        assert (home / "ESTOP").exists()
+        spend_guard.check(spend={"today": 0, "month": 50})  # virou o dia
+        assert not (home / "ESTOP").exists() and "retomado" in warns[-1][1]
+
+        estop.engage(reason="pausa manual")
+        store.set_meta("limits.paused_profile", "2026-01-01")
+        spend_guard.check(spend={"today": 0, "month": 50})
+        assert (home / "ESTOP").exists()  # pausa manual nunca é retirada pelo limite
+    finally:
+        reset_hermes_home_override(token)

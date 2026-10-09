@@ -223,3 +223,27 @@ def test_notice_html_has_client_block_and_copy_button():
 
     body, buttons = listen.format_notice_html({**a, "client_id": None, "suggested_reply": "x" * 300})
     assert "não vinculado" in body and buttons == []  # acima do limite do copy_text: só o bloco <pre>
+
+
+def test_team_members_are_marked_in_batch_and_participants():
+    from gateway import ops_hooks
+    from ops_center import listen, store
+
+    store.add_team_member("+55 49 8923-5817", "Kelvin", aliases=["143821358772333@lid"])
+    assert store.is_team("554989235817@s.whatsapp.net") and store.is_team("143821358772333@lid")
+    _listen()
+    ev, src = _event("o pix não cai", user="Cliente")
+    ops_hooks.listen_capture(ev, src)
+    ev, src = _event("já estamos vendo!", user="Kelvin")
+    src.user_id = "554989235817@s.whatsapp.net"
+    ops_hooks.listen_capture(ev, src)
+    aid = store.open_batch(f"whatsapp:{GROUP}")
+    seen = {}
+
+    def run(group, client, state, cfg):
+        seen["state"] = state
+        return '{"summary": "pix", "participants": [{"name": "Kelvin", "role": "cliente"}, {"name": "Cliente", "role": "cliente"}]}'
+
+    a = listen.analyze(aid, triage=lambda s, c: None, run=run, notify=lambda a: None)
+    assert "Kelvin (equipe): já estamos vendo!" in seen["state"] and "Cliente: o pix" in seen["state"]
+    assert {p["name"]: p["role"] for p in a["participants"]} == {"Kelvin": "equipe", "Cliente": "cliente"}

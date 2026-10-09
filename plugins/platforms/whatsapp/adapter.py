@@ -882,6 +882,18 @@ class WhatsAppAdapter(WhatsAppBehaviorMixin, BasePlatformAdapter):
                             reply_to: Optional[str] = None, **kwargs) -> SendResult:
         return await self._send_media_to_bridge(chat_id, file_path, "document", caption, file_name or os.path.basename(file_path))
 
+    async def group_participants(self, chat_id: str) -> dict:
+        """Participantes de um grupo (id, número, admin, nome, foto) — só leitura, para o painel."""
+        from urllib.parse import quote
+
+        if await self._bridge_unavailable():
+            raise RuntimeError("a ponte do WhatsApp não está conectada")
+        async with self._bridge_req("get", f"group/{quote(to_whatsapp_jid(chat_id), safe='')}/participants", 40) as resp:
+            data = await resp.json(content_type=None)
+            if resp.status != 200:
+                raise RuntimeError(str((data or {}).get("error") or f"ponte respondeu {resp.status}"))
+            return data
+
     async def send_typing(self, chat_id: str, metadata=None) -> None:
         if await self._bridge_unavailable():
             return

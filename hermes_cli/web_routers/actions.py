@@ -160,6 +160,13 @@ def _persisted_action_id(log_dir: Path, name: str) -> Optional[str]:
 @router.post("/api/gateway/restart")
 async def restart_gateway(profile: Optional[str] = None):
     """Kick off a ``hermes gateway restart`` in the background."""
+    if profile and profile.lower() not in ("default", "current"):
+        from hermes_cli.web_server_gateway import _profile_is_multiplexed
+
+        # Perfil servido pelo gateway único: ele não tem gateway próprio (o restart com -p seria recusado
+        # em silêncio); reiniciar é reiniciar o gateway que o atende.
+        if await asyncio.to_thread(_profile_is_multiplexed, profile):
+            profile = None
     with http_failure("Failed to spawn gateway restart", 500, "Failed to restart gateway"):
         proc, _reused = _spawn_gateway_restart(profile)
     return {"ok": True, "pid": proc.pid, "name": "gateway-restart"}

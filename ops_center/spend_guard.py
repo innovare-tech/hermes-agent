@@ -8,7 +8,8 @@
   (``holding_non_urgent``): no Escutar, só lotes de urgência crítica/alta vão para o modelo; o resto
   chega à equipe com as mensagens cruas, sem gastar.
 - ``over`` com ``pause_profile`` → aviso crítico + pausa do perfil (ESTOP do perfil; o padrão não
-  pausa sozinho, então só avisa). Retomar é manual, no painel.
+  pausa sozinho, então só avisa). Volta sozinho quando o gasto sai do estouro (virou o dia, ou o mês
+  se o estouro foi mensal) — só a pausa que o limite pôs; pausa manual continua manual.
 
 ponytail: a checagem lê o ``state.db`` a cada ``CHECK_SECONDS``; gasto que acontece entre duas
 checagens passa do limite em até esse intervalo.
@@ -27,6 +28,7 @@ from ops_center import store
 logger = logging.getLogger(__name__)
 
 CHECK_SECONDS = 300
+PAUSE_REASON = "limite de gasto atingido"
 _last_check: dict[str, float] = {}
 
 
@@ -76,6 +78,8 @@ def check(now: Optional[float] = None, *, spend: Optional[dict] = None) -> dict:
     cur = spend if spend is not None else _spend_now()
     ev = models.evaluate_limits(cur, lim)
     state = ev["state"]
+    if state != "over":
+        _resume_if_paused_by_limit()  # virou o dia (ou o mês) e o gasto voltou para dentro do limite
     if state == "ok":
         return ev
     today = _today()
@@ -105,11 +109,31 @@ def _pause_profile() -> bool:
     try:
         if sentinel_path().parent.resolve() == get_process_hermes_home().resolve():
             return False
-        engage(reason="limite de gasto atingido")
+        engage(reason=PAUSE_REASON)
+        store.set_meta("limits.paused_profile", _today())
         return True
     except OSError:
         logger.warning("ops_center: não consegui pausar o perfil pelo limite de gasto", exc_info=True)
         return False
+
+
+def _resume_if_paused_by_limit() -> None:
+    """Tira a pausa que o PRÓPRIO limite pôs (nunca uma pausa manual), quando o gasto voltou ao limite."""
+    if not store.get_meta("limits.paused_profile"):
+        return
+    try:
+        import json
+
+        from agent.estop import sentinel_path
+
+        path = sentinel_path()
+        if path.exists() and (json.loads(path.read_text(encoding="utf-8") or "{}").get("reason") == PAUSE_REASON):
+            path.unlink(missing_ok=True)
+            _warn("warning", "▶️ Perfil retomado: o gasto voltou para dentro do limite")
+    except (OSError, ValueError):
+        logger.warning("ops_center: não consegui retomar o perfil pausado pelo limite", exc_info=True)
+        return
+    store.set_meta("limits.paused_profile", None)
 
 
 def maybe_check(home_key: str) -> None:
