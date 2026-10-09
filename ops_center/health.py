@@ -755,9 +755,14 @@ def _run_ssh(p: dict, _prev: dict) -> dict:
     try:
         if key:
             fd, keyfile = tempfile.mkstemp(prefix="hermes-ssh-")
-            with os.fdopen(fd, "w") as f:
+            with os.fdopen(fd, "w", newline="\n") as f:  # CRLF quebra a leitura da chave no OpenSSH
                 f.write(key)
             os.chmod(keyfile, 0o600)
+            if os.name == "nt":  # o OpenSSH do Windows ignora chave com ACL herdada ("bad permissions")
+                import getpass
+
+                subprocess.run(["icacls", keyfile, "/inheritance:r", "/grant:r", f"{getpass.getuser()}:(R,D)"],  # noqa: S603,S607
+                               capture_output=True, timeout=10)
             args += ["-i", keyfile, "-o", "IdentitiesOnly=yes"]
         args += [f"{srv['user']}@{srv['host']}" if srv["user"] else srv["host"], _SSH_PROBE]
         r = subprocess.run(args, capture_output=True, text=True, timeout=30)  # noqa: S603
