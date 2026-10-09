@@ -14,6 +14,7 @@ type NavItem = { to: string; label: string; icon: string; count?: string; sub?: 
 export const OPS: NavItem[] = [
   { to: "/", label: "Painel", icon: "layout-dashboard" },
   { to: "/saude", label: "Saúde", icon: "heart-pulse" },
+  { to: "/copiloto", label: "Clientes do Copiloto", icon: "users-round" },
   { to: "/inbox", label: "Caixa de entrada", icon: "inbox" },
   { to: "/analises", label: "Análises dos grupos", icon: "scan-search", sub: true },
   { to: "/approvals", label: "Aprovações", icon: "shield-check" },

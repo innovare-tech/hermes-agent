@@ -138,6 +138,9 @@ const PROFILE_SCOPED_PREFIXES = [
   // Saúde da plataforma (A7): verificações, incidentes e conexões no ops.db do perfil.
   "/api/health",
   "/api/incidents",
+  // Copiloto do Gestor (A8): clientes, chaves e auditoria vivem no ops.db e no .env do perfil que administra; o diretório é o do Canais.
+  "/api/copilot",
+  "/api/aibiz",
   "/api/logs",
   "/api/portal",
   // Pool entries live in the profile's home, and DELETE /api/credentials/pool/{provider}/{index}

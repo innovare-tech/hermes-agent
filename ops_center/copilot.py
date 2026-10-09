@@ -479,6 +479,7 @@ def _summary(r: dict) -> dict:
             "month": {"conversations": u["conversations"], "credits": u["credits"], "creditsLimit": limit,
                       "tokens": u["tokens"], "toolCalls": u["toolCalls"], "spendUsd": _spend(r["profile_id"])},
             "lastActivityAt": u["lastActivityAt"], "keyRotatedAt": r["key_rotated_at"],
+            "isNew": not r["revoked_at"] and not u["lastActivityAt"] and time.time() - r["created_at"] < 7 * 86400,
             "revoked": {"at": r["revoked_at"], "by": r["revoked_by"], "reason": r["revoke_reason"],
                         "purgeAt": r["revoked_at"] + REVOKED_KEEP_DAYS * 86400} if r["revoked_at"] else None}
 
@@ -509,6 +510,7 @@ def list_clients(q: str = "", status: str = "", plan: str = "", cursor: Optional
         rows = [dict(r) for r in c.execute("SELECT * FROM copilot_clients")]
     items = [_summary(r) for r in rows]
     counts = {"all": len(items), **{s: sum(1 for i in items if i["status"] == s) for s in ("active", "no_credit", "revoked")}}
+    spend_all = round(sum(i["month"]["spendUsd"] or 0 for i in items), 2)  # KPIs são de todos, não do filtro
     needle = store._norm(q)
     if needle:
         items = [i for i in items if needle in store._norm(i["name"]) or needle in i["systemClientId"].lower()]
@@ -516,15 +518,12 @@ def list_clients(q: str = "", status: str = "", plan: str = "", cursor: Optional
         items = [i for i in items if i["status"] == status]
     if plan:
         items = [i for i in items if i["plan"] == plan]
-    day = 86400
-    for i in items:
-        i["isNew"] = i["status"] == "active" and not i["lastActivityAt"] and time.time() - i["createdAt"] < 7 * day
     items.sort(key=lambda i: (_ORDER["new"] if i["isNew"] else _ORDER[i["status"]], -(i["lastActivityAt"] or i["createdAt"])))
     start = int(cursor or 0)
     page = items[start:start + limit]
     return {"items": page, "total": len(items), "counts": counts,
             "kpis": {"active": counts["active"], "noCredit": counts["no_credit"],
-                     "spendUsd": round(sum(i["month"]["spendUsd"] or 0 for i in items), 2)},
+                     "spendUsd": spend_all},
             "nextCursor": str(start + limit) if start + limit < len(items) else None}
 
 

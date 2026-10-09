@@ -123,6 +123,13 @@ import {
   ShieldAlert,
   Timer,
   TimerOff,
+  UsersRound,
+  ShieldX,
+  Wallet,
+  Gauge,
+  FileSearch,
+  Coins,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 
@@ -250,6 +257,13 @@ const ICONS: Record<string, LucideIcon> = {
   "shield-alert": ShieldAlert,
   timer: Timer,
   "timer-off": TimerOff,
+  "users-round": UsersRound,
+  "shield-x": ShieldX,
+  wallet: Wallet,
+  gauge: Gauge,
+  "file-search": FileSearch,
+  coins: Coins,
+  "user-plus": UserPlus,
 };
 
 export function Icon({ name, size = 16, color, className }: { name: string; size?: number; color?: string; className?: string }) {
