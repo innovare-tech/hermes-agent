@@ -15,6 +15,7 @@ def test_sync_uses_business_id_and_name(monkeypatch):
             {"_id": "oid2", "shortName": "Lumen", "status": "inactive"},  # sem id: usa o _id
             {"_id": "oid3", "id": "sc-103"}]  # sem nome: fica de fora
     seen = {}
+    docs[1]["status"] = "active"
     out = clients_sync.sync(fetch=lambda src: seen.update(src) or docs)
     assert seen["db"] == "aibiz_mrz" and seen["collection"] == "system_client"
     assert out["imported"] == 2 and out["total"] == 2
@@ -41,3 +42,15 @@ def test_maybe_sync_waits_between_attempts(monkeypatch):
     clients_sync.maybe_sync()
     clients_sync.maybe_sync()
     assert calls == [1]  # a falha não vira nova tentativa no ciclo seguinte
+
+
+def test_only_active_clients_and_deactivated_ones_leave():
+    from ops_center import clients_sync, store
+
+    first = [{"id": "a", "name": "Ativo", "status": "active"}, {"id": "b", "name": "Vai sair", "status": "active"}]
+    clients_sync.sync(fetch=lambda src: first)
+    second = [{"id": "a", "name": "Ativo", "status": "active"}, {"id": "b", "name": "Vai sair", "status": "inactive"},
+              {"id": "c", "name": "Falso", "status": "false"}]
+    out = clients_sync.sync(fetch=lambda src: second)
+    assert out["removed"] == 1 and out["total"] == 1
+    assert store.get_client("a") and store.get_client("b") is None and store.get_client("c") is None

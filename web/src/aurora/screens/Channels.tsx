@@ -403,8 +403,9 @@ function SyncClientsButton({ onDone }: { onDone: () => void }) {
   const run = async () => {
     setBusy(true);
     try {
-      const out = await fetchJSON<{ imported: number; total: number }>("/api/clients/sync", { method: "POST" });
-      toast(`${out.total} clientes no diretório`, { sub: `${out.imported} lidos do banco agora. As sugestões de vínculo já usam a lista nova.` });
+      const out = await fetchJSON<{ imported: number; total: number; removed?: number }>("/api/clients/sync", { method: "POST" });
+      const gone = out.removed ? ` ${out.removed} desativados saíram do diretório.` : "";
+      toast(`${out.total} clientes ativos no diretório`, { sub: `Lidos do banco agora (só ativos).${gone} As sugestões de vínculo já usam a lista nova.` });
       onDone();
     } catch (e) {
       toast(e instanceof Error && e.message ? e.message : "Não consegui sincronizar os clientes");

@@ -436,6 +436,17 @@ def import_clients(items: Any) -> dict:
     return {"imported": len(rows), "total": total}
 
 
+def prune_clients(keep_ids: list[str]) -> int:
+    """Tira do diretório quem não veio na última sincronização (ex.: cliente desativado). Devolve quantos saíram.
+
+    Grupos já vinculados mantêm ``client_id``/``client_name`` (histórico); só some da busca e das sugestões."""
+    keep = set(keep_ids)
+    with connect() as c:
+        gone = [r[0] for r in c.execute("SELECT system_client_id FROM clients") if r[0] not in keep]
+        c.executemany("DELETE FROM clients WHERE system_client_id=?", [(g,) for g in gone])
+    return len(gone)
+
+
 def get_client(system_client_id: str) -> Optional[dict]:
     with connect() as c:
         row = c.execute("SELECT system_client_id, name, plan FROM clients WHERE system_client_id=?",
