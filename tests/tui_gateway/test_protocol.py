@@ -2133,3 +2133,29 @@ def test_session_branch_stored_accepts_idempotency_key(server, monkeypatch):
     assert "error" not in second, second.get("error")
     assert second["result"]["session_id"] == first_sid
     assert len(server._sessions) == 1
+
+
+def test_slash_model_routes_through_config_set_and_resets_worker(server):
+    """/model <nome> troca a sessão viva pelo config.set (não pelo estado do slash worker) e recria o worker,
+    para /status não mostrar o modelo antigo. Erro do config.set chega ao cliente; nada de "Model switched" falso."""
+    sid = "s-model"
+    closed = []
+    worker = type("W", (), {"close": lambda self: closed.append(True)})()
+    server._sessions[sid] = {"session_key": sid, "agent": None, "slash_worker": worker}
+    calls = []
+
+    def fake_cfgset(rid, params):
+        calls.append(params)
+        if params["value"] == "nao-existe":
+            return {"jsonrpc": "2.0", "id": rid, "error": {"code": 5032, "message": "modelo indisponível"}}
+        return {"jsonrpc": "2.0", "id": rid, "result": {"key": "model", "value": params["value"], "warning": ""}}
+
+    with patch.dict(server._methods, {"config.set": fake_cfgset}):
+        ok = server.handle_request({"id": "r1", "method": "slash.exec",
+                                    "params": {"command": "model gemini-3.8-flash", "session_id": sid}})
+        bad = server.handle_request({"id": "r2", "method": "slash.exec",
+                                     "params": {"command": "/model nao-existe", "session_id": sid}})
+    assert ok["result"]["output"] == "Modelo da conversa: gemini-3.8-flash"
+    assert calls[0] == {"session_id": sid, "key": "model", "value": "gemini-3.8-flash"}
+    assert closed == [True] and server._sessions[sid]["slash_worker"] is None
+    assert bad["error"]["code"] == 5032
