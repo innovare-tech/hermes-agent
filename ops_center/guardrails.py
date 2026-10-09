@@ -244,7 +244,9 @@ def settings() -> dict:
     for k, v in (saved.get("matrix") or {}).items():
         matrix.setdefault(k, dict(v))
     return {"enabled": bool(saved.get("enabled")), "matrix": matrix, "approvers": list(saved.get("approvers") or []),
-            "approval_target": str(saved.get("approval_target") or ""), "approvalTtlMin": APPROVAL_TTL_MIN}
+            "approval_target": str(saved.get("approval_target") or ""), "approvalTtlMin": APPROVAL_TTL_MIN,
+            # Quem pediu pode aprovar o próprio pedido (padrão: sim — equipe de uma pessoa só).
+            "allow_self_approval": bool(saved.get("allow_self_approval", True))}
 
 
 def save_settings(patch: dict) -> dict:
@@ -264,7 +266,7 @@ def save_settings(patch: dict) -> dict:
         for key, row in patch["matrix"].items():
             merged.setdefault(key, {}).update(row)
         cur["matrix"] = merged
-    for k in ("enabled", "approvers", "approval_target"):
+    for k in ("enabled", "approvers", "approval_target", "allow_self_approval"):
         if k in patch:
             cur[k] = patch[k]
     store.set_meta("permissions", cur)
@@ -439,7 +441,8 @@ def approval_text(a: dict) -> str:
     return (f"🟡 <b>Pedido de aprovação · {html.escape(a['summary'] or '')}</b>\n"
             f"Origem: {html.escape(ORIGIN_LABEL.get(a.get('origin') or '', 'painel'))} · pedido de "
             f"{html.escape(a.get('requested_by') or '?')}\n\n<pre>{html.escape((a.get('command') or '')[:3000])}</pre>\n"
-            f"Expira em {APPROVAL_TTL_MIN} min (sem resposta = negado). Quem pediu não aprova o próprio pedido.")
+            f"Expira em {APPROVAL_TTL_MIN} min (sem resposta = negado)."
+            + ("" if settings()["allow_self_approval"] else " Quem pediu não aprova o próprio pedido."))
 
 
 def _send_approval_prompt(aid: int, chat_id: str, thread_id: Optional[str]) -> bool:
@@ -480,7 +483,8 @@ def decide(approval_id: int, approve: bool, by: str, by_id: str, note: str = "")
         return {"ok": False, "error": "pedido não encontrado"}
     if a["status"] != "pending":
         return {"ok": False, "error": f"este pedido já está {a['status']}", "approval": a}
-    if by_id and a.get("requested_by_id") and str(by_id) == str(a["requested_by_id"]):
+    if (not settings()["allow_self_approval"] and by_id and a.get("requested_by_id")
+            and str(by_id) == str(a["requested_by_id"])):
         return {"ok": False, "error": "quem pediu não aprova o próprio pedido", "approval": a}
     # Quem entra no painel é o dono: decide sempre. A lista de aprovadores vale para o Telegram.
     approvers = [str(x) for x in settings()["approvers"]]

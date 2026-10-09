@@ -19,6 +19,8 @@ export type Permissions = {
   hardDeny: HardDeny[];
   approvers: (string | number)[];
   approvalTarget: string;
+  /** Quem pediu pode aprovar o próprio pedido (padrão: sim). */
+  allowSelfApproval?: boolean;
   approvalTtlMin: number;
 };
 
@@ -46,7 +48,7 @@ export type ApprovalRow = {
 
 const json = (method: string, body?: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
 
-export type PermissionsPatch = { enabled?: boolean; matrix?: Matrix; approvers?: string[]; approvalTarget?: string };
+export type PermissionsPatch = { enabled?: boolean; matrix?: Matrix; approvers?: string[]; approvalTarget?: string; allowSelfApproval?: boolean };
 
 export const permissionsApi = {
   get: () => fetchJSON<Permissions>("/api/ops/permissions"),

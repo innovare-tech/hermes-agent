@@ -218,9 +218,10 @@ export function PermissionsPanel() {
               <TelegramExample ttlMin={perms.approvalTtlMin} />
               <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--fg2)", lineHeight: 1.5 }}>
                 <Rule icon="users">
-                  {perms.approvers.length
-                    ? `Quem pode aprovar: ${perms.approvers.length} ${plural(perms.approvers.length, "pessoa", "pessoas")} da lista acima. Quem pediu não aprova o próprio pedido.`
-                    : "Quem pode aprovar: qualquer pessoa que veja o pedido no Telegram. Quem pediu não aprova o próprio pedido."}
+                  {(perms.approvers.length
+                    ? `Quem pode aprovar: ${perms.approvers.length} ${plural(perms.approvers.length, "pessoa", "pessoas")} da lista acima.`
+                    : "Quem pode aprovar: qualquer pessoa que veja o pedido no Telegram.") +
+                    (perms.allowSelfApproval === false ? " Quem pediu não aprova o próprio pedido." : " Quem pediu também pode aprovar o próprio pedido.")}
                 </Rule>
                 <Rule icon="timer">Sem resposta em {perms.approvalTtlMin} minutos, o pedido expira e conta como negado.</Rule>
                 <Rule icon="layout-dashboard">O mesmo pedido aparece aqui, no histórico, com Aprovar e Negar. Vale o que for decidido primeiro.</Rule>
@@ -316,10 +317,11 @@ function ApprovalSettings({ perms, onSaved }: { perms: Permissions; onSaved: (p:
   const [target, setTarget] = useState(perms.approvalTarget);
   const [ids, setIds] = useState<string[]>(perms.approvers.map(String));
   const [draftId, setDraftId] = useState("");
+  const [self, setSelf] = useState(perms.allowSelfApproval !== false);
   const [busy, setBusy] = useState(false);
   const targetOk = validTarget(target);
   const idOk = draftId === "" || validApprover(draftId);
-  const dirty = target.trim() !== perms.approvalTarget || ids.join() !== perms.approvers.map(String).join();
+  const dirty = target.trim() !== perms.approvalTarget || ids.join() !== perms.approvers.map(String).join() || self !== (perms.allowSelfApproval !== false);
   const people = ids.filter((i) => i !== PANEL_APPROVER);
 
   const addId = () => {
@@ -332,7 +334,7 @@ function ApprovalSettings({ perms, onSaved }: { perms: Permissions; onSaved: (p:
     if (!targetOk || busy) return;
     setBusy(true);
     try {
-      onSaved(await permissionsApi.save({ approvalTarget: target.trim(), approvers: ids }));
+      onSaved(await permissionsApi.save({ approvalTarget: target.trim(), approvers: ids, allowSelfApproval: self }));
       toast("Destino e aprovadores salvos", "Vale a partir do próximo pedido.");
     } catch (e) {
       toast(errMsg(e, "Não consegui salvar. Nada mudou."));
@@ -383,8 +385,15 @@ function ApprovalSettings({ perms, onSaved }: { perms: Permissions; onSaved: (p:
             </button>
           </div>
           <span id="pm-approver-d" style={{ fontSize: 11.5, lineHeight: 1.45, color: idOk ? "var(--fg3)" : "var(--err)" }}>
-            {!idOk ? "O id do Telegram tem só números." : people.length ? "No Telegram, só estas pessoas aprovam; aqui no painel, você sempre pode. Quem pediu nunca aprova o próprio pedido." : "Lista vazia: qualquer pessoa que veja o pedido pode aprovar (menos quem pediu)."}
+            {!idOk ? "O id do Telegram tem só números." : people.length ? "No Telegram, só estas pessoas aprovam; aqui no painel, você sempre pode." : "Lista vazia: qualquer pessoa que veja o pedido pode aprovar."}
           </span>
+          <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, marginTop: 4 }}>
+            <button type="button" role="switch" aria-checked={self} aria-label="Quem pediu pode aprovar o próprio pedido" className="au-switch" onClick={() => setSelf(!self)} style={{ marginLeft: 0 }}>
+              <span />
+            </button>
+            Quem pediu pode aprovar o próprio pedido
+            <span style={{ color: "var(--fg3)" }}>{self ? "· útil enquanto há um aprovador só" : "· exige uma segunda pessoa"}</span>
+          </label>
         </div>
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
@@ -394,6 +403,7 @@ function ApprovalSettings({ perms, onSaved }: { perms: Permissions; onSaved: (p:
           onClick={() => {
             setTarget(perms.approvalTarget);
             setIds(perms.approvers.map(String));
+            setSelf(perms.allowSelfApproval !== false);
             setDraftId("");
           }}
         >

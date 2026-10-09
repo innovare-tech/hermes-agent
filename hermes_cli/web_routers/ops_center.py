@@ -257,6 +257,7 @@ def _permissions_payload() -> dict:
         "enabled": cfg["enabled"], "origins": list(guardrails.ORIGINS), "originLabels": guardrails.ORIGIN_LABEL,
         "actions": guardrails.ACTIONS + mcp_tools, "mcpServers": mcp_servers,
         "matrix": cfg["matrix"], "approvers": cfg["approvers"], "approvalTarget": cfg["approval_target"],
+        "allowSelfApproval": cfg["allow_self_approval"],
         "approvalTtlMin": cfg["approvalTtlMin"],
         "hardDeny": [{"label": r["label"], "patterns": _HARD_DENY_EXAMPLES.get(r["label"], [])} for r in guardrails.HARD_DENY],
     }
@@ -274,6 +275,8 @@ async def put_permissions(body: dict):
     patch = {k: body[k] for k in ("enabled", "matrix", "approvers") if k in body}
     if "approvalTarget" in body:
         patch["approval_target"] = str(body["approvalTarget"] or "")
+    if "allowSelfApproval" in body:
+        patch["allow_self_approval"] = bool(body["allowSelfApproval"])
     await _run(guardrails.save_settings, patch)
     await _act("Permissões atualizadas (valem a partir do próximo pedido)")
     return await _run(_permissions_payload)

@@ -131,7 +131,7 @@ def test_telegram_write_becomes_button_approval(monkeypatch):
 def test_decide_rules_and_exact_execution(monkeypatch):
     from ops_center import guardrails, store
 
-    guardrails.save_settings({"enabled": True, "approvers": ["22", "33"]})
+    guardrails.save_settings({"enabled": True, "approvers": ["22", "33"], "allow_self_approval": False})
     monkeypatch.setattr(guardrails, "_send_approval_prompt", lambda *a: True)
     with session(platform="telegram", chat_type="group", chat_id="-100", user_id="11", user_name="Ivair"):
         guardrails.check("terminal", {"command": "kubectl scale deploy/x --replicas=4"})
@@ -248,3 +248,16 @@ def test_general_topic_is_sent_without_thread(monkeypatch):
     monkeypatch.setattr(notify, "_call", lambda method, payload=None: calls.append(payload) or {})
     guardrails.announce({"id": 1, "status": "approved", "target": "telegram:-100:1", "summary": "x", "command": "y"}, "ok")
     assert "message_thread_id" not in calls[-1]
+
+
+def test_requester_may_approve_own_request_by_default(monkeypatch):
+    from ops_center import guardrails
+
+    guardrails.save_settings({"enabled": True, "approvers": ["11"]})
+    monkeypatch.setattr(guardrails, "_send_approval_prompt", lambda *a: True)
+    with session(platform="telegram", chat_type="group", chat_id="-100", user_id="11", user_name="Kelvin"):
+        guardrails.check("terminal", {"command": "systemctl restart x"})
+    assert guardrails.decide(1, True, "Kelvin", "11")["ok"]
+    from ops_center import store
+
+    assert "não aprova o próprio" not in guardrails.approval_text(store.get_approval(1))
