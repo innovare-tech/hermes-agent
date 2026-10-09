@@ -1,0 +1,19 @@
+# Produção na VPS Innovare (/opt/innovare/apps/hermes). Um container: gateway (todos os perfis,
+# multiplexado) + painel, supervisionados pelo s6 — o "Reiniciar gateway" do painel reinicia o slot.
+# Segredos e login (HERMES_DASHBOARD_OIDC_*, HERMES_DASHBOARD_PUBLIC_URL) ficam em ./data/.env.
+services:
+  hermes:
+    image: ghcr.io/innovare-tech/hermes-agent:${TAG:-latest}
+    container_name: hermes
+    restart: unless-stopped
+    # host: o painel (127.0.0.1:9119) fica atrás do nginx da VPS; o MCP do Copiloto (127.0.0.1:3170)
+    # e a API dos perfis (127.0.0.1:8642) não saem da máquina.
+    network_mode: host
+    command: ["gateway", "run"]
+    environment:
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_HOST: 127.0.0.1
+      HERMES_DASHBOARD_PORT: "9119"
+      TZ: America/Sao_Paulo
+    volumes:
+      - ./data:/opt/data
