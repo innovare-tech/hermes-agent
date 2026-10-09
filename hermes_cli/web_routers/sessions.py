@@ -71,6 +71,23 @@ _PRUNE_NUM_FILTERS = (
     "min_tool_calls", "max_tool_calls")
 
 
+def _question_counts(db_path, ids: list) -> dict:
+    """``{session_id: perguntas}`` numa consulta só (somente leitura); vazio se o banco não responder."""
+    if not ids:
+        return {}
+    try:
+        con = sqlite3.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True, timeout=2)
+        try:
+            rows = con.execute(
+                f"SELECT session_id, COUNT(*) FROM messages WHERE role='user' AND COALESCE(active, 1)=1 "
+                f"AND session_id IN ({','.join('?' * len(ids))}) GROUP BY session_id", list(ids)).fetchall()
+        finally:
+            con.close()
+        return {r[0]: int(r[1]) for r in rows}
+    except sqlite3.Error:
+        return {}
+
+
 _PRUNE_ROW_KEYS = ("id", "source", "title", "model", "started_at", "last_active", "message_count")
 
 
@@ -231,6 +248,11 @@ def get_sessions(
                 # SQLite stores the flags as 0/1; expose real JSON booleans.
                 s["archived"] = bool(s.get("archived"))
                 s["pinned"] = bool(s.get("pinned"))
+            counts = _question_counts(db.db_path, [s["id"] for s in sessions])
+            for s in sessions:
+                # Perguntas do usuário (linhas ativas): o que a pessoa vê como "mensagens" na conversa;
+                # ``message_count`` também conta ferramentas e linhas internas.
+                s["question_count"] = counts.get(s["id"], 0)
             if not full:
                 _strip_session_list_rows(sessions)
             # ``storage`` tells an empty page apart from an unreadable store (#72046); same

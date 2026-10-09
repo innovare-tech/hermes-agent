@@ -17,11 +17,13 @@ type Props = {
   onDeny: () => void;
   /** Ações extras (ex.: "Sempre" / "Nesta sessão" nas aprovações de comando da Conversa). */
   extra?: ReactNode;
+  /** Texto original do pedido (em inglês, vindo do sistema), recolhido. */
+  detail?: string;
   delay?: number;
 };
 
 /** Cartão de aprovação: o que o Hermes quer fazer, por quê, prévia exata e Negar/Aprovar. */
-export function ApprovalCard({ icon, title, business, meta, risk, why, preview, source, onApprove, onDeny, extra, delay = 0 }: Props) {
+export function ApprovalCard({ icon, title, business, meta, risk, why, preview, source, onApprove, onDeny, extra, detail, delay = 0 }: Props) {
   return (
     <div className="au-card" onMouseMove={spot} style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12, animation: "hblurin .5s both", animationDelay: delay + "ms" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -43,6 +45,12 @@ export function ApprovalCard({ icon, title, business, meta, risk, why, preview, 
       </div>
       {why && <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: "var(--fg2)", textWrap: "pretty" }}>{why}</p>}
       <pre className="au-code">{preview}</pre>
+      {detail && (
+        <details className="au-detail">
+          <summary>Texto original do pedido</summary>
+          <p>{detail}</p>
+        </details>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         {source && <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>{source}</span>}
         <button className="au-outline danger" onClick={onDeny} style={{ marginLeft: "auto" }}>

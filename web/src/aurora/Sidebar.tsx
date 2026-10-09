@@ -1,5 +1,8 @@
-import { useEffect } from "react";
-import { NavLink, useNavigate } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router";
+import { agent } from "./agent";
+import { chat } from "./chat";
+import { useDismiss } from "./chat/useDismiss";
 import { Icon } from "./Icon";
 import { refreshHealthBadge, resetHealthBadge, useHealthBadge } from "./health/badge";
 import { healthCount } from "./health/model";
@@ -7,7 +10,8 @@ import "./health/health.css";
 import { refreshModelsHealth, useModelsProblem } from "./models/health";
 import { isListenSession } from "./chat/sources";
 import { ProfileSwitcher } from "./ProfileSwitcher";
-import { inBiz, setPrefs, setState, useStore, type State } from "./store";
+import type { Session } from "./adapter";
+import { ask, inBiz, loadSessions, setPrefs, setState, toast, useStore, type State } from "./store";
 
 type NavItem = { to: string; label: string; icon: string; count?: string; sub?: boolean; dot?: boolean };
 
@@ -87,6 +91,102 @@ function NavRow({ item, index, count, hot }: { item: NavItem; index: number; cou
   );
 }
 
+/** Conversa na barra lateral, com menu (⋯ ou botão direito): Renomear e Apagar. */
+function SessionItem({ x, i }: { x: Session; i: number }) {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [menu, setMenu] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const more = useRef<HTMLButtonElement>(null);
+  useDismiss(box, () => menu && setMenu(false));
+  useEffect(() => {
+    if (menu) box.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+  }, [menu]);
+
+  const close = () => {
+    setMenu(false);
+    more.current?.focus();
+  };
+  const rename = async (raw: string) => {
+    setEditing(false);
+    const t = raw.trim();
+    if (!t || t === x.title) return;
+    try {
+      await agent.renameSession(x.id, t);
+      await loadSessions();
+      toast("Conversa renomeada");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Não consegui renomear");
+    }
+  };
+  const remove = async () => {
+    setMenu(false);
+    if (!(await ask({ title: `Apagar “${x.title}”?`, body: "A conversa e o histórico dela somem para sempre. O que o Hermes guardou na memória continua.", confirm: "Apagar", danger: true }))) return;
+    try {
+      // A conversa aberta está viva no gateway, que recusa apagar sessão ativa: solta antes.
+      if (pathname.endsWith("/chat/" + x.id)) {
+        await chat.release(x.id);
+        navigate("/chat");
+      }
+      await agent.deleteSession(x.id);
+      await loadSessions();
+      toast("Conversa apagada");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Não consegui apagar");
+    }
+  };
+
+  return (
+    <div className="au-sesswrap" ref={box} onContextMenu={(e) => { e.preventDefault(); setMenu(true); }}>
+      {editing ? (
+        <input
+          autoFocus
+          aria-label={`Novo título de “${x.title}”`}
+          className="au-inline"
+          defaultValue={x.title}
+          maxLength={120}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setEditing(false);
+            if (e.key === "Enter") rename((e.target as HTMLInputElement).value);
+          }}
+          onBlur={(e) => rename(e.target.value)}
+          style={{ width: "100%", margin: "4px 0", border: "1px solid var(--acc)" }}
+        />
+      ) : (
+        <>
+          <NavLink to={`/chat/${x.id}`} className="au-sess" style={({ isActive }) => ({ animationDelay: 300 + i * 50 + "ms", background: isActive ? "var(--panel)" : undefined, paddingRight: 34 })}>
+            {({ isActive }) => (
+              <>
+                <span style={{ fontSize: 13, color: isActive ? "var(--fg)" : "var(--fg2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%" }}>{x.title}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>
+                  <Icon name={x.icon} size={11} />
+                  {x.source} · {x.when}
+                </span>
+              </>
+            )}
+          </NavLink>
+          <button ref={more} className="au-mini au-sessmore" aria-label={`Opções de “${x.title}”`} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>
+            <Icon name="ellipsis" size={14} />
+          </button>
+        </>
+      )}
+      {menu && (
+        <div className="au-ctxmenu" role="menu" aria-label={`Opções de “${x.title}”`} onKeyDown={(e) => e.key === "Escape" && close()}>
+          <button role="menuitem" className="au-mitem" onClick={() => { setMenu(false); setEditing(true); }}>
+            <Icon name="pencil" size={13} />
+            Renomear
+          </button>
+          <button role="menuitem" className="au-mitem danger" onClick={remove}>
+            <Icon name="trash-2" size={13} />
+            Apagar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const GROUPS = ["Hoje", "Ontem", "Esta semana", "Mais antigas"] as const;
 
 export function Sidebar() {
@@ -141,17 +241,7 @@ export function Sidebar() {
               {sessions
                 .filter((x) => x.group === g)
                 .map((x, i) => (
-                  <NavLink key={x.id} to={`/chat/${x.id}`} className="au-sess" style={({ isActive }) => ({ animationDelay: 300 + i * 50 + "ms", background: isActive ? "var(--panel)" : undefined })}>
-                    {({ isActive }) => (
-                      <>
-                        <span style={{ fontSize: 13, color: isActive ? "var(--fg)" : "var(--fg2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%" }}>{x.title}</span>
-                        <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)" }}>
-                          <Icon name={x.icon} size={11} />
-                          {x.source} · {x.when}
-                        </span>
-                      </>
-                    )}
-                  </NavLink>
+                  <SessionItem key={x.id} x={x} i={i} />
                 ))}
             </div>
           ))}

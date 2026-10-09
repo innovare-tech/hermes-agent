@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router";
 import { Icon } from "../Icon";
 import { agent, useAgentData } from "../agent";
 import { plural } from "../chat/sources";
+import { hitParts } from "../chat/snippet";
 import { ask, loadSessions, toast } from "../store";
 
 
@@ -94,10 +95,12 @@ export function Sessions() {
                 ) : (
                   <span style={{ fontSize: 14, fontWeight: 500 }}>{r.title}</span>
                 )}
-                <span style={{ fontSize: 12.5, color: "var(--fg2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.snippet}</span>
+                <span style={{ fontSize: 12.5, color: "var(--fg2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {hitParts(r.snippet, query).map((p, i) => (p.hit ? <mark key={i} className="au-hit">{p.t}</mark> : p.t))}
+                </span>
               </span>
               <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg2)" }}>
-                {r.source} · {plural(r.msgs, "mensagem", "mensagens")}
+                {r.source} · {r.questions != null ? plural(r.questions, "pergunta", "perguntas") : plural(r.msgs, "mensagem", "mensagens")}
               </span>
               <span style={{ fontFamily: "var(--fm)", fontSize: 11, color: "var(--fg3)", textAlign: "right", whiteSpace: "nowrap" }}>{r.when}</span>
               <span className="au-rowactions" style={{ display: "flex", gap: 2, justifyContent: "flex-end" }} onClick={(e) => e.stopPropagation()}>

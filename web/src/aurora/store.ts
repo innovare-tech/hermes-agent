@@ -142,12 +142,40 @@ export const EMPTY_OPS: Partial<State> = {
 };
 
 // Resposta de um perfil que já não é o atual (troca no meio do carregamento) é descartada: nunca mistura perfis.
-export async function loadOps() {
+// Na Conversa e em Sessões só a barra lateral precisa dos dados da Central: lê o mínimo (loadLean) e deixa
+// o resto para quando abrir uma tela que usa. Chamadas juntas (entrada no perfil + início do app) viram uma só.
+let lean = false;
+let fullFor = "";
+let leanFor = "";
+let flight: { pid: string; full: boolean; p: Promise<void> } | null = null;
+export const setOpsLean = (v: boolean) => void (lean = v);
+
+export function loadOps(): Promise<void> {
   const pid = state.profileId;
-  const snap = await adapter.load();
-  if (state.profileId === pid) setState(snap);
+  if (fullFor && fullFor !== pid) fullFor = "";
+  if (leanFor && leanFor !== pid) leanFor = "";
+  if (flight && flight.pid === pid && (flight.full || lean)) return flight.p;
+  const full = !lean;
+  const p = (async () => {
+    const snap = full ? await adapter.load() : await adapter.loadLean();
+    if (state.profileId === pid) {
+      setState(snap);
+      if (full) fullFor = pid;
+      else leanFor = pid;
+    }
+  })().finally(() => {
+    if (flight?.p === p) flight = null;
+  });
+  flight = { pid, full, p };
   refreshActionRequests();
+  return p;
 }
+
+/** Entrada do app: o perfil já carregou os dados ao ser adotado? Então não lê de novo. */
+export const loadOpsOnce = () => (fullFor === state.profileId || (lean && leanFor === state.profileId) ? Promise.resolve() : loadOps());
+
+/** Ao sair da Conversa para uma tela de operação: completa o que a leitura enxuta deixou de fora. */
+export const ensureFullOps = () => (fullFor === state.profileId ? Promise.resolve() : (setOpsLean(false), loadOps()));
 
 /** Pedidos de ação pendentes (Permissões). Falha em silêncio: o contador só some até a próxima leitura. */
 export async function refreshActionRequests() {

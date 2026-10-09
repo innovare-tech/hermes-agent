@@ -410,3 +410,28 @@ def test_listen_send_notice_uses_routes_and_falls_back(tg, monkeypatch):
     assert listen.send_notice(a) is None and not legacy  # "Não enviar" não cai no destino antigo
     failed = {**a, "status": "failed", "urgency": None}
     assert listen.send_notice(failed)["topic"] == 12  # análise que falhou vale como "alta"
+
+
+def test_parallel_bot_calls_keep_the_profile_context(tg, monkeypatch):
+    """As chamadas em paralelo rodam em threads: precisam do contexto do perfil (segredos), senão o token
+    de um perfil nomeado não é lido (500 em Avisos no perfil Aibiz)."""
+    import contextvars
+
+    from ops_center import notify
+
+    scope = contextvars.ContextVar("perfil", default=None)
+    seen = []
+    real = notify._call
+
+    def spy(method, payload=None):
+        seen.append(scope.get())
+        return real(method, payload)
+
+    notify.set_chat(CHAT)
+    monkeypatch.setattr(notify, "_call", spy)
+    token = scope.set("aibiz")
+    try:
+        assert notify.telegram()["status"] == "ok"
+    finally:
+        scope.reset(token)
+    assert seen and set(seen) == {"aibiz"}

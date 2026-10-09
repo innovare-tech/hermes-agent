@@ -8,7 +8,7 @@ import type { Activity, Approval, AutonomyMode, Business, Channel, Costs, Health
 type Estop = { paused: boolean; reason: string | null; engaged_at: string | null };
 
 // Formato cru de /api/ops (ops_center.store).
-type RawChannel = { id: string; platform: string; chat_id: string; name: string; kind: string; business_id: string | null; mode: number; last_seen: number | null };
+type RawChannel = { id: string; platform: string; chat_id: string; name: string; kind: string; business_id: string | null; mode: number; last_seen: number | null; todayCount?: number; members?: number | null };
 type RawInbox = { id: number; channel_id: string; sender_id: string | null; sender_name: string | null; text: string; received_at: number; priority: string; summary: string | null; draft: string | null; status: string; sent_at: number | null; platform: string; chat_name: string; kind: string; mode: number; business_id: string | null };
 type RawActivity = { id: number; at: number; business_id: string | null; kind: Activity["kind"]; action: string; why: string; reversible: number; undone: number };
 type RawPerson = { id: string; name: string; role: string; business_id: string | null; tone: string; channels: string; notes: string; pending: string[]; waiting_since: number | null; handles?: PersonHandles };
@@ -54,8 +54,9 @@ export function severeFromLogs(lines: string[], now = Date.now()): { text: strin
 }
 
 export function healthFrom(st: StatusResponse, platforms: { name: string; enabled: boolean; configured: boolean; error_message?: string | null }[] = [], logs: string[] = []): Health {
-  const items = Object.entries(st.gateway_platforms ?? {}).map(([name, p]) => ({
-    name: cap(name),
+  // "<perfil>:<canal>" são canais de OUTRO perfil servidos pelo mesmo gateway: não pertencem a este painel.
+  const items = Object.entries(st.gateway_platforms ?? {}).filter(([name]) => !name.includes(":")).map(([name, p]) => ({
+    name: name === "api_server" ? "API" : cap(name),
     status: ["connected", "running", "ready", "ok"].includes(p.state) ? ("ok" as const) : p.error_code ? ("err" as const) : ("warn" as const),
     value: p.error_message ? "erro" : p.state === "connected" ? "conectado" : p.state,
   }));
@@ -86,6 +87,8 @@ export const channelFrom = (c: RawChannel): Channel => ({
   business: c.business_id ?? "",
   mode: (c.mode as AutonomyMode) ?? 2,
   lastSeen: whenLabel(c.last_seen),
+  todayCount: c.todayCount,
+  speakers: c.members,
 });
 
 export function inboxFrom(i: RawInbox): InboxItem {
@@ -159,7 +162,7 @@ const playbookFrom = (p: RawPlaybook): Playbook => ({
 });
 
 /** Grupos para o Radar: canais de grupo + volume de hoje vindo da caixa de entrada. */
-function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
+export function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
   const today = new Date().setHours(0, 0, 0, 0) / 1000;
   return channels
     .filter((c) => c.kind === "group")
@@ -171,8 +174,9 @@ function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
         business: c.business,
         channel: c.platform,
         name: c.name,
-        members: new Set(msgs.map((m) => m.sender_id)).size,
-        msgsToday: msgs.length,
+        // Do canal quando houver: grupos em Escutar não passam pela Caixa de entrada.
+        members: c.speakers ?? new Set(msgs.map((m) => m.sender_id)).size,
+        msgsToday: c.todayCount ?? msgs.length,
         sentiment: [],
         alert: urgent ? `${urgent} ${urgent === 1 ? "mensagem" : "mensagens"} com palavras vigiadas hoje` : undefined,
         decisions: [],
@@ -183,6 +187,13 @@ function radarFrom(channels: Channel[], inbox: RawInbox[]): RadarGroup[] {
 }
 
 export const liveAdapter: OpsAdapter = {
+  async loadLean() {
+    const [estop, businesses, channels, inboxRaw] = await Promise.all([fetchJSON<Estop>("/api/estop"), ops<Business[]>("/businesses"), ops<RawChannel[]>("/channels"), ops<RawInbox[]>("/inbox")]);
+    const inbox = inboxRaw.map(inboxFrom);
+    const autonomy = channels.map(channelFrom);
+    return { businesses, inbox, approvals: inboxRaw.filter((i) => i.status === "drafted" && i.draft).map((i) => approvalFrom(inboxFrom(i))), radar: radarFrom(autonomy, inboxRaw), autonomy, paused: estop.paused };
+  },
+
   async load() {
     const [estop, status, costs, businesses, channels, inboxRaw, activity, watches, people, playbooks, settings, messaging, warnLogs] = await Promise.all([
       fetchJSON<Estop>("/api/estop"),

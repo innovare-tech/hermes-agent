@@ -95,9 +95,9 @@ export type TaskDef = {
 export const TASKS: TaskDef[] = [
   { id: "default", label: "Modelo padrão", desc: "Usado por tudo que não tem escolha própria.", icon: "star", cap: "text", root: true },
   { id: "main", label: "Conversa principal", desc: "Quando você conversa com o Hermes pelo painel.", icon: "messages-square", cap: "text", parent: "default" },
-  { id: "channel.telegram", label: "Telegram", desc: "Conversas com a equipe.", icon: "send", cap: "text", parent: "main", sub: true, soon: true },
-  { id: "channel.whatsapp", label: "WhatsApp", desc: "Conversas diretas com clientes.", icon: "phone", cap: "text", parent: "main", sub: true, soon: true },
-  { id: "channel.api", label: "API", desc: "Pedidos de outros sistemas, como o painel da Aibiz.", icon: "braces", cap: "text", parent: "main", sub: true, soon: true },
+  { id: "channel.telegram", label: "Telegram", desc: "Conversas com a equipe.", icon: "send", cap: "text", parent: "main", sub: true },
+  { id: "channel.whatsapp", label: "WhatsApp", desc: "Conversas diretas com clientes.", icon: "phone", cap: "text", parent: "main", sub: true },
+  { id: "channel.api", label: "API", desc: "Pedidos de outros sistemas, como o painel da Aibiz.", icon: "braces", cap: "text", parent: "main", sub: true },
   { id: "group_analysis", label: "Análise dos grupos", desc: "Lê cada lote de mensagens e escreve a análise.", icon: "scan-search", cap: "text", parent: "default" },
   { id: "triage_jev", label: "Triagem", desc: "Modelo de decisão: classifica e decide rápido e barato, não escreve textos.", icon: "split", cap: "decision", parent: "default", jev: true, rec: ["jev-latest", "jev-1.13", "typesafe/jev-1.13"] },
   { id: "vision", label: "Visão de imagens", desc: "Entende prints, fotos e vídeos enviados nos grupos.", icon: "image", cap: "vision", parent: "default", rec: ["google/gemini-2.5-flash"] },

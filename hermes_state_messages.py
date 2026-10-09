@@ -576,6 +576,30 @@ class SessionMessagesMixin:
         row = self._read_one(*self._reaction_row_query(session_id, message_row_id))
         return self._reaction_list(self._decode_display_metadata(row[0])) if row is not None else []
 
+    TURN_METADATA_KEY = "turn"
+
+    def set_message_turn_summary(self, session_id: str, message_row_id: int, summary: Optional[Dict[str, Any]]) -> bool:
+        """Grava (``None``: apaga) o resumo de um turno — modelo, tokens, custo, duração e como terminou
+        (complete / interrupted / error) — no ``display_metadata`` da linha do usuário que abriu o turno.
+        É só exibição: renderizadores mostram o rodapé e o estado do turno ao reabrir a conversa em qualquer
+        cliente. Mesma regra de linhagem das reações; ``False`` para linha fora da sessão."""
+        if not session_id or message_row_id is None:
+            return False
+        sql, params = self._reaction_row_query(session_id, message_row_id)
+
+        def _do(conn):
+            row = conn.execute(sql, params).fetchone()
+            if row is None:
+                return False
+            meta = self._decode_display_metadata(row[0]) or {}
+            if summary:
+                meta[self.TURN_METADATA_KEY] = summary
+            else:
+                meta.pop(self.TURN_METADATA_KEY, None)
+            conn.execute(_SET_DISPLAY_META_SQL, (self._encode_display_metadata(meta) if meta else None, message_row_id))
+            return True
+        return bool(self._execute_write(_do))
+
     def _reaction_row_query(self, session_id: str, message_row_id: int) -> Tuple[str, tuple]:
         """A reaction addresses a row the client can SEE, and a display resume materializes the whole
         compression lineage (active + compacted rows, with row ids) — so a row is "in this session" when

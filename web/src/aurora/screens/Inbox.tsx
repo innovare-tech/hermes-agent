@@ -100,7 +100,7 @@ export function Inbox() {
               <div style={{ padding: "14px 16px", borderRadius: "var(--r) var(--r) var(--r) 4px", background: "var(--panel2)", fontSize: 14.5, lineHeight: 1.6, textWrap: "pretty" }}>{sel.message}</div>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {sel.context.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <span className="au-label">O que eu sei</span>
               {sel.context.map((c) => (
                 <div key={c} style={{ display: "flex", gap: 10, alignItems: "flex-start", minHeight: 23, fontSize: 13, color: "var(--fg2)", lineHeight: 1.5 }}>
@@ -108,7 +108,7 @@ export function Inbox() {
                   {c}
                 </div>
               ))}
-            </div>
+            </div>}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center" }}>

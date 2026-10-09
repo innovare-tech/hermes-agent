@@ -521,6 +521,7 @@ export interface SessionLiveInfo {
   reasoning_effort_wire?: string
   service_tier?: string
   fast?: boolean
+  fast_supported?: boolean
   yolo?: boolean
   approval_mode?: string
   tools?: Record<string, string[]>
@@ -3300,6 +3301,7 @@ export interface SessionCwdSetResult {
   reasoning_effort_wire?: string
   service_tier?: string
   fast?: boolean
+  fast_supported?: boolean
   yolo?: boolean
   approval_mode?: string
   tools?: Record<string, string[]>
@@ -4646,6 +4648,7 @@ export interface MessageCompletePayload {
   error_surface?: ErrorSurface | null
   partial?: boolean | null
   persisted_turn?: PersistedTurn | null
+  turn_summary?: Record<string, unknown> | null
 }
 /** ``prompt_turn._result_status``. */
 export type TurnStatus = 'complete' | 'error' | 'interrupted'

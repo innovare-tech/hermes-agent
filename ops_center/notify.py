@@ -265,6 +265,20 @@ def _member_name(u: dict) -> str:
     return " ".join(x for x in (u.get("first_name"), u.get("last_name")) if x) or u.get("title") or u.get("username") or str(u.get("id"))
 
 
+_ME: dict = {}
+
+
+def _bot_identity() -> dict:
+    """``getMe`` em cache por token (a identidade do bot só muda com outro token)."""
+    import hashlib
+
+    key = hashlib.sha256(token().encode()).hexdigest()
+    if key not in _ME:
+        _ME.clear()
+        _ME[key] = _call("getMe")
+    return _ME[key]
+
+
 def telegram() -> dict:
     """Estado do Telegram para a tela: ``status`` = ok | no_token | no_chat | error."""
     base: dict[str, Any] = {"connected": False, "status": "no_token", "bot": None, "chat": None, "topics": [], "members": [], "chatId": None}
@@ -275,11 +289,24 @@ def telegram() -> dict:
         return {**base, "status": "no_chat"}
     base["chatId"] = cid
     try:
-        me = _call("getMe")
-        chat = _call("getChat", {"chat_id": cid})
-        count = _call("getChatMemberCount", {"chat_id": cid})
-        admins = _call("getChatAdministrators", {"chat_id": cid})
-        mine = _call("getChatMember", {"chat_id": cid, "user_id": me["id"]})
+        # Eram 5 chamadas seguidas à Bot API (~3 s para abrir Avisos): a identidade do bot fica em cache (não
+        # muda com o mesmo token) e o resto vai em paralelo.
+        from concurrent.futures import ThreadPoolExecutor
+
+        import contextvars
+
+        me = _bot_identity()
+        # Cada thread leva uma cópia do contexto do perfil (home + segredos), feita AQUI, na thread que chamou:
+        # sem isso o token de um perfil nomeado não é lido. Uma cópia por chamada (contexto não é reentrante).
+        def submit(*a):
+            return pool.submit(contextvars.copy_context().run, _call, *a)
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            f_chat = submit("getChat", {"chat_id": cid})
+            f_count = submit("getChatMemberCount", {"chat_id": cid})
+            f_admins = submit("getChatAdministrators", {"chat_id": cid})
+            f_mine = submit("getChatMember", {"chat_id": cid, "user_id": me["id"]})
+            chat, count, admins, mine = f_chat.result(), f_count.result(), f_admins.result(), f_mine.result()
     except TelegramError as e:
         status = e.code if e.code in ("no_token", "no_chat") else "error"
         return {**base, "status": status, "error": {"code": e.code, "message": e.message}}

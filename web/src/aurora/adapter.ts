@@ -91,7 +91,9 @@ export type Activity = {
   undone: boolean;
 };
 
-export type Channel = { id: string; name: string; icon: string; platform: string; kind: string; business: BizId; mode: AutonomyMode; lastSeen: string };
+export type Channel = { id: string; name: string; icon: string; platform: string; kind: string; business: BizId; mode: AutonomyMode; lastSeen: string;
+  /** Mensagens de hoje e quem já escreveu, contados no canal (inclui grupos em Escutar, que não vão à Caixa). */
+  todayCount?: number; speakers?: number | null };
 
 export type KbArticle = { title: string; source: string; uses: number };
 
@@ -212,6 +214,8 @@ export type OnBehalf = {
 
 export interface OpsAdapter {
   load(): Promise<OpsSnapshot>;
+  /** Só o que a barra lateral mostra em toda tela (negócios, contadores da caixa/aprovações/radar, pausa): 4 leituras em vez de 13. */
+  loadLean(): Promise<Partial<OpsSnapshot>>;
   /** Estado atual do kill switch (pode mudar por fora, ex.: `hermes pause` no terminal). */
   getPaused(): Promise<boolean>;
   /** Kill switch global: o gateway não envia nem executa nada enquanto `true`. */

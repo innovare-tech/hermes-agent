@@ -644,6 +644,17 @@ def _session_chat_user_message(body: Dict[str, Any], *, param: str = "message") 
         return None, _multimodal_validation_error(exc, param=param)
 
 
+def _api_channel_model() -> Optional[Dict[str, str]]:
+    """``{provider, model}`` escolhido em Modelos › "API" (herda da conversa principal), ou None."""
+    try:
+        from ops_center.models import resolved_model
+        picked = resolved_model("channel.api")
+    except Exception:  # noqa: BLE001 — leitura falhou: vale o padrão
+        logger.debug("Modelos: escolha do canal API ilegível", exc_info=True)
+        return None
+    return picked if picked and picked.get("provider") and picked.get("model") else None
+
+
 def _request_turn_author(body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Normalized body ``author``, None when absent or null, ValueError when not an object. It only labels memory."""
     raw = body.get("author")
@@ -2382,6 +2393,17 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         # must not collide with the ``**runtime_kwargs`` spread).
         model = runtime_kwargs.pop("model", None) or _resolve_gateway_model()
         runtime_kwargs.pop("_fallback_notice", None)  # raw API surface: the switch is already logged
+        # Modelos (painel A5) › "API": base do canal, abaixo de tudo que o pedido/sessão escolher.
+        picked = _api_channel_model()
+        if picked:
+            try:
+                from gateway.run import _resolve_runtime_agent_kwargs_for_provider
+                rk = _resolve_runtime_agent_kwargs_for_provider(picked["provider"], target_model=picked["model"])
+                rk.pop("model", None)
+                rk.pop("_fallback_notice", None)
+                runtime_kwargs, model = rk, picked["model"]
+            except Exception as exc:  # provedor sem chave/fora do ar: segue no padrão
+                logger.warning("Modelo do canal API (%s/%s) indisponível: %s", picked["provider"], picked["model"], exc)
         request_reasoning_config = _request_reasoning_config(model_options)
         request_service_tier = _request_service_tier(model_options)
         model, session_override, request_model, request_provider = self._select_agent_runtime(

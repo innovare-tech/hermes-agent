@@ -1,7 +1,7 @@
 // Contrato das telas do agente (Sessões, Memória, Skills, Agendamentos, Subagentes, Gateways, Logs,
 // Configurações). Mesmo padrão do OpsAdapter: mock do protótipo + adapter real por cima.
 
-export type SessionRow = { id: string; title: string; source: string; icon: string; snippet: string; msgs: number; when: string };
+export type SessionRow = { id: string; title: string; source: string; icon: string; snippet: string; msgs: number; /** Perguntas do usuário (`question_count`); ausente em backend antigo e na busca. */ questions?: number; when: string };
 
 export type MemoryTarget = "memory" | "user";
 /** MEMORY.md (notas do agente) e USER.md (perfil de você), entrada por entrada. */

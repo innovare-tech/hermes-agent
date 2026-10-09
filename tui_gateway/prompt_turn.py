@@ -502,6 +502,9 @@ class _TurnRun:
     prompt_text: str = ""
     marker_key: str = ""
     receipt_attempted: bool = False
+    usage_before: dict = dataclasses.field(default_factory=dict)
+    cost_before: float = 0.0
+    started_at: float = 0.0
 
 
 def _adopt_out_of_band_turns(session: dict) -> None:
@@ -918,6 +921,51 @@ def _persisted_turn_receipt(st: _TurnRun, raw: Any, status: str) -> dict | None:
     return receipt
 
 
+def _start_turn_summary(st: _TurnRun) -> None:
+    """Fotografa o uso da sessão antes do turno (o resumo grava a diferença)."""
+    with contextlib.suppress(Exception):
+        st.started_at = time.time()
+        if st.agent is not None:
+            st.usage_before = dict(_get_usage(st.agent))
+            st.cost_before = float(getattr(st.agent, "session_estimated_cost_usd", 0.0) or 0.0)
+
+
+def _record_turn_summary(session: dict, st: _TurnRun, payload: dict, status: str) -> None:
+    """Resumo do turno no ``display_metadata`` da linha do usuário (``SessionDB.set_message_turn_summary``):
+    modelo, tokens e custo DESTE turno, duração e como terminou. Quem reabre a conversa (qualquer cliente)
+    mostra o rodapé e "interrompido"/"erro" sem depender do navegador. Falha aqui nunca derruba o turno."""
+    try:
+        receipt = payload.get("persisted_turn") or {}
+        row_id = receipt.get("user_row_id")
+        key = str(session.get("session_key") or "").strip()
+        if not key or type(row_id) is not int:
+            return
+        after = payload.get("usage") or {}
+        before = st.usage_before or {}
+
+        def delta(k: str) -> int:
+            return max(0, int(after.get(k) or 0) - int(before.get(k) or 0))
+
+        agent = st.agent
+        cost = float(getattr(agent, "session_estimated_cost_usd", 0.0) or 0.0) - st.cost_before if agent else 0.0
+        summary = {
+            "status": status, "model": str(after.get("model") or getattr(agent, "model", "") or ""),
+            "tokens": {"input": delta("input"), "output": delta("output"), "reasoning": delta("reasoning"),
+                       "total": delta("total")},
+            "duration_s": round(max(0.0, time.time() - st.started_at), 2) if st.started_at else None,
+            "cost_usd": round(cost, 6) if cost > 0 else None,
+            "cost_status": str(getattr(agent, "session_cost_status", "") or "") or None,
+        }
+        if status == "error":
+            summary["error"] = str(payload.get("error") or "")[:500]
+        with _session_db(session) as db:
+            if db is not None:
+                db.set_message_turn_summary(key, row_id, summary)
+        payload["turn_summary"] = summary
+    except Exception:  # noqa: BLE001
+        logger.debug("turn summary not recorded", exc_info=True)
+
+
 def _complete_turn_payload(session: dict, st: _TurnRun, status_note: str | None, cols: int):
     """``(payload, raw, status)`` for message.complete; retains/clears the inflight turn and
     settles the hosted-room terminal receipt."""
@@ -1163,6 +1211,7 @@ def _run_prompt_submit(
             receipt_committed=terminal_callback is None)
         st.marker_key = _record_turn_marker(session, text, auto_continue=terminal_callback is None,
             notification_category=(display_metadata or {}).get("notification_category"))
+        _start_turn_summary(st)
         goal_followup = None
         try:
             prepared = _prepare_turn_input(sid, session, st, text, images)
@@ -1180,6 +1229,7 @@ def _run_prompt_submit(
             status_note = _absorb_turn_result(
                 sid, session, st, text, display_kind, display_metadata)
             payload, raw, status = _complete_turn_payload(session, st, status_note, cols)
+            _record_turn_summary(session, st, payload, status)
             _emit("message.complete", sid, payload)
             goal_followup = _goal_followup_after_turn(sid, session, st.result, status, raw)
             if status == "complete":

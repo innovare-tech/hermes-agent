@@ -165,6 +165,25 @@ def hygiene_no_commit_reason(agent) -> str:
     return "in-place commit did not complete"
 
 
+_PLATFORM_TASK = {"telegram": "channel.telegram", "whatsapp": "channel.whatsapp"}
+
+
+def _platform_model(source: Any) -> Optional[Dict[str, str]]:
+    """``{provider, model}`` escolhido em Modelos para a plataforma da mensagem (escopo do perfil do turno),
+    ou None (sem escolha: vale o padrão). Falha de leitura nunca derruba o turno."""
+    platform = getattr(getattr(source, "platform", None), "value", getattr(source, "platform", None))
+    task = _PLATFORM_TASK.get(str(platform or "").lower())
+    if not task:
+        return None
+    try:
+        from ops_center.models import resolved_model
+        picked = resolved_model(task)
+    except Exception:  # noqa: BLE001
+        logger.debug("Modelos: escolha do canal %s ilegível", task, exc_info=True)
+        return None
+    return picked if picked and picked.get("provider") and picked.get("model") else None
+
+
 class GatewayTurnMixin:
     """Agent-turn execution for GatewayRunner (see module docstring)."""
 
@@ -266,6 +285,18 @@ class GatewayTurnMixin:
                     # Adopt the provider's bundled model only when the override named none.
                     if ch_runtime_model and not ch.model:
                         model = ch_runtime_model
+            elif not override:
+                # Modelos (painel A5): modelo escolhido para a plataforma ("Telegram", "WhatsApp"), com herança
+                # canal → conversa principal → padrão. Abaixo do /model da sessão e do channel_overrides do chat.
+                picked = _platform_model(source)
+                if picked:
+                    try:
+                        rk = _resolve_runtime_agent_kwargs_for_provider(picked["provider"], target_model=picked["model"])
+                        rk.pop("model", None)
+                        model, runtime_kwargs = picked["model"], rk
+                    except Exception as exc:  # provedor sem chave/fora do ar: segue no padrão, avisando no log
+                        logger.warning("Modelo do canal %s (%s/%s) indisponível: %s", source.platform,
+                                       picked["provider"], picked["model"], exc)
 
         if override and skey:
             model, runtime_kwargs = self._apply_session_model_override(skey, model, runtime_kwargs)

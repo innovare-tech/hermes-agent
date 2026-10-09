@@ -1110,6 +1110,28 @@ def _(rid, params: dict) -> dict:
     return _err(rid, 4018, f"not a quick/plugin/bundle/skill command: {name}")
 
 
+def _slash_model_switch(rid, sid: str, session: dict, value: str) -> dict:
+    """``/model <nome>`` pelo mesmo caminho do seletor (``config.set model``): trata agente caído (após um
+    erro de modelo), turno em andamento (troca pendente) e modelo caro (pede confirmação). Antes, o slash worker
+    respondia "Model switched" pelo estado dele e a sessão viva só trocava se o agente estivesse de pé."""
+    res = _methods["config.set"](rid, {"session_id": sid, "key": "model", "value": value})
+    worker = session.get("slash_worker")
+    if worker is not None:  # o worker guarda o modelo dele; recriado no próximo comando, lê o da sessão
+        with contextlib.suppress(Exception):
+            worker.close()
+        session["slash_worker"] = None
+    if "error" in res:
+        return res
+    r = res.get("result") or {}
+    if r.get("confirm_required"):
+        return _ok(rid, {"output": r.get("confirm_message") or f"Confirme a troca para {value} no seletor de modelo."})
+    deferred = " (vale a partir da próxima mensagem)" if r.get("deferred") else ""
+    payload = {"output": f"Modelo da conversa: {r.get('value') or value}{deferred}"}
+    if r.get("warning"):
+        payload["warning"] = r["warning"]
+    return _ok(rid, payload)
+
+
 @method("slash.exec")
 def _(rid, params: dict) -> dict:
     session, err = _sess_nowait(params, rid)
@@ -1124,6 +1146,8 @@ def _(rid, params: dict) -> dict:
     base = (parts[0] if parts else "").lower()
     arg = parts[1] if len(parts) > 1 else ""
     sid = params.get("session_id", "")
+    if base == "model" and arg.strip() and not arg.strip().startswith("-"):
+        return _slash_model_switch(rid, sid, session, arg.strip())
     live_output = _live_slash_command_output(sid, session, base, arg)
     if live_output is not None:
         return _ok(rid, {"output": live_output or "(no output)"})

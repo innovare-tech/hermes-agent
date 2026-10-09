@@ -211,7 +211,6 @@ export function Copilot() {
             <span className="au-label">Operação</span>
             <div className="cp-title">
               <h1 className="au-h1">Clientes do Copiloto</h1>
-              <span className="cp-phase">Fase 3</span>
             </div>
             <p style={{ margin: 0, color: "var(--fg2)", fontSize: 14, lineHeight: 1.5 }}>
               O Copiloto do Gestor é um Hermes por cliente, aberto dentro do Aibiz Manager. Aqui a equipe libera, acompanha e corta o acesso.
@@ -223,7 +222,7 @@ export function Copilot() {
                 <div role="group" aria-label="Resumo do mês" className="cp-kpirow">
                   <div className="cp-kpi">
                     <b>{k.active}</b>
-                    <span>ativos</span>
+                    <span>{k.active === 1 ? "ativo" : "ativos"}</span>
                   </div>
                   <div className="cp-kpi">
                     <b style={{ color: "var(--warn)" }}>{k.noCredit}</b>

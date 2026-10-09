@@ -24,6 +24,14 @@ describe("healthFrom", () => {
     expect(healthFrom({ gateway_running: false, gateway_platforms: {} } as unknown as StatusResponse).items).toEqual([{ name: "Gateway de mensagens", status: "warn", value: "parado" }]);
   });
 
+  it("canais de outro perfil (\"aibiz:telegram\") não aparecem; api_server vira API", () => {
+    const st = {
+      gateway_running: true,
+      gateway_platforms: { api_server: { state: "connected" }, "aibiz:telegram": { state: "connected" } },
+    } as unknown as StatusResponse;
+    expect(healthFrom(st).items.map((i) => i.name)).toEqual(["Gateway de mensagens", "API"]);
+  });
+
   it("avisos graves da última hora viram problema; antigos não", async () => {
     const { severeFromLogs } = await import("./live");
     const now = new Date("2026-10-07T21:00:00").getTime();
@@ -46,5 +54,14 @@ describe("cleanSnippet", async () => {
     // Trecho como vem da busca: barras dobradas e aspas escapadas do JSON.
     const raw = String.raw`>>>spike<<< em **negrito** \\hermes-agent\\web\", \"pattern`;
     expect(cleanSnippet(raw)).toBe(String.raw`spike em negrito \hermes-agent\web", "pattern`);
+  });
+});
+
+describe("radarFrom", () => {
+  it("usa a contagem do canal (grupos em Escutar não vão à Caixa de entrada)", async () => {
+    const { radarFrom } = await import("./live");
+    const ch = { id: "c1", name: "Hermes", icon: "users", platform: "WhatsApp", kind: "group", business: "", mode: 3, lastSeen: "", todayCount: 3, speakers: 2 };
+    const [g] = radarFrom([ch as never], []);
+    expect([g.msgsToday, g.members]).toEqual([3, 2]);
   });
 });

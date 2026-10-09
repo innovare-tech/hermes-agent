@@ -1,6 +1,7 @@
 // Mesmos ícones Lucide do protótipo (classes `icon-*`), por nome. Cresce a cada tela.
 import {
   Activity,
+  ArrowDown,
   ArrowUp,
   Box,
   Brain,
@@ -135,6 +136,7 @@ import {
 
 const ICONS: Record<string, LucideIcon> = {
   activity: Activity,
+  "arrow-down": ArrowDown,
   "arrow-up": ArrowUp,
   box: Box,
   brain: Brain,

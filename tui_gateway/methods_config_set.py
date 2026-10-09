@@ -311,6 +311,10 @@ def _set_reasoning(rid, params, key, value, session):
     scope = _word(params.get("scope"))
     for words, reported, fields, thinking, show in _REASONING_DISPLAY_WORDS:
         if arg in words:
+            if scope == "session" and session and show is not None:
+                # Só esta conversa (o painel mostra/esconde o pensamento sem reescrever o config global).
+                session["show_reasoning"] = show
+                return _kv(rid, key, reported, scope="session")
             _write_display_sections(sections={"thinking": thinking}, **fields)
             if show is not None and session:
                 session["show_reasoning"] = show

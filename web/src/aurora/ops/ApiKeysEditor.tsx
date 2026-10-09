@@ -21,6 +21,20 @@ const KEY_NAME: Record<string, string> = {
   GROQ_API_KEY: "Groq (transcrição de voz)", BROWSERBASE_API_KEY: "Browserbase (navegador na nuvem)", BROWSER_USE_API_KEY: "Browser Use", ELEVENLABS_API_KEY: "ElevenLabs (voz)", FAL_KEY: "fal.ai (imagens)",
   GITHUB_TOKEN: "GitHub", MEM0_API_KEY: "Mem0 (memória)", HONCHO_API_KEY: "Honcho (memória)", SUPERMEMORY_API_KEY: "Supermemory", VOICE_TOOLS_OPENAI_KEY: "OpenAI (voz)",
 };
+/** Descrições em pt-BR das chaves do próprio Hermes (Saúde, Copiloto, triagem). */
+const KEY_DESC: Record<string, string> = {
+  AIBIZ_MONGO_URI: "Conexão com o MongoDB da Aibiz (usuário só leitura): diretório de clientes e Saúde",
+  HEALTH_SSH_KEY: "Chave SSH (privada, em base64) do usuário de monitoramento das VPS",
+  K8S_TOKEN: "Token da conta de serviço de leitura do Kubernetes (Saúde)",
+  K8S_CA_CERT: "Certificado (CA) do cluster Kubernetes, em base64",
+  COPILOT_MCP_JWT_SECRET: "Segredo que assina os tokens do Copiloto do Gestor (o mesmo do MCP)",
+  TYPESAFE_API_KEY: "Chave da TypeSafe (Jev), usada na triagem dos grupos",
+  TELEGRAM_BOT_TOKEN: "Token do bot do Telegram (BotFather)",
+};
+/** Descrição em pt-BR: a própria, senão uma genérica pelo nome (o catálogo vem em inglês). */
+export const keyDescription = (key: string) =>
+  KEY_DESC[key] ?? (/_(BASE_)?URL$|_ENDPOINT$/.test(key) ? `Endereço (URL) de ${keyName(key.replace(/_(BASE_)?URL$|_ENDPOINT$/, "_KEY"))}`
+    : /_(API_KEY|TOKEN|KEY)$/.test(key) ? `Chave de acesso de ${keyName(key)}` : `Configuração ${keyName(key)}`);
 /** Provedor que pode estar conectado por outro meio (login/OAuth) sem a chave no .env. */
 const KEY_PROVIDER: Record<string, string> = { ANTHROPIC_API_KEY: "anthropic", GEMINI_API_KEY: "gemini", COPILOT_GITHUB_TOKEN: "copilot", NVIDIA_API_KEY: "nvidia", OPENAI_API_KEY: "openai-api", OPENROUTER_API_KEY: "openrouter" };
 export const keyName = (key: string) => KEY_NAME[key] ?? key.replace(/_(API_KEY|TOKEN|KEY)$/, "").split("_").map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(" ");
@@ -67,7 +81,7 @@ function Row({ k, onChange, viaLogin }: { k: ApiKey; onChange: () => void; viaLo
             {keyName(k.key)} <span style={{ fontFamily: "var(--fm)", fontSize: 10.5, fontWeight: 400, color: "var(--fg3)" }}>{k.key}</span>
           </span>
           <span style={{ fontSize: 12, color: k.isSet || viaLogin ? "var(--ok)" : "var(--fg3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {k.isSet ? savedHint(k.preview) : viaLogin ? "conectado por login (sem chave aqui)" : k.key in KEY_NAME ? "não configurada" : k.description}
+            {k.isSet ? savedHint(k.preview) : viaLogin ? "conectado por login (sem chave aqui)" : k.key in KEY_NAME ? "não configurada" : keyDescription(k.key)}
           </span>
         </span>
         {k.url && !k.isSet && (

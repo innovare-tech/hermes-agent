@@ -18838,6 +18838,19 @@
               }
             ],
             "default": null
+          },
+          "turn_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Turn Summary"
           }
         },
         "title": "MessageCompletePayload",
@@ -30413,6 +30426,11 @@
             "title": "Fast",
             "type": "boolean"
           },
+          "fast_supported": {
+            "default": false,
+            "title": "Fast Supported",
+            "type": "boolean"
+          },
           "yolo": {
             "default": false,
             "title": "Yolo",
@@ -31290,6 +31308,11 @@
           "fast": {
             "default": false,
             "title": "Fast",
+            "type": "boolean"
+          },
+          "fast_supported": {
+            "default": false,
+            "title": "Fast Supported",
             "type": "boolean"
           },
           "yolo": {

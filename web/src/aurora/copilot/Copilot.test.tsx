@@ -184,7 +184,7 @@ describe("Clientes do Copiloto", () => {
   it("lista na ordem novos, sem saldo, ativos, revogados; selecionado com aria-current; faixa de isolamento e KPIs", async () => {
     await mount();
     expect(q("h1")?.textContent).toBe("Clientes do Copiloto");
-    expect(container.textContent).toContain("Fase 3");
+    expect(container.textContent).not.toContain("Fase 3");
     expect(q(".cp-strip")?.textContent).toContain("O Copiloto só lê dados daquele cliente.");
     expect(names()).toEqual(["Academia Ipê", "Ótica Visão", "Padaria Sol", "Doce Encanto Confeitaria"]);
     expect(qa("button.cp-item").map((b) => b.getAttribute("aria-current"))).toEqual(["true", null, null, null]);
@@ -213,7 +213,7 @@ describe("Clientes do Copiloto", () => {
     expect(art.textContent).toContain("Plano Starter");
     expect(art.querySelector('a[href="/settings/perfis?perfil=cli-ai7781"]')?.textContent).toContain("perfil cli-ai7781");
     expect(q(".cp-banner")?.textContent).toContain("Cliente novo");
-    expect(qa(".cp-kpibox").map((k) => k.querySelector("span")?.textContent)).toEqual(["Conversas no mês", "Gasto no mês", "Créditos", "Última atividade"]);
+    expect(qa(".cp-kpibox").map((k) => k.querySelector("span")?.textContent)).toEqual(["Conversas no mês", "Gasto no mês", "Créditos usados", "Última atividade"]);
     expect(art.textContent).toContain("nunca usou");
     expect(byText("button", "Mudar plano")).toBeTruthy();
     expect(byText("button", "Rotacionar chave")).toBeTruthy();

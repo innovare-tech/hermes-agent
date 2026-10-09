@@ -62,3 +62,13 @@ def test_reasoning_flag_with_global_writes_config_and_drops_the_pin(_quiet_switc
 
     with pytest.raises(ValueError):
         server._apply_model_switch("sid", {"agent": _Agent()}, "new/model --reasoning turbo")
+
+
+def test_session_reasoning_pick_survives_a_plain_model_switch(_quiet_switch):
+    """Esforço escolhido na conversa (config.set reasoning, escopo de sessão) continua depois de /model X."""
+    agent = _Agent()
+    low = {"enabled": True, "effort": "low"}
+    session = {"agent": agent, "create_reasoning_override": dict(low)}
+    out = server._apply_model_switch("sid", session, "new/model")
+    assert out["value"] == "new/model"
+    assert agent.reasoning_config == low

@@ -9,3 +9,12 @@ describe("isConnectionNoise", () => {
     expect(isConnectionNoise("news closed early")).toBe(false);
   });
 });
+
+describe("displayLevel", () => {
+  it("conectar ao Telegram é informação, não aviso; avisos de verdade ficam", async () => {
+    const { displayLevel } = await import("./Logs");
+    expect(displayLevel({ level: "WARN", msg: "[Telegram] Connected to Telegram (polling mode)" }).level).toBe("INFO");
+    expect(displayLevel({ level: "WARN", msg: "[Telegram] Connecting to Telegram (attempt 1/8)…" }).level).toBe("INFO");
+    expect(displayLevel({ level: "WARN", msg: "latência alta (840ms)" }).level).toBe("WARN");
+  });
+});

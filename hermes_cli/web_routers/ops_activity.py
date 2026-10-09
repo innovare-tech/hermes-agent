@@ -29,7 +29,7 @@ def log(action: str, *, kind: str = "cfg", why: str = WHY, business_id: Optional
 
 
 def _name(platform: str) -> str:
-    return {"whatsapp_cloud": "WhatsApp Business", "google_chat": "Google Chat", "email": "E-mail", "sms": "SMS"}.get(platform, platform.replace("_", " ").title())
+    return {"whatsapp": "WhatsApp", "whatsapp_cloud": "WhatsApp Business", "google_chat": "Google Chat", "email": "E-mail", "sms": "SMS"}.get(platform, platform.replace("_", " ").title())
 
 
 def _messaging(m: re.Match, body: dict) -> Optional[str]:

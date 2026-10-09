@@ -393,6 +393,8 @@ confirme o problema, procure a causa e descarte hipóteses. Seja breve: no máxi
 roda não tem acesso ao alvo (sem ssh/kubectl/mongosh configurado), não procure mais: diga isso numa linha da timeline
 e responda com o que os dados do incidente já mostram.
 
+Investigue o ALVO do incidente (servidor, banco, cluster, serviço). Nunca acesse o painel ou a API do próprio
+Hermes (127.0.0.1:9119), o ops.db, arquivos .env nem procure tokens ou chaves: isso é bloqueado e não ajuda.
 Quem lê é a equipe de suporte, não só técnicos: escreva frases curtas em português simples. Nunca mostre ids/UUIDs,
 valores crus de status ('blocked', 'disconnected'…) nem listas de números; diga o que significam ("o número foi
 bloqueado pelo WhatsApp"). Não repita o que a verificação já disse. Limitações suas (sem acesso, comando que falhou)

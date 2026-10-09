@@ -6,7 +6,7 @@ import { shortWhen, sourceIcon, sourceLabel } from "../chat/sources";
 import { CHANNEL_PT, FIELD_PT, MAIN_CHANNELS, TOOL_PT } from "./channelText";
 import { parseCronPt } from "./cron";
 const DEST_ICON: Record<string, string> = { Telegram: "send", Email: "mail", Discord: "message-circle", WhatsApp: "phone", Slack: "hash", Conversa: "message-square" };
-import type { AgentAdapter, CronJob, Gateway, LogLine, MemoryData, Settings } from "./types";
+import type { AgentAdapter, CronJob, Gateway, LogLine, MemoryData, SessionRow, Settings } from "./types";
 
 // Reserva para provedores cujo catálogo não informa a variável da chave.
 const KEY_ENV: Record<string, string> = { openrouter: "OPENROUTER_API_KEY", anthropic: "ANTHROPIC_API_KEY", gemini: "GEMINI_API_KEY", "openai-api": "OPENAI_API_KEY", fireworks: "FIREWORKS_API_KEY", novita: "NOVITA_API_KEY", huggingface: "HF_TOKEN" };
@@ -19,7 +19,12 @@ export const cleanSnippet = (t: string) =>
     .replace(/>>>|<<</g, "")
     .replace(/\\+(["/])/g, "$1") // \" e \/ de JSON
     .replace(/\\{2,}/g, "\\") // \\\\ → \
-    .replace(/\*\*|__|`+|^#+\s*/g, "")
+    .replace(/\*\*|__|`+|^#+\s*/gm, "")
+    .replace(/\[([^\]\n]+)\]\([^)\s]*\)/g, "$1") // [texto](link) → texto
+    .replace(/^\s*\|?[\s:|-]{3,}\|?\s*$/gm, "") // linha separadora de tabela (|---|---|)
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, "") // marcador de lista
+    .replace(/^\s*\||\|\s*$/gm, "") // bordas da tabela
+    .replace(/\s*\|\s*/g, " · ") // colunas
     .replace(/\s+/g, " ")
     .trim();
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
@@ -73,13 +78,25 @@ export function logFrom(line: string, i: number): LogLine {
   return m ? { id: String(i), t: m[1], level, src: m[3].split(".").pop()!, msg: m[4] } : { id: String(i), t: "", level, src: "", msg: raw };
 }
 
+/** Linha da lista de Sessões: `questions` = `question_count` do backend (as perguntas do usuário, o que a Conversa também mostra). */
+export const sessionRow = (s: { id: string; title?: string | null; preview?: string | null; source?: string | null; message_count?: number; question_count?: number; started_at?: number }): SessionRow => ({
+  id: s.id,
+  title: s.title || s.preview || "Sem título",
+  source: sourceLabel(s.source),
+  icon: sourceIcon(s.source),
+  snippet: cleanSnippet(s.preview ?? ""),
+  msgs: s.message_count ?? 0,
+  questions: s.question_count,
+  when: shortWhen(s.started_at),
+});
+
 export const liveAgent: AgentAdapter = {
   async sessions(query, source) {
     // Filtro por rótulo no cliente: "Terminal" junta tui e cli, que o backend guarda separados.
     const opts = { source: null, order: "recent" as const };
     const rows = query.trim() ? (await api.searchSessions(query, opts)).results.map((r) => ({ ...r, id: r.session_id ?? r.id, preview: r.snippet || r.preview })) : (await api.getSessions(100, 0, opts)).sessions;
     return rows
-      .map((s) => ({ id: s.id, title: s.title || s.preview || "Sem título", source: sourceLabel(s.source), icon: sourceIcon(s.source), snippet: cleanSnippet(s.preview ?? ""), msgs: s.message_count ?? 0, when: shortWhen(s.started_at) }))
+      .map(sessionRow)
       .filter((r) => source === "Todas" || r.source === source);
   },
 

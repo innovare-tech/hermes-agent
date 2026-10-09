@@ -191,6 +191,7 @@ _LONG_HANDLERS = frozenset({
     "session.resume", "session.save", "session.workspace.move", "shell.exec", "skills.manage", "slash.exec",
     "command.dispatch",  # /goal draft invokes the auxiliary model; never block the RPC reader
     "shared_metrics.set",  # consent reconcile waits on the metrics store's write lock
+    "session.context_breakdown",  # waits for a cold resume's agent build (live=True)
 })
 
 _rpc_pool_workers = max(2, env_int("HERMES_TUI_RPC_POOL_WORKERS", 8))
@@ -1943,6 +1944,14 @@ def _load_provider_routing() -> dict:
     return {}
 
 
+def _model_has_fast_mode(model) -> bool:
+    try:
+        from hermes_cli.models import model_supports_fast_mode
+        return bool(model_supports_fast_mode(str(model or "") or None))
+    except Exception:  # noqa: BLE001 — informação de tela; nunca derruba o session.info
+        return False
+
+
 def _load_show_reasoning() -> bool:
     # Fallback True — keep in sync with DEFAULT_CONFIG display.show_reasoning (no DEFAULT_CONFIG merge here).
     return bool(_display_cfg().get("show_reasoning", True))
@@ -2185,7 +2194,11 @@ def _restart_slash_worker(sid: str, session: dict):
 
 
 def _get_usage(agent) -> dict:
-    g = lambda k, fb=None: getattr(agent, k, 0) or (getattr(agent, fb, 0) if fb else 0)
+    # ``_usage_base``: o que a conversa já gastou antes deste agente (retomada/rebuild zeram os contadores dele).
+    base = getattr(agent, "_usage_base", None) or {}
+    g = lambda k, fb=None: (getattr(agent, k, 0) or (getattr(agent, fb, 0) if fb else 0)) + base.get(k, 0)
+    cost = float(getattr(agent, "session_estimated_cost_usd", 0.0) or 0.0) + base.get("cost", 0.0)
+    status = str(getattr(agent, "session_cost_status", "") or "unknown")
     usage = {
         "model": getattr(agent, "model", "") or "",
         "input": g("session_input_tokens", "session_prompt_tokens"),
@@ -2193,6 +2206,9 @@ def _get_usage(agent) -> dict:
         "reasoning": g("session_reasoning_tokens"), "prompt": g("session_prompt_tokens"),
         "completion": g("session_completion_tokens"), "total": g("session_total_tokens"),
         "calls": g("session_api_calls"),
+        # Custo acumulado da sessão (o painel distingue "unknown" de US$ 0).
+        "cost_usd": cost,
+        "cost_status": base.get("cost_status", "unknown") if status == "unknown" and cost else status,
     }
     comp = getattr(agent, "context_compressor", None)
     if comp:
@@ -2392,6 +2408,7 @@ def _session_info(agent, session: dict | None = None) -> dict:
         "service_tier": service_tier,
         "fast": service_tier in STATIC_TIERS and _fast_tier_applies(agent, model, pending_provider or provider,
                                                                     route_known=not pending_provider, tier=service_tier),
+        "fast_supported": _model_has_fast_mode(model),
         "yolo": yolo, "approval_mode": approval_mode,
         "tools": dict(mirror.get("tools") or {}) if isinstance(mirror.get("tools"), dict) else {},
         "skills": dict(mirror.get("skills") or {}) if isinstance(mirror.get("skills"), dict) else {},
@@ -2642,6 +2659,18 @@ def _session_auth_user_id(session: dict | None) -> str | None:
     return _transport_auth_user_id(session.get("transport"))
 
 
+def _main_conversation_model() -> dict | None:
+    """Modelos (painel A5) › "Conversa principal": ``{provider, model}`` para uma conversa sem escolha própria
+    (sessão nova, sem /model). ``None`` = sem escolha (vale o padrão do perfil) ou leitura falhou."""
+    try:
+        from ops_center.models import resolved_model
+        picked = resolved_model("main")
+    except Exception:  # noqa: BLE001 — nunca impede a conversa de abrir
+        logger.debug("Modelos: escolha da conversa principal ilegível", exc_info=True)
+        return None
+    return picked if picked and picked.get("provider") and picked.get("model") else None
+
+
 def _make_agent(
     sid: str, key: str, session_id: str | None = None, session_db=None,
     model_override: dict | str | None = None, provider_override: str | None = None,
@@ -2664,6 +2693,8 @@ def _make_agent(
     from agent.shell_hooks import register_from_config
     register_from_config(cfg)
     system_prompt = _startup_system_prompt(cfg, session_id or key)
+    if model_override is None and provider_override is None and (picked := _main_conversation_model()):
+        model_override, provider_override = picked["model"], picked["provider"]
     model, runtime = _resolve_agent_model_runtime(model_override, provider_override)
     fallback_notice = runtime.pop("_fallback_notice", None)
     _pr = _load_provider_routing()
@@ -2704,7 +2735,26 @@ def _make_agent(
     if fallback_notice:
         # Emitted once on the first successful reply via _emit_pending_fallback_notice -> status_callback.
         agent._pending_fallback_notice = fallback_notice
+    agent._usage_base = _stored_usage_base(getattr(agent, "_session_db", None), session_id or key)
     return agent
+
+
+def _stored_usage_base(db, key: str) -> dict:
+    """Totais já gravados da conversa (``sessions``), na forma dos contadores do agente: o painel mostra a conversa
+    inteira mesmo depois de retomar. Só leitura; os contadores do agente (cobrança, orçamentos) não mudam."""
+    with contextlib.suppress(Exception):
+        row = db.get_session(key) if db is not None and key else None
+        if row:
+            i, o = int(row.get("input_tokens") or 0), int(row.get("output_tokens") or 0)
+            prompt = i + int(row.get("cache_read_tokens") or 0) + int(row.get("cache_write_tokens") or 0)
+            return {
+                "session_input_tokens": i, "session_output_tokens": o, "session_completion_tokens": o,
+                "session_reasoning_tokens": int(row.get("reasoning_tokens") or 0), "session_prompt_tokens": prompt,
+                "session_total_tokens": prompt + o, "session_api_calls": int(row.get("api_call_count") or 0),
+                "cost": float(row.get("actual_cost_usd") or row.get("estimated_cost_usd") or 0.0),
+                "cost_status": row.get("cost_status") or "unknown",
+            }
+    return {}
 
 
 def _hydrate_session_cwd(sid: str, key: str, session_db, profile_home: str | None) -> None:
