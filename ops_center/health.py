@@ -203,13 +203,41 @@ def _api_incident(d: dict) -> dict:
            "title": d["title"], "impact": d["impact"], "status": d["status"], "startedAt": d["started_at"],
            "ackBy": d["ack_by"], "ackAt": d["ack_at"], "resolvedAt": d["resolved_at"], "resolvedBy": d["resolved_by"],
            "note": d["note"], "timeline": d["timeline"], "hypothesis": d["hypothesis"],
-           "investigating": not d["investigated"], "suggestedAction": d["suggested_action"], "approval": None}
+           "investigating": False, "investigationPaused": False, "suggestedAction": d["suggested_action"],
+           "approval": None}
+    if not d["investigated"] and d["status"] == "open":
+        paused = _paused()
+        out["investigating"], out["investigationPaused"] = not paused, paused
     if d.get("approval_id"):
         a = store.get_approval(d["approval_id"]) or {}
         out["approval"] = {k: a.get(s) for k, s in (("id", "id"), ("status", "status"), ("target", "target"),
                                                      ("expiresAt", "expires_at"), ("decidedBy", "decided_by"),
                                                      ("result", "result"))}
+        out["approval"]["targetLabel"] = _target_label(a.get("target") or "")
     return out
+
+
+def _paused() -> bool:
+    """Perfil pausado (Parar tudo ou limite de gasto): o Hermes não investiga até retomar."""
+    try:
+        from agent.estop import is_engaged
+
+        return bool(is_engaged())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _target_label(target: str) -> str:
+    """``telegram:<chat>:<tópico>`` → "Telegram · Alertas de infra" (nome do tópico quando conhecido)."""
+    parts = target.split(":")
+    if not parts or parts[0] != "telegram":
+        return target
+    if len(parts) < 3 or parts[2] in ("", "1"):
+        return "Telegram"
+    from ops_center import notify
+
+    name = next((t.get("name") for t in notify._topics() if str(t.get("id")) == parts[2]), None)
+    return f"Telegram · {name or 'tópico ' + parts[2]}"
 
 
 def _inc(iid: int) -> dict:

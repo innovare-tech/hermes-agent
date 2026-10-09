@@ -2,6 +2,7 @@
 // faixa de problema de OUTRO perfil, e o popover com busca, perfis, grupo "Clientes do Copiloto", Novo e Gerenciar.
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { useHealthBadge } from "./health/badge";
 import { Icon } from "./Icon";
 import { hexOf, otherIssueLabel, otherIssues, rowSubtitle, splitProfiles, triggerStatus, type Profile } from "./profileLogic";
 import { switchProfile } from "./profiles";
@@ -63,6 +64,7 @@ export function ProfileSwitcher() {
     };
   }, [open]);
 
+  const critical = useHealthBadge().critical;
   const cur = profiles.find((p) => p.id === id);
   // Lista ainda não chegou (ou falhou): o bloco "Hermes" de sempre, sem seletor.
   if (!cur) {
@@ -77,7 +79,8 @@ export function ProfileSwitcher() {
     );
   }
 
-  const st = triggerStatus(cur);
+  // Incidente crítico aberto em Saúde passa na frente do "rodando"; perfil já com problema ou pausado mantém o seu status.
+  const st = critical > 0 && cur.status === "ok" ? { label: "Incidente crítico", tone: "var(--err)", pulse: true } : triggerStatus(cur);
   const others = otherIssues(profiles, id);
   const { top, clients } = splitProfiles(profiles, q);
   const searching = q.trim().length > 0;

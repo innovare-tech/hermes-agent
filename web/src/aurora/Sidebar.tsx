@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 import { NavLink, useNavigate } from "react-router";
 import { Icon } from "./Icon";
+import { refreshHealthBadge, resetHealthBadge, useHealthBadge } from "./health/badge";
+import { healthCount } from "./health/model";
+import "./health/health.css";
 import { refreshModelsHealth, useModelsProblem } from "./models/health";
 import { isListenSession } from "./chat/sources";
 import { ProfileSwitcher } from "./ProfileSwitcher";
@@ -10,6 +13,7 @@ type NavItem = { to: string; label: string; icon: string; count?: string; sub?: 
 
 export const OPS: NavItem[] = [
   { to: "/", label: "Painel", icon: "layout-dashboard" },
+  { to: "/saude", label: "Saúde", icon: "heart-pulse" },
   { to: "/inbox", label: "Caixa de entrada", icon: "inbox" },
   { to: "/analises", label: "Análises dos grupos", icon: "scan-search", sub: true },
   { to: "/approvals", label: "Aprovações", icon: "shield-check" },
@@ -69,11 +73,14 @@ export function BusinessSwitcher() {
 
 function NavRow({ item, index, count, hot }: { item: NavItem; index: number; count: string; hot: boolean }) {
   const problem = useModelsProblem();
+  const hb = healthCount(useHealthBadge());
+  const isHealth = item.to === "/saude";
+  if (isHealth) count = hb.text;
   return (
     <NavLink to={item.to} end={item.to === "/"} className={({ isActive }) => "au-nav" + (isActive ? " active" : "")} style={{ animationDelay: index * 30 + "ms", ...(item.sub ? { paddingLeft: 30 } : {}) }}>
       <Icon name={item.icon} />
       <span style={{ whiteSpace: "nowrap" }}>{item.label}</span>
-      <span className={"au-count" + (hot && count ? " hot" : "")}>{count}</span>
+      <span className={"au-count" + (isHealth ? (hb.tone ? " " + hb.tone : "") : hot && count ? " hot" : "")} {...(isHealth && hb.text ? { role: "img", "aria-label": hb.tone === "hl-crit" ? `${hb.text} incidente(s) crítico(s) aberto(s)` : `${hb.text} incidente(s) em atenção` } : {})}>{count}</span>
       {item.dot && problem && <span role="img" aria-label="Algum provedor com problema" title="Algum provedor com problema" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--err)", flex: "none" }} />}
     </NavLink>
   );
@@ -90,6 +97,13 @@ export function Sidebar() {
   // Ponto vermelho em Modelos: lê o estado guardado dos provedores ao entrar e a cada troca de perfil.
   useEffect(() => {
     refreshModelsHealth();
+  }, [profileId]);
+  // Badge de Saúde: incidentes abertos do perfil, a cada 60 s com a aba à vista (a tela de Saúde atualiza mais rápido).
+  useEffect(() => {
+    resetHealthBadge();
+    refreshHealthBadge();
+    const iv = setInterval(() => document.visibilityState === "visible" && refreshHealthBadge(), 60000);
+    return () => clearInterval(iv);
   }, [profileId]);
   return (
     <aside className="au-side">

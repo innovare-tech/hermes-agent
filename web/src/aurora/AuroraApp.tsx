@@ -13,6 +13,7 @@ import { Agents } from "./screens/Agents";
 import { Channels } from "./screens/Channels";
 import { Cron } from "./screens/Cron";
 import { Gateways } from "./screens/Gateways";
+import { Health } from "./screens/Health";
 import { Logs } from "./screens/Logs";
 import { Memory } from "./screens/Memory";
 import { Sessions } from "./screens/Sessions";
@@ -151,6 +152,7 @@ export function AuroraApp() {
             {booted && (
             <Routes key={profileId}>
               <Route path="/" element={<Home />} />
+              <Route path="/saude" element={<Health />} />
               <Route path="/inbox" element={<Inbox />} />
               <Route path="/analises" element={<Analyses />} />
               <Route path="/approvals" element={<Approvals />} />
