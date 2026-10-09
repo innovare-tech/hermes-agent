@@ -157,6 +157,13 @@ async def _item(info: Any, active: str) -> dict[str, Any]:
     color, icon = await asyncio.to_thread(_look, home, pid)
 
     status = "paused" if facts["paused"] else "err" if issue else "ok"
+    copilot = None
+    if pid.startswith("cli-"):
+        from ops_center.copilot import profile_state
+
+        copilot = await asyncio.to_thread(profile_state, home)
+        if (copilot or {}).get("status") == "revoked":  # Copiloto revogado: não está "rodando" para o gestor
+            status, facts = "paused", {**facts, "pausedBy": "copilot_revoked"}
     item: dict[str, Any] = {
         "id": pid,
         "name": _label(info),
@@ -172,6 +179,7 @@ async def _item(info: Any, active: str) -> dict[str, Any]:
         "canPause": facts["canPause"],
         "pausedBy": facts["pausedBy"],
         "usageToday": usage,
+        "copilot": {k: copilot.get(k) for k in ("status", "plan", "systemClientId")} if copilot else None,
     }
     if issue and status == "err":
         item["issue"] = issue

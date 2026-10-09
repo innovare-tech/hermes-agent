@@ -150,7 +150,7 @@ def _new_api_key() -> str:
 
 def _slug(name: str) -> str:
     s = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
-    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")[:24].strip("-") or "cliente"
+    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")[:40].strip("-") or "cliente"
 
 
 def _profile_id(name: str) -> str:
@@ -175,6 +175,29 @@ def _profile_home(pid: str) -> Path:
     from hermes_cli.profiles import get_profile_dir
 
     return get_profile_dir(pid)
+
+
+def _display_name(pid: str, name: str) -> None:
+    """Perfis mostra o nome do cliente, não o slug ``cli-…``."""
+    try:
+        from hermes_cli.profiles import set_profile_display_name
+
+        set_profile_display_name(pid, name[:64])
+    except Exception:  # noqa: BLE001 — só apresentação
+        logger.debug("copilot: nome de exibição de %s não gravado", pid, exc_info=True)
+
+
+def profile_state(home: Path) -> Optional[dict]:
+    """Estado do Copiloto de um perfil ``cli-`` (para a tela Perfis): ``{status, plan, systemClientId}``."""
+    db = home / "ops.db"
+    if not db.exists():
+        return None
+    try:
+        with store.connect(db) as c:
+            row = c.execute("SELECT value FROM meta WHERE key='copilot'").fetchone()
+        return json.loads(row[0]) if row else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def tools_for(plan: str) -> list[str]:
@@ -255,6 +278,7 @@ def create(system_client_id: str, plan: str, by: str = "painel") -> dict:
     api_key = _new_api_key()
     try:
         create_profile(pid, no_skills=True, description=f"Copiloto do Gestor · {client['name']}")
+        _display_name(pid, client["name"])
         _write_client_profile(pid, client["name"], system_client_id, plan, api_key,
                               sign_token(system_client_id, plan, secret), model_cfg, provider_env, cfg["mcpUrl"],
                               cfg["plans"][plan]["credits"])
