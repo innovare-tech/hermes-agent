@@ -24,6 +24,14 @@ describe("healthFrom", () => {
     expect(healthFrom({ gateway_running: false, gateway_platforms: {} } as unknown as StatusResponse).items).toEqual([{ name: "Gateway de mensagens", status: "warn", value: "parado" }]);
   });
 
+  it("canais de outro perfil (\"aibiz:telegram\") não aparecem; api_server vira API", () => {
+    const st = {
+      gateway_running: true,
+      gateway_platforms: { api_server: { state: "connected" }, "aibiz:telegram": { state: "connected" } },
+    } as unknown as StatusResponse;
+    expect(healthFrom(st).items.map((i) => i.name)).toEqual(["Gateway de mensagens", "API"]);
+  });
+
   it("avisos graves da última hora viram problema; antigos não", async () => {
     const { severeFromLogs } = await import("./live");
     const now = new Date("2026-10-07T21:00:00").getTime();

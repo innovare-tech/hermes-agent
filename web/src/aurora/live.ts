@@ -54,8 +54,9 @@ export function severeFromLogs(lines: string[], now = Date.now()): { text: strin
 }
 
 export function healthFrom(st: StatusResponse, platforms: { name: string; enabled: boolean; configured: boolean; error_message?: string | null }[] = [], logs: string[] = []): Health {
-  const items = Object.entries(st.gateway_platforms ?? {}).map(([name, p]) => ({
-    name: cap(name),
+  // "<perfil>:<canal>" são canais de OUTRO perfil servidos pelo mesmo gateway: não pertencem a este painel.
+  const items = Object.entries(st.gateway_platforms ?? {}).filter(([name]) => !name.includes(":")).map(([name, p]) => ({
+    name: name === "api_server" ? "API" : cap(name),
     status: ["connected", "running", "ready", "ok"].includes(p.state) ? ("ok" as const) : p.error_code ? ("err" as const) : ("warn" as const),
     value: p.error_message ? "erro" : p.state === "connected" ? "conectado" : p.state,
   }));
