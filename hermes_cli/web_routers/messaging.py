@@ -179,6 +179,10 @@ def _platform_enablement(
     required = entry["required_env"]
     if scoped:
         configured = bool(required) and all(env_on_disk.get(key) for key in required)
+        if platform_id == "whatsapp" and not configured:
+            # A credencial do WhatsApp é a sessão pareada (creds.json), não uma variável do .env.
+            from hermes_cli.web_server_messaging import _whatsapp_session_path
+            configured = (_whatsapp_session_path() / "creds.json").exists()
         try:
             plat_cfg = (load_config().get("platforms") or {}).get(platform_id)
             plat_cfg = plat_cfg if isinstance(plat_cfg, dict) else {}
