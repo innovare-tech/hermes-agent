@@ -1481,7 +1481,8 @@ def _account_usage_lines(session: dict) -> list[str]:
     return render_account_usage_lines(snapshot)
 
 
-@_session_method("session.context_breakdown")
+# live: retomada a frio ainda não montou o agente; sem esperar, o painel mostrava 0 até a próxima resposta.
+@_session_method("session.context_breakdown", live=True)
 def _(rid, params: dict, session: dict) -> dict:
     if (agent := session.get("agent")) is None:
         usage = _session_usage_snapshot(session) or _get_usage(None)

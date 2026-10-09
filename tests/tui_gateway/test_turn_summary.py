@@ -67,3 +67,27 @@ def test_usage_includes_stored_totals_after_resume():
     assert (u["input"], u["output"], u["calls"], u["total"]) == (107, 13, 3, 160)
     assert round(u["cost_usd"], 3) == 0.021 and u["cost_status"] == "estimated"
     assert _stored_usage_base(SimpleNamespace(get_session=lambda k: None), "s1") == {}
+
+
+def test_context_breakdown_waits_for_cold_resume_build(monkeypatch):
+    """Retomada a frio: o agente ainda está montando. O painel espera e recebe o contexto calculado, não 0."""
+    import threading
+    from types import SimpleNamespace
+    from tui_gateway import server
+
+    assert "session.context_breakdown" in server._LONG_HANDLERS  # espera fora do leitor do socket
+    ready = threading.Event()
+    session = {"agent": None, "agent_ready": ready, "agent_build_started": True, "history": [],
+               "history_lock": threading.Lock(), "session_key": "k1", "profile_home": None}
+    monkeypatch.setattr(server, "_sessions", {"s1": session})
+    monkeypatch.setattr("agent.context_breakdown.compute_session_context_breakdown",
+                        lambda agent, history: {"categories": [], "context_used": 20700, "context_max": 100})
+    monkeypatch.setattr("agent.context_file_sources.context_file_sources_for_agent", lambda agent: [])
+
+    def build():
+        session["agent"] = SimpleNamespace(model="m")
+        ready.set()
+
+    threading.Timer(0.2, build).start()
+    resp = server._methods["session.context_breakdown"]("rid", {"session_id": "s1"})
+    assert resp["result"]["context_used"] == 20700, resp
