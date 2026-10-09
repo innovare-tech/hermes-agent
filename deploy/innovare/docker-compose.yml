@@ -3,7 +3,7 @@
 # Segredos dos perfis ficam em ./data/.env; o login do painel (Google) em ./dashboard.env, fora do volume.
 services:
   hermes:
-    image: ghcr.io/innovare-tech/hermes-agent:${TAG:-latest}
+    image: ghcr.io/innovare-tech/hermes-agent:${TAG:?TAG vem do .env que o deploy grava}
     container_name: hermes
     restart: unless-stopped
     # host: o painel (127.0.0.1:9119) fica atrás do nginx da VPS; o MCP do Copiloto (127.0.0.1:3170)
