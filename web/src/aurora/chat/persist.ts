@@ -2,16 +2,19 @@
 // rodapé nem se o turno foi interrompido ou falhou. Guardamos isso aqui, por sessão, no localStorage (melhor esforço)
 // e devolvemos à tela ao recarregar. Âncora: o `rowId` da pergunta do usuário (-1 = antes de qualquer pergunta).
 import { isFailedTurnText } from "./errors";
+import { baseName, parseAttachRefs } from "./attachments";
 import type { AgentMessage, ChatError, ChatMessage, CommandCard } from "./types";
 
 export type TurnExtra = { n: number; r?: string; ms?: number; tok?: number; cost?: number; st?: "i" | ChatError };
 export type CardExtra = { n: number; after: number; cmd: string; card: CommandCard };
-export type Extras = { cards: CardExtra[]; turns: Record<string, TurnExtra> };
+/** `names`: nome original do anexo por nome do arquivo no servidor (o texto recarregado só traz o caminho do servidor). */
+export type Extras = { cards: CardExtra[]; turns: Record<string, TurnExtra>; names?: Record<string, string> };
 
 export const MAX_ENTRIES = 50;
 export const MAX_BYTES = 200_000;
 const MAX_THINK = 20_000;
 const MAX_SESSIONS = 40;
+const MAX_NAMES = 100;
 const KEY = "hermes.aurora.chat.";
 
 const slimCard = (c: CommandCard): CommandCard => (c.raw && c.raw.length > 4000 ? { ...c, raw: c.raw.slice(0, 4000) } : c);
@@ -21,8 +24,10 @@ export function extrasOf(messages: ChatMessage[]): Extras {
   const ex: Extras = { cards: [], turns: {} };
   let anchor: number | null = -1;
   messages.forEach((m, n) => {
-    if (m.role === "user") anchor = m.rowId ?? null;
-    else if (m.role === "system") {
+    if (m.role === "user") {
+      anchor = m.rowId ?? null;
+      for (const att of m.attachments ?? []) for (const p of att.paths ?? []) if (baseName(p) !== att.name) (ex.names ??= {})[baseName(p)] = att.name;
+    } else if (m.role === "system") {
       if (!m.pending && m.card && anchor != null) ex.cards.push({ n, after: anchor, cmd: m.cmd, card: slimCard(m.card) });
     } else if (!m.live && anchor != null && anchor >= 0 && !ex.turns[anchor]) {
       const t: TurnExtra = { n };
@@ -43,17 +48,18 @@ export function limitExtras(ex: Extras, maxEntries = MAX_ENTRIES, maxBytes = MAX
   type Ent = { n: number; c?: CardExtra; k?: string; t?: TurnExtra };
   const all: Ent[] = [...ex.cards.map((c): Ent => ({ n: c.n, c })), ...Object.entries(ex.turns).map(([k, t]): Ent => ({ n: t.n, k, t }))].sort((a, b) => b.n - a.n).slice(0, maxEntries);
   const build = (list: Ent[]): Extras => ({ cards: list.flatMap((e) => (e.c ? [e.c] : [])).sort((a, b) => a.n - b.n), turns: Object.fromEntries(list.flatMap((e) => (e.t ? [[e.k!, e.t]] : []))) });
-  let out = build(all);
+  const names = ex.names ? Object.fromEntries(Object.entries(ex.names).slice(-MAX_NAMES)) : undefined;
+  let out = { ...build(all), ...(names && Object.keys(names).length ? { names } : {}) };
   while (all.length && JSON.stringify(out).length > maxBytes) {
     all.pop();
-    out = build(all);
+    out = { ...build(all), ...(out.names ? { names: out.names } : {}) };
   }
   return out;
 }
 
 /** Devolve às mensagens do histórico o que o backend não guardou. O que veio do backend (pensamento) tem prioridade. */
 export function applyExtras(messages: ChatMessage[], ex: Extras | null): ChatMessage[] {
-  if (!ex || (!ex.cards.length && !Object.keys(ex.turns).length)) return messages;
+  if (!ex || (!ex.cards.length && !Object.keys(ex.turns).length && !ex.names)) return messages;
   const out: ChatMessage[] = [];
   const flush = (after: number | null) => {
     if (after == null) return;
@@ -67,7 +73,8 @@ export function applyExtras(messages: ChatMessage[], ex: Extras | null): ChatMes
       if (anchor !== -1) flush(anchor);
       anchor = m.rowId ?? null;
       seen = false;
-      out.push(m);
+      const chips = ex.names && !m.attachments?.length ? parseAttachRefs(m.text, ex.names).attachments : [];
+      out.push(chips.length ? { ...m, attachments: chips } : m);
     } else if (m.role === "agent" && !seen && anchor != null) {
       seen = true;
       out.push(withTurn(m, ex.turns[anchor]));
@@ -84,9 +91,9 @@ function withTurn(m: AgentMessage, t?: TurnExtra): AgentMessage {
   a.thinkMs ??= t.ms;
   if (a.stat && (t.tok || t.cost != null)) a.stat = { ...a.stat, tokens: a.stat.tokens ?? t.tok, cost: a.stat.cost ?? t.cost };
   // Turno sem resposta: o histórico só tem o aviso em inglês — volta o estado de antes (interrompido ou erro do provedor).
-  if (!a.text && t.st && (!a.error || isFailedTurnText(a.error.detail))) {
-    if (t.st === "i") Object.assign(a, { error: undefined, interrupted: true });
-    else Object.assign(a, { error: t.st, interrupted: false });
+  if (t.st && (!a.error || isFailedTurnText(a.error.detail))) {
+    if (t.st === "i") Object.assign(a, { error: undefined, interrupted: true }); // com texto parcial também
+    else if (!a.text) Object.assign(a, { error: t.st, interrupted: false });
   }
   return a;
 }
@@ -112,8 +119,10 @@ export function saveExtras(sid: string, messages: ChatMessage[]) {
   const s = store();
   if (!s) return;
   try {
-    const ex = limitExtras(extrasOf(messages));
-    if (!ex.cards.length && !Object.keys(ex.turns).length) return void s.removeItem(KEY + sid);
+    const fresh = extrasOf(messages);
+    const names = { ...loadExtras(sid)?.names, ...fresh.names };
+    const ex = limitExtras({ ...fresh, ...(Object.keys(names).length ? { names } : {}) });
+    if (!ex.cards.length && !Object.keys(ex.turns).length && !ex.names) return void s.removeItem(KEY + sid);
     s.setItem(KEY + sid, JSON.stringify(ex));
     // Só as últimas MAX_SESSIONS sessões ficam guardadas.
     const idx = (JSON.parse(s.getItem(KEY + "index") ?? "[]") as string[]).filter((x) => x !== sid);

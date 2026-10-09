@@ -290,6 +290,7 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-stats{display:grid;grid-template-columns:1fr auto;gap:6px 12px;margin:0;font-size:12.5px}
 .au-stats dt{color:var(--fg2)}.au-stats dd{margin:0;font-family:var(--fm);font-size:11.5px;color:var(--fg);text-align:right}
 .au-think{display:flex;flex-direction:column;gap:6px}
+.au-think-body .au-md{white-space:normal;font-size:inherit}
 .au-think-body{padding:10px 14px;border-left:2px solid var(--line2);color:var(--fg2);font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;animation:hin .25s ease both}
 .au-errcard{display:flex;flex-direction:column;gap:12px;padding:16px 18px;border:1px solid color-mix(in oklab,var(--err) 45%,var(--line));border-radius:var(--r);background:color-mix(in oklab,var(--err) 6%,var(--panel))}
 .au-errcard-ic{flex:none;width:32px;height:32px;display:grid;place-items:center;border-radius:var(--r2);background:color-mix(in oklab,var(--err) 16%,transparent);color:var(--err)}

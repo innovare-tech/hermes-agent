@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cmdName, commandError, parseCommandOutput, ptNumbers, ptWarning, withWarning } from "./commandOutput";
+import { cmdName, commandError, parseCommandOutput, ptConfirm, ptNumbers, ptWarning, withWarning } from "./commandOutput";
 
 // Textos reais do gateway (inglês, formato de terminal).
 const STATUS = "Hermes TUI Status\n\nSession ID: 20261009_161220_4c21a4\nPath: ~/AppData/Local/hermes\nModel: gemini-3.8-flash (gemini)\nCreated: 2026-10-09 16:12\nLast Activity: 2026-10-09 16:12\nTokens: 0\nAgent Running: No";
@@ -111,5 +111,22 @@ describe("/title e outras mensagens de comando", () => {
     expect(commandError("/title x", "Title too long (140 chars, max 100)").lines).toEqual(["O título tem 140 caracteres; o máximo é 100."]);
     expect(commandError("/queue", "usage: /queue <prompt>").lines).toEqual(["Faltou o texto depois de /queue."]);
     expect(commandError("/x", "empty command").lines?.[0]).toMatch(/Digite/);
+  });
+});
+
+describe("confirmação de troca de modelo", () => {
+  it("contexto grande", () => {
+    const c = ptConfirm("!!! LARGE CONTEXT MODEL SWITCH !!!\n\nThis session holds ~171,345 tokens of context.\nSwitching to gemini-3.8-flash makes the next reply re-read all of it uncached.\n\nConfirm only if you intend to switch now.");
+    expect(c).toEqual({ title: "Trocar de modelo agora?", body: "Esta conversa tem cerca de 171.345 tokens de contexto. Trocar para gemini-3.8-flash faz a próxima resposta reler tudo sem cache, o que custa mais. Confirme só se quiser trocar agora." });
+  });
+  it("modelo caro, e as duas juntas", () => {
+    const exp = "!!! EXPENSIVE MODEL WARNING !!!\n\ngpt-9-pro has known pricing above Hermes' safety threshold.\nInput tokens: $30.00/M\nOutput tokens: $120.00/M\nConfirm only if you intend to use this model.";
+    expect(ptConfirm(exp)).toEqual({ title: "Este modelo é caro", body: "O modelo gpt-9-pro custa mais que o limite de segurança do Hermes (entrada $30,00/M e saída $120,00/M). Confirme só se quiser usá-lo." });
+    const both = ptConfirm(exp + "\n\n!!! LARGE CONTEXT MODEL SWITCH !!!\n\nThis session holds ~2,000 tokens.\nSwitching to x makes the next reply re-read");
+    expect(both.body).toMatch(/2\.000 tokens[\s\S]*gpt-9-pro/);
+  });
+  it("texto desconhecido passa como veio; troca cancelada vira cartão", () => {
+    expect(ptConfirm("Algo novo").body).toBe("Algo novo");
+    expect(commandError("/model x", "Troca de modelo cancelada").title).toBe("Troca de modelo cancelada");
   });
 });

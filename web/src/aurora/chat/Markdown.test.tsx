@@ -80,3 +80,12 @@ describe("fórmulas em listas e frações", () => {
     expect(html("vale $\\frac{a}{b}$ aqui")).toContain('<span class="au-md-math">a/b</span>');
   });
 });
+
+describe("$ com conta numérica", () => {
+  it("renderiza conta, mas não dinheiro", () => {
+    expect(html("Dá $340 + 51 = 391$ ao todo.")).toContain('<span class="au-md-math">340 + 51 = 391</span>');
+    expect(html("O resultado é $23$.")).toContain('<span class="au-md-math">23</span>');
+    expect(html("A conta $(3 + 4) * 2$ fecha.")).toContain("au-md-math");
+    for (const money of ["Custa $5 e depois $10.", "De $5 a $10 por mês", "Pague $ 5 + 3 $ hoje", "US$ 5 ou $20 reais"]) expect(html(money)).not.toContain("au-md-math");
+  });
+});

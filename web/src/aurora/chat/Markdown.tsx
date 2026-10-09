@@ -112,7 +112,7 @@ export function parseMd(src: string): MdBlock[] {
   return out;
 }
 
-const INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|\*\*([\s\S]+?)\*\*|__([\s\S]+?)__|~~([\s\S]+?)~~|\*([^*\s][\s\S]*?)\*|(?<![\w])_([^_\s][\s\S]*?)_(?![\w])|\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|\$(?=[^$\n]*[\\^_][^$\n]*\$)([^\s$](?:[^$\n]*[^\s$])?)\$|\\\(([^\n]+?)\\\)|\$\$([\s\S]+?)\$\$/g;
+const INLINE = /(`+)([\s\S]*?[^`])\1(?!`)|\*\*([\s\S]+?)\*\*|__([\s\S]+?)__|~~([\s\S]+?)~~|\*([^*\s][\s\S]*?)\*|(?<![\w])_([^_\s][\s\S]*?)_(?![\w])|\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|\$(?=[^$\n]*[\\^_][^$\n]*\$)([^\s$](?:[^$\n]*[^\s$])?)\$|\\\(([^\n]+?)\\\)|\$\$([\s\S]+?)\$\$|\$([\d(](?:[\d+\-×*/=()^,.\s]*[\d)])?)\$/g;
 
 /** Inline: código, negrito, itálico, riscado, links (só http/https/mailto), URLs soltas. */
 export function inline(text: string, key = "i"): ReactNode[] {
@@ -127,7 +127,7 @@ export function inline(text: string, key = "i"): ReactNode[] {
     else if (m[5]) out.push(<del key={k}>{inline(m[5], k)}</del>);
     else if (m[6] ?? m[7]) out.push(<em key={k}>{inline(m[6] ?? m[7], k)}</em>);
     else if (m[13]) out.push(<MathBlock key={k} tex={m[13]} inline />);
-    else if (m[11] ?? m[12]) out.push(<span key={k} className="au-md-math">{texToText(m[11] ?? m[12])}</span>);
+    else if (m[11] ?? m[12] ?? m[14]) out.push(<span key={k} className="au-md-math">{texToText(m[11] ?? m[12] ?? m[14])}</span>);
     else {
       const href = m[9] ?? m[10];
       const safe = /^(https?:|mailto:)/i.test(href);

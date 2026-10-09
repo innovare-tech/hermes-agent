@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 // Cliente falso: guarda o handler de estado para simular a queda da conexão.
-const fake = vi.hoisted(() => ({ state: null as null | ((s: string) => void), connects: 0, profile: "", calls: [] as [string, Record<string, unknown>][] }));
+const fake = vi.hoisted(() => ({ state: null as null | ((s: string) => void), connects: 0, profile: "", calls: [] as [string, Record<string, unknown>][], configSet: null as null | ((p: Record<string, unknown>) => Record<string, unknown>), asked: [] as { title: string; body: string; confirm: string }[], answer: true }));
+vi.mock("../store", () => ({ ask: async (o: { title: string; body: string; confirm: string }) => (fake.asked.push(o), fake.answer) }));
 vi.mock("@/lib/gatewayClient", () => ({
   GatewayClient: class {
     connectionState = "idle";
@@ -13,6 +14,7 @@ vi.mock("@/lib/gatewayClient", () => ({
     request = async (method: string, params: Record<string, unknown> = {}) => {
       if (this.connectionState !== "open") throw new Error("gateway not connected");
       fake.calls.push([method, params]);
+      if (method === "config.set" && fake.configSet) return fake.configSet(params);
       return method === "session.resume" ? { session_id: "live1" } : method === "session.list" ? { sessions: [] } : method === "session.create" ? { session_id: "live2", stored_session_id: "s2" } : method === "commands.catalog" ? { pairs: [], skills: {} } : {};
     };
     on = () => () => {};
@@ -188,5 +190,31 @@ describe("transcrição (recarregar /chat/<id>)", async () => {
     expect(toolFailed('{"error":"arquivo não existe"}')).toBe(true);
     expect(toolFailed('{"output":"ok","exit_code":1}')).toBe(false);
     expect(toolFailed("texto")).toBe(false);
+  });
+});
+
+describe("/model digitado usa o fluxo do seletor", () => {
+  const WARN = "!!! LARGE CONTEXT MODEL SWITCH !!!\n\nThis session holds ~171,345 tokens of context.\nSwitching to gemini-3.8-flash makes the next reply re-read all of it uncached (providers key prompt caches per model) — a one-time full-price input cost.\n\nThreshold: model.switch_context_confirm_tokens (currently 100,000; 0 disables this check).\nConfirm only if you intend to switch now.";
+  const setup = async (answer: boolean) => {
+    fake.answer = answer;
+    fake.asked.length = 0;
+    fake.calls.length = 0;
+    fake.configSet = (p) => (p.confirm_expensive_model ? { value: "gemini-3.8-flash", info: { model: "gemini-3.8-flash" } } : { confirm_required: true, confirm_message: WARN });
+    const id = await gatewayChat.create(); // sessão "viva"
+    return gatewayChat.slash(id, "/model gemini-3.8-flash");
+  };
+  it("pede confirmação em português e, confirmado, troca com confirm_expensive_model", async () => {
+    const r = await setup(true);
+    expect(fake.asked).toHaveLength(1);
+    expect(fake.asked[0].body).toBe("Esta conversa tem cerca de 171.345 tokens de contexto. Trocar para gemini-3.8-flash faz a próxima resposta reler tudo sem cache, o que custa mais. Confirme só se quiser trocar agora.");
+    expect(fake.calls.filter(([m]) => m === "config.set").map(([, p]) => p.confirm_expensive_model)).toEqual([undefined, true]);
+    expect(fake.calls.some(([m]) => m === "slash.exec")).toBe(false);
+    expect(r).toMatchObject({ type: "output", output: "Modelo da conversa: gemini-3.8-flash" });
+  });
+  it("recusado: não troca e vira cartão de troca cancelada", async () => {
+    const r = await setup(false);
+    expect(fake.calls.filter(([m]) => m === "config.set")).toHaveLength(1);
+    expect(r).toMatchObject({ type: "error", message: "Troca de modelo cancelada" });
+    fake.configSet = null;
   });
 });

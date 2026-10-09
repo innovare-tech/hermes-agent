@@ -37,6 +37,13 @@ describe("parseAttachRefs", () => {
     expect(r.attachments).toEqual([{ name: "upload_20261009_170843_2.png", kind: "image" }]);
     expect(r.text).toBe("O que tem nesta imagem?");
   });
+  it("rótulo solto na linha de baixo some junto da referência; nome original quando conhecido", () => {
+    const r = parseAttachRefs("@image:C:\\Users\\U\\hermes\\images\\upload_2026_2.png\n[screenshot]\n\nolha isso", { "upload_2026_2.png": "tela.png" });
+    expect(r.text).toBe("olha isso");
+    expect(r.attachments).toEqual([{ name: "tela.png", kind: "image" }]);
+    expect(parseAttachRefs("@image:/a/b.png [screenshot]\n[screenshot]\nfim").text).toBe("fim");
+    expect(parseAttachRefs("oi\n[screenshot]").text).toBe("oi\n[screenshot]");
+  });
   it("@file e @pdf, várias referências e caminho com espaço", () => {
     const r = parseAttachRefs("@file:/home/u/relatório final.txt @pdf:/tmp/p/doc.pdf [pages]\n\nresuma");
     expect(r.attachments).toEqual([{ name: "relatório final.txt", kind: "file" }, { name: "doc.pdf", kind: "pdf" }]);

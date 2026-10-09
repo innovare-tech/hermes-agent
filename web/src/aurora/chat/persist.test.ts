@@ -88,3 +88,25 @@ describe("localStorage", () => {
     expect(() => saveExtras("x", [user(1), agent({ reasoning: "r" })])).not.toThrow();
   });
 });
+
+describe("interrompido e anexos", () => {
+  it("turno parado com texto parcial volta marcado 'interrompido', com os tokens", () => {
+    const live: ChatMessage[] = [user(1), agent({ text: "parcial", interrupted: true, stat: { model: "m", secs: 3, tokens: 700 } })];
+    const back = applyExtras([user(1), agent({ text: "parcial", stat: { model: "m", secs: 3 } })], JSON.parse(JSON.stringify(extrasOf(live)))) as AgentMessage[];
+    expect(back[1]).toMatchObject({ interrupted: true, text: "parcial", stat: { tokens: 700 } });
+  });
+  it("nome original do anexo sobrevive ao recarregar (e a salvar de novo)", () => {
+    const sent = { ...user(1), text: "oi", attachments: [{ name: "tela.png", kind: "image", paths: ["C:\\h\\images\\upload_1.png"] }] } as ChatMessage;
+    const ex = extrasOf([sent, agent()]);
+    expect(ex.names).toEqual({ "upload_1.png": "tela.png" });
+    const reloaded = [{ ...user(1), text: "@image:C:\\h\\images\\upload_1.png [screenshot]\n\noi" } as ChatMessage, agent()];
+    const back = applyExtras(reloaded, ex);
+    expect(back[0]).toMatchObject({ attachments: [{ name: "tela.png", kind: "image" }] });
+    const s = { d: new Map<string, string>(), getItem(k: string) { return this.d.get(k) ?? null; }, setItem(k: string, v: string) { this.d.set(k, v); }, removeItem(k: string) { this.d.delete(k); } };
+    vi.stubGlobal("localStorage", s);
+    saveExtras("z", [sent, agent()]);
+    saveExtras("z", back); // recarregado: sem os caminhos, mas o nome continua guardado
+    expect(loadExtras("z")?.names).toEqual({ "upload_1.png": "tela.png" });
+    vi.unstubAllGlobals();
+  });
+});

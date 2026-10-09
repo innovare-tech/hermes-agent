@@ -59,27 +59,39 @@ export const baseName = (p: string) => p.replace(/[\\/]+$/, "").split(/[\\/]/).p
 
 /**
  * Referências `@image:<caminho> [rótulo]`, `@file:…`, `@pdf:…` que o envio põe no texto: viram chips (kind + nome)
- * e saem do texto. Linha só de referências aceita caminho com espaço; no meio de uma frase, o caminho vai até o espaço.
+ * e saem do texto, junto do "[rótulo]" que as acompanha (na mesma linha ou na linha de baixo). Linha só de referências aceita
+ * caminho com espaço; no meio de uma frase, o caminho vai até o espaço. `names`: nome original do arquivo por nome no servidor.
  */
-export function parseAttachRefs(text: string): { text: string; attachments: SentAttachment[] } {
+export function parseAttachRefs(text: string, names?: Record<string, string>): { text: string; attachments: SentAttachment[] } {
   if (!text.includes("@")) return { text, attachments: [] };
   const attachments: SentAttachment[] = [];
   const add = (kind: string, raw: string) => {
     const path = raw.replace(/\s*\[[^\]\n]*\]\s*$/, "").trim().replace(/^["']|["']$/g, "");
     if (!path || !looksLikePath(path)) return false;
-    attachments.push({ name: baseName(path), kind: KIND_OF[kind] });
+    const base = baseName(path);
+    attachments.push({ name: names?.[base] ?? base, kind: KIND_OF[kind] });
     return true;
   };
-  const lines = text.split("\n").map((line) => {
-    if (!/^\s*@(?:image|file|pdf):/.test(line)) return line.replace(/@(image|file|pdf):(\S+)(?:[ \t]+\[[^\]\n]*\])?/g, (all, k: string, p: string) => (add(k, p) ? "" : all));
-    // Linha só de referências: parte em cada "@tipo:" e tira o rótulo "[…]" do fim de cada uma.
-    const parts = line.split(/(?=@(?:image|file|pdf):)/).filter((s) => s.trim());
-    const left = parts.filter((part) => {
-      const m = part.match(/^@(image|file|pdf):([\s\S]*)$/);
-      return !(m && add(m[1], m[2]));
-    });
-    return left.join(" ");
-  });
+  const lines: string[] = [];
+  let afterRef = false;
+  for (const line of text.split("\n")) {
+    if (afterRef && /^\s*\[[^\]\n]{1,60}\]\s*$/.test(line)) continue; // "[screenshot]" solto logo depois da referência
+    const before = attachments.length;
+    if (!/^\s*@(?:image|file|pdf):/.test(line)) lines.push(line.replace(/@(image|file|pdf):(\S+)(?:[ \t]+\[[^\]\n]*\])?/g, (all, k: string, p: string) => (add(k, p) ? "" : all)));
+    else {
+      // Linha só de referências: parte em cada "@tipo:" e tira o rótulo "[…]" do fim de cada uma.
+      const parts = line.split(/(?=@(?:image|file|pdf):)/).filter((s) => s.trim());
+      lines.push(
+        parts
+          .filter((part) => {
+            const m = part.match(/^@(image|file|pdf):([\s\S]*)$/);
+            return !(m && add(m[1], m[2]));
+          })
+          .join(" "),
+      );
+    }
+    afterRef = attachments.length > before;
+  }
   if (!attachments.length) return { text, attachments };
   return { text: lines.join("\n").replace(/^\s*\n/, "").replace(/\n{3,}/g, "\n\n").trim(), attachments };
 }

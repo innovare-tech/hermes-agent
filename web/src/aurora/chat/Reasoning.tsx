@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../Icon";
+import { Markdown } from "./Markdown";
 import { fmtElapsed } from "./toolLabels";
 import { useReveal } from "./useReveal";
 
@@ -24,7 +25,7 @@ export function Reasoning({ text, ms, since, live }: Props) {
         {label}
         <Icon name={open ? "chevron-up" : "chevron-down"} size={12} />
       </button>
-      {open && <div ref={body} className="au-think-body">{text}</div>}
+      {open && <div ref={body} className="au-think-body"><Markdown text={text} /></div>}
     </div>
   );
 }

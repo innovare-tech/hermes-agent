@@ -1,5 +1,5 @@
 import { classifyError } from "./errors";
-import type { AgentMessage, ChatEvent, ChatMessage, UserMessage } from "./types";
+import type { AgentMessage, ChatEvent, ChatMessage, TurnStat, UserMessage } from "./types";
 
 /** Aplica um evento do turno à mensagem viva do agente. `now` só existe para os testes. */
 export function applyEvent(m: AgentMessage, e: ChatEvent, now = Date.now()): AgentMessage {
@@ -24,7 +24,7 @@ export function applyEvent(m: AgentMessage, e: ChatEvent, now = Date.now()): Age
     case "error":
       return { ...m, live: false, steps: settle(m), error: classifyError(e.message, e), ...endThinking(m, now) };
     case "interrupted":
-      return interrupted(m, now);
+      return interrupted(m, now, e.stat);
     case "submitted":
       return m;
   }
@@ -34,8 +34,8 @@ export function applyEvent(m: AgentMessage, e: ChatEvent, now = Date.now()): Age
 const endThinking = (m: AgentMessage, now: number): Partial<AgentMessage> => (m.thinkStart && m.thinkMs == null ? { thinkMs: now - m.thinkStart } : {});
 
 /** Interrupção: fecha os passos abertos e marca o turno como interrompido (fica no histórico). */
-export function interrupted(m: AgentMessage, now = Date.now()): AgentMessage {
-  return { ...m, live: false, interrupted: true, steps: settle(m), ...endThinking(m, now) };
+export function interrupted(m: AgentMessage, now = Date.now(), stat?: TurnStat): AgentMessage {
+  return { ...m, live: false, interrupted: true, ...(stat ? { stat } : {}), steps: settle(m), ...endThinking(m, now) };
 }
 
 const settle = (m: AgentMessage) => m.steps.map((s) => (s.status === "run" ? { ...s, status: "ok" as const } : s));

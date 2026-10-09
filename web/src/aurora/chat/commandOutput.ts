@@ -178,10 +178,37 @@ export function commandError(cmd: string, message: string): CommandCard {
     line = "É a conversa principal do bot: o nome dela é fixo.";
   } else if ((m = msg.match(/usage: (\/\w+)/i))) {
     line = `Faltou o texto depois de ${m[1]}.`;
+  } else if (/cancelad/i.test(msg)) {
+    title = "Troca de modelo cancelada";
+    line = "O modelo da conversa continua o mesmo.";
   } else if (/empty command/i.test(msg)) {
     line = "Digite um comando depois da barra.";
   } else if (/no active session|session not found|not connected/i.test(msg)) {
     line = "A conversa não está conectada. Tente de novo em instantes.";
   }
   return { kind: "error", icon: "circle-alert", title, lines: [line], raw: msg === line ? undefined : msg };
+}
+
+/** Pergunta de confirmação do backend ao trocar de modelo (inglês) → título e corpo em português. Desconhecida passa como veio. */
+export function ptConfirm(message: string, target = ""): { title: string; body: string } {
+  const out: { title: string; body: string }[] = [];
+  if (/LARGE CONTEXT MODEL SWITCH/i.test(message)) {
+    const tokens = message.match(/holds ~?([\d,]+) tokens/i)?.[1] ?? "";
+    const to = message.match(/Switching to (\S+) makes/i)?.[1] ?? target;
+    out.push({
+      title: "Trocar de modelo agora?",
+      body: ptNumbers(`Esta conversa tem cerca de ${tokens || "muitos"} tokens de contexto. Trocar${to ? ` para ${to}` : ""} faz a próxima resposta reler tudo sem cache, o que custa mais. Confirme só se quiser trocar agora.`),
+    });
+  }
+  if (/EXPENSIVE MODEL WARNING/i.test(message)) {
+    const model = message.match(/^(\S+) has known pricing/im)?.[1] ?? target;
+    const money = (label: string) => message.match(new RegExp(label + " tokens:\s*(.+)", "i"))?.[1]?.trim().replace(".", ",");
+    const prices = [money("Input") && `entrada ${money("Input")}`, money("Output") && `saída ${money("Output")}`].filter(Boolean).join(" e ");
+    out.push({
+      title: "Este modelo é caro",
+      body: `${model ? `O modelo ${model}` : "Este modelo"} custa mais que o limite de segurança do Hermes${prices ? ` (${prices})` : ""}. Confirme só se quiser usá-lo.`,
+    });
+  }
+  if (!out.length) return message.trim() ? { title: "Confirmar a troca de modelo?", body: message.trim() } : { title: "Este modelo é caro", body: "Cada resposta custa mais que o normal." };
+  return { title: out[0].title, body: out.map((o) => o.body).join("\n\n") };
 }

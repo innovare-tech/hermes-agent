@@ -215,6 +215,14 @@ export function Chat() {
             });
             return;
           }
+          // O gateway confirma a interrupção depois do Parar, já com os tokens do turno: completa o rodapé do turno parado.
+          if (e.type === "interrupted" && e.stat && !messagesRef.current.some((m) => m.role === "agent" && m.live)) {
+            setMessages((list) => {
+              const i = list.map((m) => m.role).lastIndexOf("agent");
+              return list.map((m, j) => (j === i && m.role === "agent" && m.interrupted ? { ...m, stat: { ...e.stat, ...m.stat, tokens: m.stat?.tokens ?? e.stat?.tokens } } : m));
+            });
+            return;
+          }
           updateLive((m) => applyEvent(m, e));
           if (e.type === "done") {
             if (e.info) setInfo((i) => ({ ...i, ...e.info }));
@@ -238,7 +246,7 @@ export function Chat() {
     if (text.startsWith("/") && !ready.length) return slash(text);
     if (!text && !ready.length) return;
     if (!text) text = "Veja o que anexei.";
-    const user = { text, attachments: ready.map((a) => ({ name: a.name, kind: a.kind, preview: a.preview })) };
+    const user = { text, attachments: ready.map((a) => ({ name: a.name, kind: a.kind, preview: a.preview, paths: [...(a.paths ?? []), ...(a.ref ? [a.ref.replace(/^@\w+:/, "").replace(/\s*\[[^\]]*\]\s*$/, "")] : [])] })) };
     const refs = ready.map((a) => a.ref).filter((r): r is string => !!r);
     setAtts([]);
     await startTurn(text, { user, refs });
@@ -402,6 +410,9 @@ export function Chat() {
 
   async function stop() {
     if (sid) await chat.interrupt(sid).catch(() => {});
+    // Grava a marca já: o turno parado precisa voltar como "interrompido" mesmo se recarregar antes de a conversa assentar.
+    const next = messagesRef.current.map((m) => (m.role === "agent" && m.live ? interrupted(m) : m));
+    if (sid) saveExtras(sid, next);
     updateLive((m) => interrupted(m));
     setRunning(false);
   }

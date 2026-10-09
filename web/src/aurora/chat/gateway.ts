@@ -7,6 +7,7 @@ import { GatewayClient } from "@/lib/gatewayClient";
 import type { Session } from "../adapter";
 import { fileToDataUrl } from "./attachments";
 import { classifyError, failedTurnError, isErrorText, isFailedTurnText, stripFailedTurn } from "./errors";
+import { ptConfirm } from "./commandOutput";
 import { applyExtras, loadExtras } from "./persist";
 import { shortWhen, sourceIcon, sourceLabel } from "./sources";
 import { buildSlashMenu } from "./slashMenu";
@@ -237,10 +238,29 @@ let defaultsCache: { key: string; at: number; p: Promise<Record<string, unknown>
 
 const msgOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/** Troca o modelo da sessão viva (seletor e `/model nome`): trata troca adiada e pede confirmação (modelo caro, contexto grande) antes de aplicar. */
+async function switchModel(id: string, value: string) {
+  let r = await call("config.set", { session_id: id, key: "model", value });
+  if (r.confirm_required) {
+    const c = ptConfirm(r.confirm_message ?? "", value.split(/\s+/)[0]);
+    if (!(await ask({ title: c.title, body: c.body, confirm: "Trocar mesmo assim" }))) throw new Error("Troca de modelo cancelada");
+    r = await call("config.set", { session_id: id, key: "model", value, confirm_expensive_model: true });
+  }
+  return r;
+}
+
 /** `/comando`: o gateway decide se vira texto na tela, um pedido ao agente (skills, /retry…) ou texto de volta ao campo. */
 async function slashExec(sessionId: string, input: string): Promise<SlashResult> {
   try {
     const sid = await liveId(sessionId);
+    // "/model nome" usa o mesmo caminho do seletor (com o modal de confirmação) em vez do texto em inglês do slash.exec.
+    const mm = input.trim().match(/^\/?model\s+(\S[\s\S]*)$/i);
+    if (mm) {
+      const value = mm[1].trim();
+      const sw = await switchModel(sid, value);
+      const real = sw.info?.model || (typeof sw.value === "string" && sw.value) || value;
+      return { type: "output", output: `Modelo da conversa: ${real}${sw.deferred ? " (vale a partir da próxima mensagem)" : ""}`, warning: sw.warning || undefined };
+    }
     const r = await call("slash.exec", { session_id: sid, command: input.replace(/^\//, "") });
     if ((r.type === "send" || r.type === "skill") && r.message) return { type: "send", message: r.message };
     if (r.type === "prefill") return { type: "prefill", message: r.message ?? "", notice: r.notice ?? "" };
@@ -384,7 +404,12 @@ export const gatewayChat: ChatAdapter = {
           const p = e.payload ?? {};
           const surface = p.error_surface as { code?: string; retryable?: boolean; model?: string } | null | undefined;
           if (p.status === "error") on({ type: "error", message: text(p.error) || "O agente falhou nesse turno", code: surface?.code, retryable: surface?.retryable, model: surface?.model });
-          else if (p.status === "interrupted") on({ type: "interrupted" });
+          else if (p.status === "interrupted") {
+            const stat = turnStat(p.usage, (Date.now() - t0) / 1000, usageBase.get(sid));
+            const us = usageOf(p.usage);
+            if (us) usageBase.set(sid, us.total);
+            on({ type: "interrupted", stat });
+          }
           else {
             // Provedor sem streaming: o texto vem só aqui. O raciocínio final também (mesmo sem "mostrar pensamento").
             if (!gotText && typeof p.text === "string" && p.text) on({ type: "delta", text: p.text });
@@ -427,17 +452,14 @@ export const gatewayChat: ChatAdapter = {
       const body = { scope: "main" as const, provider, model };
       const r = (await api.setModelAssignment(body)) as { confirm_required?: boolean; message?: string };
       if (r.confirm_required) {
-        if (!(await ask({ title: "Este modelo é caro", body: r.message ?? "Cada resposta custa mais que o normal.", confirm: "Usar mesmo assim" }))) throw new Error("Troca de modelo cancelada");
+        const c = ptConfirm(r.message ?? "", model);
+        if (!(await ask({ title: c.title, body: c.body, confirm: "Trocar mesmo assim" }))) throw new Error("Troca de modelo cancelada");
         await api.setModelAssignment({ ...body, confirm_expensive_model: true });
       }
       return { state: "default", model, provider };
     }
     const value = `${model} --provider ${provider}`;
-    let r = await call("config.set", { session_id: id, key: "model", value });
-    if (r.confirm_required) {
-      if (!(await ask({ title: "Este modelo é caro", body: r.confirm_message ?? "Cada resposta custa mais que o normal.", confirm: "Usar mesmo assim" }))) throw new Error("Troca de modelo cancelada");
-      r = await call("config.set", { session_id: id, key: "model", value, confirm_expensive_model: true });
-    }
+    const r = await switchModel(id, value);
     // O modelo que o gateway diz ter ficado (não o que pedimos): aliases e correções chegam aqui.
     const real = r.info?.model || (typeof r.value === "string" && r.value) || model;
     return { state: r.deferred ? "pending" : "applied", model: real, provider: r.info?.provider || provider, warning: r.warning || undefined };

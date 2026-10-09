@@ -58,7 +58,7 @@ export type Attachment = {
   ref?: string;
 };
 
-export type SentAttachment = { name: string; kind: AttachmentKind; preview?: string };
+export type SentAttachment = { name: string; kind: AttachmentKind; preview?: string; /** Caminhos no servidor: depois de recarregar o texto só tem esses, e o nome original se perde. */ paths?: string[] };
 
 export type UserMessage = {
   id: string;
@@ -136,7 +136,7 @@ export type ChatEvent =
   | { type: "error"; message: string; code?: string; retryable?: boolean; provider?: string; model?: string }
   | { type: "approval"; approval: Omit<ChatApproval, "status"> }
   | { type: "approval.cancel"; id: string }
-  | { type: "interrupted" }
+  | { type: "interrupted"; stat?: TurnStat }
   /** Linha do gateway da mensagem do usuário que acabou de ser enviada. */
   | { type: "submitted"; rowId: number };
 

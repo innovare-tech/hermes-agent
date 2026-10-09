@@ -155,7 +155,7 @@ export function AgentBubble({ m, isLast, busy, onRetry, onUndo, onSwitchModel, o
             }
           />
         )}
-        {m.approval && !pending && (
+        {m.approval && !pending && !(m.approval.status === "denied" && m.steps.some((s) => s.status === "denied")) && (
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--fm)", fontSize: 11.5, color: m.approval.status === "approved" ? "var(--ok)" : "var(--fg3)" }}>
             <Icon name={m.approval.status === "approved" ? "circle-check" : "circle"} size={12} />
             {m.approval.status === "approved" ? "aprovado por você" : m.approval.status === "denied" ? "negado por você" : "pedido expirou"} · {m.approval.command}

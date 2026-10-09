@@ -98,3 +98,10 @@ describe("contagem e cortes (refazer, desfazer, editar)", () => {
     expect(planEdit(list, "2")).toBeNull();
   });
 });
+
+describe("interrupção com tokens", () => {
+  it("o evento traz o rodapé do turno parado", () => {
+    const m = applyEvent(applyEvent(empty, { type: "delta", text: "parcial" }), { type: "interrupted", stat: { model: "m", secs: 2, tokens: 800 } });
+    expect(m).toMatchObject({ interrupted: true, live: false, text: "parcial", stat: { tokens: 800 } });
+  });
+});
