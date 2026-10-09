@@ -22,6 +22,7 @@ def home(tmp_path, monkeypatch):
     empty_bundled.mkdir()
     monkeypatch.setenv("HOME", str(tmp_path / "os-home"))
     monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.delenv("HERMES_LANGUAGE", raising=False)  # aqui o idioma vem do config.yaml (conftest fixa "en")
     monkeypatch.setattr(plugins_mod, "get_bundled_plugins_dir", lambda: empty_bundled)
     i18n_layers._reset_registry_for_tests()
     i18n.reset_language_cache()

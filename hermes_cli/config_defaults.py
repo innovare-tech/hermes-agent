@@ -816,6 +816,8 @@ DEFAULT_CONFIG = {
     },
 
     "display": {
+        # Innovare: mensagens do Hermes (erros, avisos, comandos) em português do Brasil (locales/pt.yaml).
+        "language": "pt",
         "compact": False,
         "personality": "",
         "resume_display": "full",

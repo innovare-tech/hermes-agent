@@ -185,6 +185,9 @@ os.environ["HERMES_TEST_ISOLATION"] = os.environ.get("HERMES_HOME", "") or "1"
 # ran a real `uv pip install boto3` into the shared venv while other files raced
 # on whether botocore was importable yet.
 os.environ["HERMES_DISABLE_LAZY_INSTALLS"] = "1"
+# A Innovare usa português por padrão (display.language: pt); a suíte herdada do Hermes confere as
+# mensagens em inglês, então os testes rodam em inglês salvo quando um teste escolhe o idioma.
+os.environ.setdefault("HERMES_LANGUAGE", "en")
 
 #: HERMES_HOME as it stood when conftest was imported - i.e. before any test
 #: module could import code that configures logging. Recorded so the guard in
