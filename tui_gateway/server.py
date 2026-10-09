@@ -2642,6 +2642,18 @@ def _session_auth_user_id(session: dict | None) -> str | None:
     return _transport_auth_user_id(session.get("transport"))
 
 
+def _main_conversation_model() -> dict | None:
+    """Modelos (painel A5) › "Conversa principal": ``{provider, model}`` para uma conversa sem escolha própria
+    (sessão nova, sem /model). ``None`` = sem escolha (vale o padrão do perfil) ou leitura falhou."""
+    try:
+        from ops_center.models import resolved_model
+        picked = resolved_model("main")
+    except Exception:  # noqa: BLE001 — nunca impede a conversa de abrir
+        logger.debug("Modelos: escolha da conversa principal ilegível", exc_info=True)
+        return None
+    return picked if picked and picked.get("provider") and picked.get("model") else None
+
+
 def _make_agent(
     sid: str, key: str, session_id: str | None = None, session_db=None,
     model_override: dict | str | None = None, provider_override: str | None = None,
@@ -2664,6 +2676,8 @@ def _make_agent(
     from agent.shell_hooks import register_from_config
     register_from_config(cfg)
     system_prompt = _startup_system_prompt(cfg, session_id or key)
+    if model_override is None and provider_override is None and (picked := _main_conversation_model()):
+        model_override, provider_override = picked["model"], picked["provider"]
     model, runtime = _resolve_agent_model_runtime(model_override, provider_override)
     fallback_notice = runtime.pop("_fallback_notice", None)
     _pr = _load_provider_routing()
