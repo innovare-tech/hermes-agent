@@ -373,6 +373,10 @@ def _apply_model_switch(
         persist_model_selection(result)
     if reasoning_effort:
         _apply_switch_reasoning(sid, session, agent, reasoning_effort, persist_global=persist_global, one_turn=one_turn)
+    elif isinstance(session, dict) and session.get("create_reasoning_override") is not None and agent is not None:
+        # switch_model re-resolve o raciocínio do config.yaml: o esforço escolhido NESTA conversa
+        # (config.set reasoning, escopo de sessão) não pode voltar ao padrão só porque o modelo mudou.
+        agent.reasoning_config = copy.deepcopy(session["create_reasoning_override"])
     if count_switch:
         from hermes_cli.observability.shared_metrics_events import record_model_switch
 
