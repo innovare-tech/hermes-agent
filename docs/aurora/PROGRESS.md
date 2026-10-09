@@ -23,6 +23,7 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | A6 Permissões (tela) | 🧪 | — | matriz, conectores MCP, histórico e pendentes; testes ✅; QA no Chrome |
 | A4 Avisos (1.5) | 🧪 | — | rotas por nível, silêncio, resumo diário (tick no ticker), teste real; QA + Telegram real |
 | A5 Modelos (1.6) | 🧪 | — | provedores, quem faz o quê, triagem Jev, gasto e limites; análise dos grupos usa o modelo escolhido; QA no Chrome |
+| 12 Saúde (A7, Fase 2) | 🧪 | — | 09/10: S1–S11 ✅ no Chrome com dados reais da Aibiz; S12 ✅ com incidente real (INC-1); falta SSH/GKE ligados |
 
 ## Já entregue antes dos specs
 - 🏁 PRs #1–#8: telas Aurora, sem mocks, ops_center, gateway com autonomia, playbooks com horário.
@@ -142,7 +143,24 @@ Processo e legenda: [`specs/README.md`](specs/README.md). Layout de celular: for
 | A6.9 Radar: botão + dica | ✅ | R3 07/10 |
 | A6.10 Cabeçalho da barra lateral | ✅ | R3 07/10 |
 
+## 12 · Saúde (A7)
+| Critério | Estado | Nota |
+|---|---|---|
+| S1 Humores | ✅ | calmo, atenção (extra) e crítico com faixa, duração ao vivo |
+| S2 Cartão de incidente | ✅ | linha do tempo, hipótese, "investigando…" / perfil pausado |
+| S3 Correção | 🧪 | fluxo de aprovação coberto por testes; sem correção sugerida no INC-1 (banimento não se resolve por comando) |
+| S4 Reconhecer / Resolver | ✅ | reconhecer conferido no Chrome; resolver com `stillFailing` por teste |
+| S5 Seis grupos | ✅ | grupos vazios ficam ocultos; 6 bots + "Ver todos os 36" |
+| S6 Linha | ✅ | sparkline, chip, Rodar agora, Pausar/Retomar/Remover |
+| S7 Criar por texto | ✅ | "Martins Odontologia 30 min sem mensagem em horário comercial" entendido e criado |
+| S8 Estados | ✅ | vazio → "Usar as recomendadas" criou 42 |
+| S9 Conexões | ✅ | sem segredos; status da chave SSH, cluster e banco |
+| S10 Sidebar | ✅ | badge vermelho e perfil "Incidente crítico" |
+| S11 Movimento reduzido | ✅ | `prefers-reduced-motion` em health.css |
+| S12 Ponta a ponta | ✅ | Liv Art Studio bloqueado → INC-1 em 2 ciclos, aviso no Telegram, investigação concluiu banimento pela Meta |
+
 ## Diário
+- **09/10/2026** — Fase 2 (spec 12, A7 Saúde): backend de verificações e incidentes, tela, QA no Chrome com o banco real da Aibiz (35 bots, Mongo, 4 filas de falha). INC-1 real aberto e investigado. Correções do QA: investigação em thread com teto de 3 min, pausar/remover, exemplos do diálogo, sessões internas fora da Sidebar.
 - **08/10/2026** — Fase 1.7 (spec 10): permissões por origem no núcleo, sempre bloqueado, aprovação por botão no Telegram com execução da chamada exata. Regressão: mesmas 163 falhas de ambiente antes e depois.
 - **08/10/2026** — Fase 1.2 (spec 09): captura antes da autorização, lote por janela, triagem Jev, análise silenciosa via cron e aviso à equipe.
 - **08/10/2026** — Fase 1.1 (spec 08): trava de saída por canal (`gateway/outbound_guard.py`), modo Escutar no ops.db, mídia sem legenda registrada, comandos não rodam em canal mudo. Spec 07 (Perfis) em implementação.
