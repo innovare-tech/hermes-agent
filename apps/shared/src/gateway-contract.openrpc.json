@@ -30413,6 +30413,11 @@
             "title": "Fast",
             "type": "boolean"
           },
+          "fast_supported": {
+            "default": false,
+            "title": "Fast Supported",
+            "type": "boolean"
+          },
           "yolo": {
             "default": false,
             "title": "Yolo",
@@ -31290,6 +31295,11 @@
           "fast": {
             "default": false,
             "title": "Fast",
+            "type": "boolean"
+          },
+          "fast_supported": {
+            "default": false,
+            "title": "Fast Supported",
             "type": "boolean"
           },
           "yolo": {

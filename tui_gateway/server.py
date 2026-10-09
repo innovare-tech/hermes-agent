@@ -1943,6 +1943,14 @@ def _load_provider_routing() -> dict:
     return {}
 
 
+def _model_has_fast_mode(model) -> bool:
+    try:
+        from hermes_cli.models import model_supports_fast_mode
+        return bool(model_supports_fast_mode(str(model or "") or None))
+    except Exception:  # noqa: BLE001 — informação de tela; nunca derruba o session.info
+        return False
+
+
 def _load_show_reasoning() -> bool:
     # Fallback True — keep in sync with DEFAULT_CONFIG display.show_reasoning (no DEFAULT_CONFIG merge here).
     return bool(_display_cfg().get("show_reasoning", True))
@@ -2392,6 +2400,7 @@ def _session_info(agent, session: dict | None = None) -> dict:
         "service_tier": service_tier,
         "fast": service_tier in STATIC_TIERS and _fast_tier_applies(agent, model, pending_provider or provider,
                                                                     route_known=not pending_provider, tier=service_tier),
+        "fast_supported": _model_has_fast_mode(model),
         "yolo": yolo, "approval_mode": approval_mode,
         "tools": dict(mirror.get("tools") or {}) if isinstance(mirror.get("tools"), dict) else {},
         "skills": dict(mirror.get("skills") or {}) if isinstance(mirror.get("skills"), dict) else {},

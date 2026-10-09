@@ -189,6 +189,7 @@ export function infoFromLive(i?: Partial<SessionLiveInfo> | null): Partial<Sessi
   if (i.provider) o.provider = i.provider;
   if (typeof i.reasoning_effort === "string") o.effort = i.reasoning_effort;
   if (typeof i.fast === "boolean") o.fast = i.fast;
+  if (typeof i.fast_supported === "boolean") o.fastSupported = i.fast_supported;
   if (i.title) o.title = i.title;
   if (i.terminal_backend) o.backend = i.terminal_backend;
   if (i.personality) o.persona = i.personality;
@@ -441,7 +442,8 @@ export const gatewayChat: ChatAdapter = {
 
   async setShowReasoning(sessionId, show) {
     const id = sessionId ? live.get(sessionId) : undefined;
-    await call("config.set", { key: "reasoning", value: show ? "show" : "hide", ...(id ? { session_id: id } : {}) });
+    // Com sessão: só esta conversa (scope "session" não reescreve o config); sem sessão, o padrão do Hermes.
+    await call("config.set", { key: "reasoning", value: show ? "show" : "hide", ...(id ? { session_id: id, scope: "session" } : {}) });
   },
 
   async defaults() {

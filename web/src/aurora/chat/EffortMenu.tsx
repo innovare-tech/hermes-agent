@@ -26,11 +26,12 @@ type Props = {
   onToggleThinking: (show: boolean) => void;
   /** Só aparece com o modo rápido ligado (o gateway não diz quais modelos suportam). */
   fast?: boolean;
+  fastSupported?: boolean;
   onToggleFast: (on: boolean) => void;
 };
 
 /** Esforço de raciocínio da conversa (e, quando houver, o modo rápido), ancorado no campo de mensagem. */
-export function EffortMenu({ effort, onPick, onClose, showThinking, onToggleThinking, fast, onToggleFast }: Props) {
+export function EffortMenu({ effort, onPick, onClose, showThinking, onToggleThinking, fast, fastSupported, onToggleFast }: Props) {
   const box = useRef<HTMLDivElement>(null);
   useDismiss(box, onClose);
   return (
@@ -59,7 +60,7 @@ export function EffortMenu({ effort, onPick, onClose, showThinking, onToggleThin
             </button>
           </div>
         )}
-        {fast && (
+        {(fast || fastSupported) && (
           <div className="au-menurow">
             <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <span style={{ fontSize: 13 }}>Modo rápido ligado</span>

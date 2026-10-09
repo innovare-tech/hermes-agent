@@ -521,6 +521,7 @@ export interface SessionLiveInfo {
   reasoning_effort_wire?: string
   service_tier?: string
   fast?: boolean
+  fast_supported?: boolean
   yolo?: boolean
   approval_mode?: string
   tools?: Record<string, string[]>
@@ -3300,6 +3301,7 @@ export interface SessionCwdSetResult {
   reasoning_effort_wire?: string
   service_tier?: string
   fast?: boolean
+  fast_supported?: boolean
   yolo?: boolean
   approval_mode?: string
   tools?: Record<string, string[]>

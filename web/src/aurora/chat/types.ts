@@ -158,6 +158,8 @@ export type SessionInfo = {
   effort?: string;
   /** Modo rápido ligado. */
   fast?: boolean;
+  /** O modelo atual tem modo rápido (mostra o interruptor). */
+  fastSupported?: boolean;
   /** Título que o gateway conhece (pode vir antes da lista de sessões). */
   title?: string;
   usage?: SessionUsage | null;

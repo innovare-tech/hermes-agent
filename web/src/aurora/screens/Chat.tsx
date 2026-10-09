@@ -377,7 +377,7 @@ export function Chat() {
     try {
       await chat.setShowReasoning(sid, show);
       setShowThinking(show);
-      toast(show ? "Pensamento visível nas respostas" : "Pensamento oculto nas respostas", "Vale para todo o Hermes.");
+      toast(show ? "Pensamento visível nas respostas" : "Pensamento oculto nas respostas", sid ? "Vale para esta conversa." : "Vale para as próximas conversas.");
     } catch (e) {
       toast(errText(e, "Não consegui mudar isso"));
     }
@@ -599,6 +599,7 @@ export function Chat() {
           pendingModel={pendingModel}
           effort={info.effort}
           fast={info.fast}
+          fastSupported={info.fastSupported}
           showThinking={showThinking}
           commands={commands}
           attachments={atts}

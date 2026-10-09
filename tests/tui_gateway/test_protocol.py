@@ -2159,3 +2159,19 @@ def test_slash_model_routes_through_config_set_and_resets_worker(server):
     assert calls[0] == {"session_id": sid, "key": "model", "value": "gemini-3.8-flash"}
     assert closed == [True] and server._sessions[sid]["slash_worker"] is None
     assert bad["error"]["code"] == 5032
+
+
+def test_reasoning_show_hide_session_scope_does_not_touch_config(server):
+    """O painel mostra/esconde o pensamento só na conversa (scope="session"): nada é gravado no config."""
+    sid = "s-show"
+    server._sessions[sid] = {"session_key": sid, "agent": None, "show_reasoning": True}
+    with patch.object(server, "_write_display_sections", side_effect=AssertionError("não pode gravar")):
+        resp = server.handle_request({"id": "r1", "method": "config.set",
+                                      "params": {"session_id": sid, "key": "reasoning", "value": "hide", "scope": "session"}})
+    assert resp["result"]["value"] == "hide" and server._sessions[sid]["show_reasoning"] is False
+
+
+def test_session_info_reports_fast_support(server):
+    with patch("hermes_cli.models.model_supports_fast_mode", side_effect=lambda m: m == "gpt-fast"):
+        assert server._model_has_fast_mode("gpt-fast") is True
+        assert server._model_has_fast_mode("gemini-3.8-flash") is False

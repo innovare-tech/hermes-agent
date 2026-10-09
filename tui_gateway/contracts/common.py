@@ -72,6 +72,8 @@ class SessionLiveInfo(OpenModel):
     reasoning_effort_wire: str = ""
     service_tier: str = ""
     fast: bool = False
+    # O modelo atual tem modo rápido (o painel só mostra o interruptor quando é true).
+    fast_supported: bool = False
     yolo: bool = False
     approval_mode: str = "manual"
     tools: dict[str, list[str]] = Field(default_factory=dict)

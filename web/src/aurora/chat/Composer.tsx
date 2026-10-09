@@ -14,6 +14,7 @@ type Props = {
   pendingModel?: string;
   effort?: string;
   fast?: boolean;
+  fastSupported?: boolean;
   /** null = o gateway não informou (esconde o interruptor). */
   showThinking: boolean | null;
   commands: SlashCommand[];
@@ -34,7 +35,7 @@ type Props = {
   openModel?: number;
 };
 
-export function Composer({ running, model, provider, pendingModel, effort, fast, showThinking, commands, attachments, onSend, onStop, onPickModel, onPickEffort, onToggleThinking, onToggleFast, onAttach, onRemoveAttachment, initialDraft = "", prefill, openModel = 0 }: Props) {
+export function Composer({ running, model, provider, pendingModel, effort, fast, fastSupported, showThinking, commands, attachments, onSend, onStop, onPickModel, onPickEffort, onToggleThinking, onToggleFast, onAttach, onRemoveAttachment, initialDraft = "", prefill, openModel = 0 }: Props) {
   const [draft, setDraft] = useState(initialDraft);
   const [menu, setMenu] = useState<null | "model" | "effort">(null);
   const [pick, setPick] = useState(0);
@@ -113,6 +114,7 @@ export function Composer({ running, model, provider, pendingModel, effort, fast,
           <EffortMenu
             effort={effort}
             fast={fast}
+            fastSupported={fastSupported}
             showThinking={showThinking}
             onClose={() => setMenu(null)}
             onPick={(v) => {
