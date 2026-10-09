@@ -209,7 +209,8 @@ def _write_client_profile(pid: str, name: str, sid: str, plan: str, api_key: str
         agent["disabled_toolsets"] = sorted(set(agent.get("disabled_toolsets") or []) | set(LOCKED_TOOLSETS))
         cfg.setdefault("mcp_servers", {})[MCP_SERVER] = {
             "url": mcp_url, "headers": {"Authorization": "Bearer ${AIBIZ_MCP_TOKEN}"}, "trust": "untrusted",
-            "lazy": True, "timeout": 120, "tools": {"include": tools_for(plan), "resources": False, "prompts": False},
+            # sem "lazy": perfil novo não tem manifesto em cache e o modelo nunca veria as ferramentas
+            "timeout": 120, "tools": {"include": tools_for(plan), "resources": False, "prompts": False},
         }
         save_config(cfg)
         for k, v in provider_env.items():

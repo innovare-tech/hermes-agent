@@ -4326,7 +4326,9 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
                     result, usage = self._finish_turn_result(
                         agent, result, session_id, route=route, requested_runtime=requested_runtime,
                         route_source=route_source, confirmed_runtime_lock=confirmed_runtime_lock)
-                    _profile = _api_request_profile.get() or ""
+                    # Thread do executor: o ContextVar do prefixo não chega aqui; a sessão do turno sabe o perfil.
+                    from gateway.session_context import get_session_env
+                    _profile = _api_request_profile.get() or str(get_session_env("HERMES_SESSION_PROFILE", "") or "")
                     if _profile.startswith("cli-"):
                         try:
                             from ops_center import copilot
