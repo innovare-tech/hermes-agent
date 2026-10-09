@@ -42,3 +42,12 @@ def test_record_turn_summary_without_row_is_a_noop(monkeypatch):
     server._record_turn_summary({"session_key": "k1"}, SimpleNamespace(agent=None, usage_before={}, cost_before=0,
                                                                        started_at=0), {"usage": {}}, "complete")
     assert called == []
+
+
+def test_get_usage_reports_session_cost_and_status():
+    from types import SimpleNamespace
+    from tui_gateway.server import _get_usage
+
+    u = _get_usage(SimpleNamespace(model="m", session_estimated_cost_usd=0.0175, session_cost_status="estimated"))
+    assert u["cost_usd"] == 0.0175 and u["cost_status"] == "estimated"
+    assert _get_usage(SimpleNamespace(model="m"))["cost_status"] == "unknown"

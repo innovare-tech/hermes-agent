@@ -2201,6 +2201,9 @@ def _get_usage(agent) -> dict:
         "reasoning": g("session_reasoning_tokens"), "prompt": g("session_prompt_tokens"),
         "completion": g("session_completion_tokens"), "total": g("session_total_tokens"),
         "calls": g("session_api_calls"),
+        # Custo acumulado da sessão (o painel distingue "unknown" de US$ 0).
+        "cost_usd": float(getattr(agent, "session_estimated_cost_usd", 0.0) or 0.0),
+        "cost_status": str(getattr(agent, "session_cost_status", "") or "unknown"),
     }
     comp = getattr(agent, "context_compressor", None)
     if comp:
