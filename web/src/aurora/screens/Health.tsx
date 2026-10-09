@@ -241,7 +241,7 @@ export function Health() {
       <div className="au-page">
         <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0, maxWidth: 640 }}>
-            <span className="au-label">Operação · Fase 2</span>
+            <span className="au-label">Operação</span>
             <h1 className="au-h1">Saúde</h1>
             <p style={{ margin: 0, color: "var(--fg2)", fontSize: 14.5, lineHeight: 1.55 }}>
               Servidores, banco, bots de WhatsApp e serviços deste perfil. O Hermes checa sozinho e investiga quando algo sai do normal.

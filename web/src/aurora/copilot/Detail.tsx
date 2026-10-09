@@ -44,7 +44,7 @@ export function ClientDetailView({ d, now, tab, onTab, planLabels, actions }: { 
   const kpis = [
     { l: "Conversas no mês", v: fmtInt(m.conversations), s: "sessões de conversa" },
     { l: "Gasto no mês", v: fmtUsd(m.spendUsd), s: "custo de IA deste perfil" },
-    { l: "Créditos", v: fmtInt(m.credits), s: `de ${fmtInt(m.creditsLimit)} do plano` },
+    { l: "Créditos usados", v: fmtInt(m.credits), s: `de ${fmtInt(m.creditsLimit)} do plano no mês` },
     { l: "Última atividade", v: last.v, s: last.s },
   ];
 

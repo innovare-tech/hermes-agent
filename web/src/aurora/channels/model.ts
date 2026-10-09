@@ -151,4 +151,5 @@ export function windowAppliesNote(mode: AutonomyMode): string | null {
   return null;
 }
 
-export const platformLabel = (p: string) => (p ? p[0].toUpperCase() + p.slice(1) : p);
+const BRAND: Record<string, string> = { whatsapp: "WhatsApp", whatsapp_cloud: "WhatsApp Business", api_server: "API" };
+export const platformLabel = (p: string) => BRAND[p] ?? (p ? p[0].toUpperCase() + p.slice(1) : p);

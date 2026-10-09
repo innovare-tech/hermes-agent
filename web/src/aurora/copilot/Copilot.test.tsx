@@ -184,7 +184,7 @@ describe("Clientes do Copiloto", () => {
   it("lista na ordem novos, sem saldo, ativos, revogados; selecionado com aria-current; faixa de isolamento e KPIs", async () => {
     await mount();
     expect(q("h1")?.textContent).toBe("Clientes do Copiloto");
-    expect(container.textContent).toContain("Fase 3");
+    expect(container.textContent).not.toContain("Fase 3");
     expect(q(".cp-strip")?.textContent).toContain("O Copiloto só lê dados daquele cliente.");
     expect(names()).toEqual(["Academia Ipê", "Ótica Visão", "Padaria Sol", "Doce Encanto Confeitaria"]);
     expect(qa("button.cp-item").map((b) => b.getAttribute("aria-current"))).toEqual(["true", null, null, null]);
