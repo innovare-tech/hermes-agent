@@ -987,8 +987,8 @@ def recommended() -> tuple[list[dict], list[str]]:
             for ns in _namespaces():
                 for dep in _k8s_get(f"/apis/apps/v1/namespaces/{ns}/deployments").get("items") or []:
                     name = dep["metadata"]["name"]
-                    specs.append({"group": "k8s", "name": name, "kind": "k8s", "interval_sec": 300, "detail": ns,
-                                  "params": {"namespace": ns, "deployment": name}})
+                    specs.append({"group": "k8s", "name": _bot_label(name), "kind": "k8s", "interval_sec": 300,
+                                  "detail": f"{ns} · {name}", "params": {"namespace": ns, "deployment": name}})
         except Exception as e:  # noqa: BLE001
             skipped.append(f"Kubernetes: não consegui listar os deployments ({_why(e)})")
     else:
@@ -1024,6 +1024,22 @@ def _bot_specs() -> list[dict]:
         out.append({"group": "whatsapp_bots", "name": name, "kind": "bot", "interval_sec": 300,
                     "client_id": client["system_client_id"], "params": {"channelId": ch["id"]}, "detail": detail})
     return out
+
+
+def _bot_label(deployment: str) -> str:
+    """``bot-<channelId>`` (bots Baileys no cluster) → "Bot · <cliente> · <número>"; outro nome fica como está."""
+    if not deployment.startswith("bot-"):
+        return deployment
+    try:
+        ch = _db()[settings()["bots"]["channels"]].find_one({"id": deployment[4:]}, {"systemClientId": 1, "source": 1},
+                                                           max_time_ms=3000)
+    except Exception:  # noqa: BLE001 — sem banco, fica o nome técnico
+        return deployment
+    client = store.get_client(str((ch or {}).get("systemClientId") or ""))
+    if not client:
+        return deployment
+    phone = str(ch.get("source") or "")
+    return f"Bot · {client['name']}" + (f" · {phone}" if len(phone) > 4 else "")
 
 
 def create_recommended() -> dict:
