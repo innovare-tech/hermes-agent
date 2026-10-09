@@ -314,6 +314,8 @@ def _incident_step(c: dict, now: float) -> None:
                       timeline=_event(last, "ruled_out", f"Voltou ao normal sozinho: {text}", now))
             _notify("warning", f"✅ INC-{last['id']} · {c['name']} voltou ao normal.")
         return
+    if last and last["status"] == "open" and not last.get("problem_since") and (c["result"] or {}).get("since"):
+        _save_inc(last["id"], problem_since=c["result"]["since"])  # incidente aberto antes de o executor saber o início
     if c["status"] != "error" or c["fails"] < CONFIRM_FAILS or (last and last["status"] == "open"):
         return
     impact = (c["result"] or {}).get("impact") or ""
