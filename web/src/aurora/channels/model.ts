@@ -21,12 +21,21 @@ export type ChannelRow = {
   clientName: string | null;
   notClient: boolean;
   suggestion: Suggestion | null;
-  /** Quem já escreveu no canal (o gateway não informa o tamanho do grupo); null = ninguém ainda. */
+  /** Id do chat na plataforma (JID do grupo no WhatsApp). */
+  chat_id?: string;
+  /** Quem já escreveu no canal; null = ninguém ainda. Para participantes do grupo, veja `size`. */
   members: number | null;
+  /** Só grupos de WhatsApp: a ponte deixa as mensagens dele chegarem. */
+  listening?: boolean;
+  /** Só grupos de WhatsApp: participantes do grupo, como o WhatsApp informa. */
+  size?: number | null;
+  /** Grupo do número que nunca falou com o Hermes: ainda não existe no ops.db. */
+  discovered?: boolean;
   todayCount: number;
   last: { at: number; from: string; text: string } | null;
   lastAlert: { at: number; analysisId: number } | null;
-  window: Window;
+  /** null só nos grupos descobertos (ainda sem canal no ops.db). */
+  window: Window | null;
   problem: { code?: string; message: string; fixable?: boolean } | null;
   receivesAlerts: boolean;
   requiresConfirm: boolean;
@@ -45,6 +54,14 @@ export type ChannelPatch = {
 };
 
 const json = (method: string, body?: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+
+export type WaPolicy = "allowlist" | "open" | "pairing" | "disabled";
+export type WaGroupsInfo = { policy: WaPolicy; updatedAt: number | null; count: number };
+
+export const groupsApi = {
+  info: () => fetchJSON<WaGroupsInfo>("/api/ops/whatsapp/groups"),
+  listen: (chatId: string, on: boolean) => fetchJSON<{ chatId: string; listening: boolean }>("/api/ops/whatsapp/groups/listen", json("POST", { chatId, on })),
+};
 
 export const channelsApi = {
   list: () => fetchJSON<ChannelRow[]>("/api/ops/channels"),
@@ -80,13 +97,13 @@ export const modeBlocked = (c: ChannelRow, m: AutonomyMode): string | null =>
 // ---- seções, ordem e filtros ----
 
 export const SECTIONS: { id: Section; title: string; sub: string; icon: string }[] = [
-  { id: "group", title: "Grupos de clientes", sub: "O Hermes está em todos estes grupos.", icon: "users" },
+  { id: "group", title: "Grupos de clientes", sub: "Os marcados “Não escutado” não chegam ao Hermes.", icon: "users" },
   { id: "team", title: "Equipe", sub: "Quem recebe os avisos do Escutar e conversa com a equipe.", icon: "send" },
   { id: "direct", title: "Conversas diretas", sub: "Pessoas que escrevem no privado.", icon: "user-round" },
 ];
 
 /** Precisa de cliente: tudo que não é da equipe e ainda não tem vínculo nem foi marcado "não é cliente". */
-export const needsLink = (c: ChannelRow) => c.section !== "team" && !c.clientId && !c.notClient;
+export const needsLink = (c: ChannelRow) => c.section !== "team" && !c.discovered && !c.clientId && !c.notClient;
 
 export type Filters = { q: string; client: string; mode: AutonomyMode | "all"; unlinked: boolean; problem: boolean };
 export const NO_FILTERS: Filters = { q: "", client: "all", mode: "all", unlinked: false, problem: false };
@@ -100,16 +117,24 @@ export function applyFilters(rows: ChannelRow[], f: Filters): ChannelRow[] {
     (c) =>
       (!q || fold(c.name).includes(q)) &&
       (f.client === "all" || c.clientId === f.client) &&
-      (f.mode === "all" || c.mode === f.mode) &&
+      (f.mode === "all" || (!c.discovered && c.mode === f.mode)) &&
       (!f.unlinked || needsLink(c)) &&
       (!f.problem || !!c.problem),
   );
 }
 
-/** Dentro do cartão: sem vínculo primeiro, depois com problema, depois o resto (ordem estável). */
+/** Dentro do cartão: escutados antes dos não escutados; entre os escutados, sem vínculo, depois com problema, depois o resto (ordem estável); os não escutados por nome. */
 export function sortSection(rows: ChannelRow[]): ChannelRow[] {
   const rank = (c: ChannelRow) => (needsLink(c) ? 0 : c.problem ? 1 : 2);
-  return rows.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i).map((x) => x.c);
+  return rows
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => {
+      const ma = notListened(a.c), mb = notListened(b.c);
+      if (ma !== mb) return ma ? 1 : -1;
+      if (ma) return a.c.name.localeCompare(b.c.name, "pt-BR") || a.i - b.i;
+      return rank(a.c) - rank(b.c) || a.i - b.i;
+    })
+    .map((x) => x.c);
 }
 
 /** Clientes que têm canal vinculado (opções do filtro Cliente). */
@@ -119,7 +144,52 @@ export function linkedClients(rows: ChannelRow[]): { id: string; name: string }[
   return [...m].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 }
 
-export const modeCounts = (rows: ChannelRow[]) => MODE_INFO.map((i) => ({ ...i, count: rows.filter((c) => c.mode === i.mode).length }));
+export const modeCounts = (rows: ChannelRow[]) => MODE_INFO.map((i) => ({ ...i, count: rows.filter((c) => !c.discovered && c.listening !== false && c.mode === i.mode).length }));
+
+// ---- escuta dos grupos de WhatsApp ----
+
+/** Grupo que a ponte descarta ("Não escutado"). `listening` ausente = não é grupo de WhatsApp ou backend antigo: tratado como escutado. */
+export const notListened = (c: ChannelRow) => c.listening === false;
+
+/** Só grupos de WhatsApp têm lista de liberados. */
+export const isWaGroup = (c: ChannelRow) => c.platform === "whatsapp" && c.kind === "group";
+
+/** JID do chat (o backend manda `chat_id`; senão sai do id `plataforma:jid`). */
+export const chatIdOf = (c: ChannelRow) => c.chat_id ?? c.id.slice(c.platform.length + 1);
+
+/** O que a linha/gaveta pode oferecer. Grupo descoberto ainda não existe no ops.db: só dá para escutar. */
+export function channelActions(c: ChannelRow, canListen: boolean) {
+  const real = !c.discovered;
+  return { mode: real, link: real && c.section !== "team", window: real, participants: real && isWaGroup(c), listen: canListen && isWaGroup(c) };
+}
+
+/** "N participantes" (tamanho do grupo no WhatsApp, se vier) ou, senão, quantas pessoas já escreveram. */
+export function participantsLabel(c: ChannelRow): string {
+  if (typeof c.size === "number" && c.size > 0) return c.size === 1 ? "1 participante" : `${c.size} participantes`;
+  if (c.members) return c.members === 1 ? "1 pessoa escreveu" : `${c.members} pessoas escreveram`;
+  return "";
+}
+
+/** "há 3 min", "há 2 h", "há 4 dias" (ms de época). */
+export function agoLabel(ms: number, now = Date.now()): string {
+  const min = Math.max(0, Math.floor((now - ms) / 60000));
+  if (min < 1) return "agora há pouco";
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? "há 1 dia" : `há ${d} dias`;
+}
+
+/** Linha do topo da seção de grupos; aviso quando a política do perfil não é allowlist. */
+export function groupsSummary(info: WaGroupsInfo, rows: ChannelRow[], now = Date.now()): { text: string; warn: string | null } {
+  if (info.policy === "open") return { text: "", warn: "Todos os grupos chegam ao Hermes (sem lista)" };
+  if (info.policy !== "allowlist") return { text: "", warn: "Grupos desligados neste perfil" };
+  if (info.updatedAt == null) return { text: "A lista de grupos aparece alguns segundos depois que o WhatsApp conecta", warn: null };
+  const on = rows.filter((r) => isWaGroup(r) && r.listening).length;
+  const n = info.count;
+  return { text: `${n === 1 ? "1 grupo" : `${n} grupos`} no WhatsApp · ${on === 1 ? "1 escutado" : `${on} escutados`} · atualizado ${agoLabel(info.updatedAt, now)}`, warn: null };
+}
 
 // ---- janela de análise ----
 

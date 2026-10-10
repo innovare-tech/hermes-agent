@@ -1,5 +1,5 @@
 import path from 'path';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, statSync } from 'fs';
 
 export function normalizeWhatsAppIdentifier(value) {
   return String(value || '')
@@ -7,6 +7,32 @@ export function normalizeWhatsAppIdentifier(value) {
     .replace(/:.*@/, '@')
     .replace(/@.*/, '')
     .replace(/^\+/, '');
+}
+
+// Grupos liberados pelo painel (Canais → Escutar): ``<session>/group-allowlist.json`` (lista de JIDs),
+// relido quando muda — ativar um grupo não exige reiniciar a ponte. Existindo, o arquivo é a lista
+// inteira (o painel já semeou com o WHATSAPP_GROUP_ALLOWED_USERS); ausente, vale a env.
+export const GROUP_ALLOWLIST_FILE = 'group-allowlist.json';
+let groupFileCache = { file: '', mtimeMs: -1, set: null };
+
+export function groupAllowlist(sessionDir, envAllowed) {
+  const file = path.join(sessionDir, GROUP_ALLOWLIST_FILE);
+  let mtimeMs;
+  try {
+    mtimeMs = statSync(file).mtimeMs;
+  } catch {
+    return envAllowed;
+  }
+  if (groupFileCache.file !== file || groupFileCache.mtimeMs !== mtimeMs) {
+    try {
+      const ids = JSON.parse(readFileSync(file, 'utf8'));
+      groupFileCache = { file, mtimeMs, set: parseAllowedUsers((Array.isArray(ids) ? ids : []).join(',')) };
+    } catch {
+      // Arquivo ilegível: fica com a última lista boa; nunca abre para todos.
+      return groupFileCache.file === file && groupFileCache.set ? groupFileCache.set : new Set();
+    }
+  }
+  return groupFileCache.set;
 }
 
 export function parseAllowedUsers(rawValue) {

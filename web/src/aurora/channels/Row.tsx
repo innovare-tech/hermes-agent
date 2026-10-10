@@ -1,8 +1,7 @@
 import type { AutonomyMode } from "../adapter";
 import { Icon } from "../Icon";
-import { plural } from "../chat/sources";
 import { whenLabel } from "../live";
-import { needsLink, platformLabel, type ChannelRow } from "./model";
+import { channelActions, needsLink, notListened, participantsLabel, platformLabel, type ChannelRow } from "./model";
 import { ModeChip, ModeMenu, SuggestionBar } from "./parts";
 
 const KIND_ICON = { group: "users", team: "send", direct: "user-round" } as const;
@@ -10,8 +9,7 @@ const KIND_LABEL = { group: "Grupo", team: "Equipe", direct: "Conversa direta" }
 const PLATFORM_ICON: Record<string, string> = { whatsapp: "phone", telegram: "send" };
 
 export function channelSubtitle(c: ChannelRow): string {
-  const who = c.members ? `${plural(c.members, "pessoa escreveu", "pessoas escreveram")}` : "";
-  return [KIND_LABEL[c.section], platformLabel(c.platform), who].filter(Boolean).join(" · ");
+  return [KIND_LABEL[c.section], platformLabel(c.platform), participantsLabel(c)].filter(Boolean).join(" · ");
 }
 
 /** Avatar do tipo de canal com o selo da plataforma no canto. */
@@ -34,12 +32,15 @@ type Handlers = {
   onConfirmSuggestion: () => void;
   onChoose: () => void;
   onNotClient: () => void;
+  onListen: (on: boolean) => void;
 };
 
-export function ChannelRowView({ row, menuOpen, h }: { row: ChannelRow; menuOpen: boolean; h: Handlers }) {
+export function ChannelRowView({ row, menuOpen, canListen, busy, h }: { row: ChannelRow; menuOpen: boolean; canListen: boolean; busy: boolean; h: Handlers }) {
   const unlinked = needsLink(row);
+  const act = channelActions(row, canListen);
+  const off = notListened(row);
   return (
-    <div role="listitem" className={"au-ch-row" + (unlinked ? " unlinked" : "")} onClick={h.onOpen}>
+    <div role="listitem" className={"au-ch-row" + (unlinked ? " unlinked" : "") + (off ? " off" : "")} onClick={h.onOpen}>
       <div className="au-ch-cols">
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
           <ChannelAvatar row={row} />
@@ -55,6 +56,7 @@ export function ChannelRowView({ row, menuOpen, h }: { row: ChannelRow; menuOpen
               {row.name}
             </button>
             <span className="au-ch-clip" style={{ fontSize: 11.5, color: "var(--fg3)" }}>
+              {off && <span className="au-ch-tag au-ch-off">Não escutado</span>}
               {channelSubtitle(row)}
             </span>
             {row.problem && (
@@ -85,7 +87,9 @@ export function ChannelRowView({ row, menuOpen, h }: { row: ChannelRow; menuOpen
         </span>
 
         <div style={{ minWidth: 0 }}>
-          {row.section === "team" ? (
+          {row.discovered ? (
+            <span style={{ fontSize: 12, color: "var(--fg3)" }}>Ainda não falou com o Hermes</span>
+          ) : row.section === "team" ? (
             <span className="au-ch-tag" style={{ color: "var(--fg2)" }}>
               Equipe interna
             </span>
@@ -110,11 +114,27 @@ export function ChannelRowView({ row, menuOpen, h }: { row: ChannelRow; menuOpen
         </div>
 
         <div style={{ position: "relative", display: "flex", justifyContent: "flex-end" }}>
-          <ModeChip mode={row.mode} open={menuOpen} onClick={h.onToggleMenu} />
-          {menuOpen && <ModeMenu row={row} onPick={h.onMode} onClose={h.onCloseMenu} />}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+            {act.mode && <ModeChip mode={row.mode} open={menuOpen} onClick={h.onToggleMenu} />}
+            {act.listen && off && (
+              <button
+                className="au-outline"
+                style={{ padding: "5px 10px", fontSize: 12 }}
+                disabled={busy}
+                aria-label={`Escutar o grupo ${row.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  h.onListen(true);
+                }}
+              >
+                Escutar este grupo
+              </button>
+            )}
+          </div>
+          {act.mode && menuOpen && <ModeMenu row={row} onPick={h.onMode} onClose={h.onCloseMenu} />}
         </div>
       </div>
-      {unlinked && <SuggestionBar row={row} onConfirm={h.onConfirmSuggestion} onChoose={h.onChoose} onNotClient={h.onNotClient} />}
+      {unlinked && act.link && <SuggestionBar row={row} onConfirm={h.onConfirmSuggestion} onChoose={h.onChoose} onNotClient={h.onNotClient} />}
     </div>
   );
 }

@@ -135,9 +135,39 @@ class ChannelBody(BaseModel):
     confirm: bool = False  # exigido ao pôr um grupo em Autônomo
 
 
+def _channels_with_groups():
+    from ops_center import wa_groups
+
+    return wa_groups.with_discovery(_store().channels_view())
+
+
 @ops.get("/channels")
 async def list_channels():
-    return await _run(_store().channels_view)
+    return await _run(_channels_with_groups)
+
+
+class WhatsAppListenBody(BaseModel):
+    chatId: str
+    on: bool
+
+
+@ops.get("/whatsapp/groups")
+async def whatsapp_groups_status():
+    """Última descoberta da ponte (quantos grupos o número tem, quando) e a política de grupos do perfil."""
+    from ops_center import wa_groups
+
+    return await _run(wa_groups.discovery_status)
+
+
+@ops.post("/whatsapp/groups/listen")
+async def whatsapp_group_listen(body: WhatsAppListenBody):
+    """Libera (Escutar) ou corta um grupo na ponte do WhatsApp — sem reiniciar nada. Nunca envia ao grupo."""
+    from ops_center import wa_groups
+
+    out = await _run(wa_groups.set_listening, body.chatId, body.on)
+    name = next((c["name"] for c in await _run(_channels_with_groups) if c.get("chat_id") == body.chatId), body.chatId)
+    await _act(f"{name}: " + ("Hermes passou a escutar o grupo" if body.on else "Hermes parou de escutar o grupo"))
+    return out
 
 
 @ops.put("/channels/{cid:path}")
