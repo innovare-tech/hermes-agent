@@ -65,3 +65,15 @@ def test_limited_response_reads_gzip_body_once(monkeypatch):
     r = shared._request_limited_response("GET", "https://accounts.google.com/.well-known/openid-configuration")
     assert r.json()["issuer"] == "https://accounts.google.com"
     assert real_stream is not None
+
+
+def test_settings_feed_the_provider_end_to_end(monkeypatch):
+    """O caminho real: _settings() → construtor → login. (O frozenset das settings virava texto no construtor.)"""
+    monkeypatch.setenv("HERMES_DASHBOARD_OIDC_ISSUER", "https://accounts.google.com")
+    monkeypatch.setenv("HERMES_DASHBOARD_OIDC_CLIENT_ID", "cid")
+    monkeypatch.setenv("HERMES_DASHBOARD_OIDC_ALLOWED_EMAILS", ME)
+    monkeypatch.setattr(oidc, "_load_config_oauth_section", lambda: {})
+    p = oidc.SelfHostedOIDCProvider(**oidc._settings())
+    assert p._session("tok", "", _claims(ME)).email == ME
+    with pytest.raises(oidc.EmailNotAllowedError):
+        p._session("tok", "", _claims("outro@gmail.com"))

@@ -84,7 +84,7 @@ class EmailNotAllowedError(InvalidCodeError):
 
 def _parse_allowed_emails(raw: Any) -> frozenset:
     """``allowed_emails`` as a list (config.yaml) or comma/space-separated string (env); lower-cased."""
-    items = raw if isinstance(raw, (list, tuple)) else str(raw or "").replace(",", " ").split()
+    items = raw if isinstance(raw, (list, tuple, set, frozenset)) else str(raw or "").replace(",", " ").split()
     return frozenset(str(e).strip().lower() for e in items if str(e).strip())
 
 
@@ -301,7 +301,8 @@ class SelfHostedOIDCProvider(JwtOAuthProvider):
             # Only a verified address counts: an unverified one is a claim anyone can type.
             verified = claims.get("email_verified") in (True, "true", "True")
             if not verified or email.strip().lower() not in self._allowed_emails:
-                logger.warning("[%s] login refused: %s is not on allowed_emails", _TAG, email or "<no email>")
+                logger.warning("[%s] login refused: %s (email_verified=%s) is not an allowed, verified email",
+                               _TAG, email or "<no email>", claims.get("email_verified"))
                 raise EmailNotAllowedError("this account has no access to this dashboard")
         # Org/tenant is non-standard: accept common spellings, else join ``groups`` so
         # multi-tenant IDPs surface *something* (free-form string).
