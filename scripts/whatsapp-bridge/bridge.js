@@ -24,13 +24,13 @@ import express from 'express';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import path from 'path';
-import { mkdirSync, readFileSync, existsSync, readdirSync, unlinkSync } from 'fs';
+import { mkdirSync, readFileSync, existsSync, readdirSync, unlinkSync, writeFileSync, renameSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { randomBytes, createHash } from 'crypto';
 import { execFileSync } from 'child_process';
 import { tmpdir } from 'os';
 import qrcode from 'qrcode-terminal';
-import { matchesAllowedSender, matchesAllowedUser, matchesInboundWhatsAppGroup, parseAllowedUsers } from './allowlist.js';
+import { groupAllowlist, matchesAllowedSender, matchesAllowedUser, matchesInboundWhatsAppGroup, parseAllowedUsers } from './allowlist.js';
 import { createOutboundIdTracker } from './outbound_ids.js';
 import { classifyOwnerMessageGate } from './owner_message_gate.js';
 import {
@@ -95,6 +95,34 @@ const SEND_READ_RECEIPTS =
 
 const PORT = parseInt(getArg('port', '3000'), 10);
 const SESSION_DIR = getArg('session', path.join(process.env.HOME || '~', '.hermes', 'whatsapp', 'session'));
+
+// Descoberta: todos os grupos em que o número está (id, nome, tamanho) em ``<session>/groups.json``.
+// O painel lista em Canais e liberar um grupo grava o group-allowlist.json (ver allowlist.js).
+// Só metadados — nenhuma mensagem de grupo não liberado chega ao Hermes.
+const GROUPS_FILE = path.join(SESSION_DIR, 'groups.json');
+const GROUPS_REFRESH_MS = 15 * 60 * 1000;
+let groupsTimer = null;
+function scheduleGroupsRefresh(delayMs) {
+  if (groupsTimer) clearTimeout(groupsTimer);
+  groupsTimer = setTimeout(refreshGroups, delayMs);
+}
+async function refreshGroups() {
+  groupsTimer = null;
+  try {
+    if (!sock || connectionState !== 'connected') return;
+    const all = await sock.groupFetchAllParticipating();
+    const groups = Object.values(all || {}).map((g) => ({
+      id: g.id, subject: g.subject || '', size: Array.isArray(g.participants) ? g.participants.length : (g.size || null),
+    }));
+    const tmp = `${GROUPS_FILE}.tmp`;
+    writeFileSync(tmp, JSON.stringify({ updatedAt: Date.now(), groups }));
+    renameSync(tmp, GROUPS_FILE);
+  } catch (err) {
+    console.warn(`[groups] refresh failed: ${err?.message || err}`);
+  } finally {
+    scheduleGroupsRefresh(GROUPS_REFRESH_MS);
+  }
+}
 // Cache directories: the Python gateway passes the profile-aware paths via
 // env (HERMES_HOME-aware, new cache/ layout).  Fall back to the legacy
 // hardcoded locations for bridges launched outside the gateway.
@@ -410,6 +438,10 @@ async function startSocket() {
   });
 
   sock.ev.on('creds.update', () => { saveCreds(); lidToPhone = buildLidMap(); });
+  // Grupos do número mudaram (entrou/saiu, nome, participantes): atualiza o groups.json do painel.
+  for (const evt of ['groups.upsert', 'groups.update', 'group-participants.update']) {
+    sock.ev.on(evt, () => scheduleGroupsRefresh(5000));
+  }
 
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -456,6 +488,7 @@ async function startSocket() {
           }
         : null;
       emitPairEvent({ event: 'connected', user: connectedUser });
+      if (!PAIR_ONLY) scheduleGroupsRefresh(3000);
       if (!PAIR_JSON) {
         console.log('✅ WhatsApp connected!');
       }
@@ -647,7 +680,7 @@ async function startSocket() {
           ? matchesInboundWhatsAppGroup({
               chatId,
               groupPolicy: WHATSAPP_GROUP_POLICY,
-              groupAllowedUsers: GROUP_ALLOWED_USERS,
+              groupAllowedUsers: groupAllowlist(SESSION_DIR, GROUP_ALLOWED_USERS),
               sessionDir: SESSION_DIR,
             })
           : WHATSAPP_DM_POLICY === 'pairing'
