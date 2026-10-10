@@ -45,6 +45,10 @@ CATALOG: list[dict] = [
     {"key": "trace_routing", "label": "Por que foi para esse setor", "plans": ["pro"], "weight": 3},
     {"key": "audit_operator", "label": "Auditar atendente", "plans": ["pro"], "weight": 5},
     {"key": "team_quality", "label": "Qualidade da equipe", "plans": ["pro"], "weight": 5},
+    {"key": "waiting_now", "label": "Fila agora", "plans": ["starter", "pro"], "weight": 2},
+    {"key": "stuck_services", "label": "Atendimentos presos", "plans": ["pro"], "weight": 3},
+    {"key": "transfers", "label": "Transferências", "plans": ["pro"], "weight": 3},
+    {"key": "ai_overlap", "label": "IA x humano", "plans": ["pro"], "weight": 3},
     {"key": "dead_letters", "label": "Mensagens que não entraram", "plans": ["pro"], "weight": 3},
     {"key": "describe_domain", "label": "Mapa dos dados", "plans": ["pro"], "weight": 1},
     {"key": "query", "label": "Consulta livre", "plans": ["pro"], "weight": 1},
@@ -91,8 +95,12 @@ def _db(path: Optional[Path] = None) -> Iterator[Any]:
 
 # ---- configuração (perfil administrador) ----
 
+# Modelo do Copiloto: o mais forte do provedor do administrador (qualidade > custo; o cliente paga pela
+# máquina que investiga de verdade). Mesmo provedor/chave do perfil administrador; só o nome do modelo muda.
+EFFORTS = ("low", "medium", "high", "xhigh")
 DEFAULT_SETTINGS = {"mcpUrl": "http://127.0.0.1:3170/mcp", "secretEnv": "COPILOT_MCP_JWT_SECRET",
-                    "plans": {k: {"credits": v["credits"]} for k, v in PLANS.items()}}
+                    "plans": {k: {"credits": v["credits"]} for k, v in PLANS.items()},
+                    "model": "gemini-3.1-pro-preview", "reasoningEffort": "high"}
 
 
 def settings() -> dict:
@@ -108,6 +116,15 @@ def save_settings(patch: dict) -> dict:
         if not re.match(r"https?://", url):
             raise ValueError("o endereço do MCP precisa começar com http:// ou https://")
         cur["mcpUrl"] = url
+    if "model" in patch:
+        model = str(patch["model"] or "").strip()
+        if not re.match(r"^[\w.:/-]{2,80}$", model):
+            raise ValueError("modelo inválido")
+        cur["model"] = model
+    if "reasoningEffort" in patch:
+        if patch["reasoningEffort"] not in EFFORTS:
+            raise ValueError("esforço inválido")
+        cur["reasoningEffort"] = patch["reasoningEffort"]
     if isinstance(patch.get("plans"), dict):
         plans = cur.get("plans") or {}
         for k, v in patch["plans"].items():
@@ -116,6 +133,8 @@ def save_settings(patch: dict) -> dict:
         cur["plans"] = plans
     store.set_meta("copilot_settings", cur)
     out = settings()
+    if "model" in patch or "reasoningEffort" in patch:  # vale já para todos os clientes
+        refresh_souls()
     if isinstance(patch.get("plans"), dict):  # a cota mora no perfil de cada cliente (a API checa lá)
         with _db() as c:
             rows = [dict(r) for r in c.execute("SELECT profile_id, plan FROM copilot_clients")]
@@ -234,9 +253,15 @@ aconteceu nos atendimentos: canais, conversas, roteamento, atendentes e mensagen
 ## Como investigar
 - Vá fundo: cruze atendimentos, mensagens, contatos, departamentos e pesquisas de satisfação até ter evidência.
   Uma pergunta boa merece várias consultas; prefira medir a supor, e cite atendimentos concretos (horário, contato).
-- Comece pelas ferramentas prontas — channel_metrics (visão geral), team_quality (comparar atendentes),
-  audit_operator (um atendente, com os piores casos), timeline (um atendimento), search_conversations (texto) —
-  e use query/aggregate para o resto. Antes de montar uma consulta livre, consulte describe_domain
+- Comece pelas ferramentas prontas, que já respondem as dúvidas mais comuns em uma chamada:
+  waiting_now (quem está esperando resposta agora), stuck_services (atendimentos presos ou que ninguém vê:
+  sem atendente, canal x departamento fora do habitual, esperando há muito), transfers (transferências e se o
+  destino respondeu — "transferi e não chegou"), ai_overlap (IA x atendente: intromissão ou mensagens cruzadas),
+  channel_metrics (visão geral), team_quality (comparar atendentes), audit_operator (um atendente e seus piores
+  casos), timeline (um atendimento), search_conversations (texto), my_channels_status, dead_letters.
+  Use query/aggregate para o que elas não cobrem.
+- Reclamação vaga ("as mensagens estão sumindo", "a IA se meteu", "ninguém respondeu") é para investigar com
+  dados, sem defender a plataforma nem culpar a equipe: mostre o que aconteceu, com casos, e o que fazer. Antes de montar uma consulta livre, consulte describe_domain
   (visão geral; `collection` para os campos; `recipe` para pipelines prontos e testados).
 - Se uma consulta falhar, leia o erro, corrija e tente de novo; se vier vazia, confira campos e datas antes de concluir.
 
@@ -265,6 +290,17 @@ Responda em português do Brasil, direto e com números/horários quando houver.
 """
 
 
+def _apply_model(cfg: dict, st: dict) -> None:
+    """Modelo e esforço do Copiloto sobre o provedor herdado do administrador. ``st`` = settings() lido no perfil
+    administrador ANTES de entrar no do cliente (lá dentro o ops.db é o do cliente)."""
+    model = cfg.get("model")
+    if isinstance(model, dict):
+        model["default"] = st["model"]
+    else:
+        cfg["model"] = {"default": st["model"]}
+    cfg.setdefault("agent", {})["reasoning_effort"] = st["reasoningEffort"]
+
+
 def _eager_tools(cfg: dict) -> None:
     """Só ~10 ferramentas: todas direto no prompt, sem a ponte tool_search/tool_describe (3 idas a mais por pergunta)."""
     cfg.setdefault("tools", {}).setdefault("tool_search", {})["enabled"] = "off"
@@ -276,6 +312,7 @@ def refresh_souls() -> list[str]:
     from hermes_cli.config import read_raw_config, save_config
     from hermes_constants import get_hermes_home
 
+    st = settings()
     with _db() as c:
         rows = [dict(r) for r in c.execute("SELECT profile_id, name, plan FROM copilot_clients")]
     done = []
@@ -284,6 +321,7 @@ def refresh_souls() -> list[str]:
             (get_hermes_home() / "SOUL.md").write_text(SOUL.format(name=r["name"]), encoding="utf-8")
             cfg = read_raw_config() or {}
             _eager_tools(cfg)
+            _apply_model(cfg, st)
             mcp = (cfg.get("mcp_servers") or {}).get(MCP_SERVER)
             if isinstance(mcp, dict):  # ferramenta nova no catálogo chega aos clientes já criados
                 mcp.setdefault("tools", {})["include"] = tools_for(r["plan"])
@@ -296,10 +334,12 @@ def _write_client_profile(pid: str, name: str, sid: str, plan: str, api_key: str
                           model_cfg: dict, provider_env: dict, mcp_url: str, credits: int) -> None:
     from hermes_cli.config import read_raw_config, save_config, save_env_value
 
+    st = settings()
     with _in_profile(pid):
         cfg = read_raw_config() or {}
         if model_cfg:
             cfg["model"] = model_cfg
+        _apply_model(cfg, st)
         cfg.setdefault("platform_toolsets", {})["api_server"] = [MCP_SERVER]
         _eager_tools(cfg)
         agent = cfg.setdefault("agent", {})
