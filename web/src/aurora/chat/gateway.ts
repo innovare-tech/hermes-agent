@@ -71,8 +71,12 @@ const fmtDur = (s?: number | null) => (s == null ? "" : s.toFixed(1).replace("."
 const text = (v: unknown) => (typeof v === "string" ? v : v == null ? "" : JSON.stringify(v, null, 2));
 const argsPreview = (args?: Record<string, unknown> | null) => (args ? Object.values(args).map(text).join(" ").slice(0, 200) : "");
 
-/** Prévia do passo em português ("echo a + 2 commands" → "echo a + 2 comandos"). */
-export const ptPreview = (t: string) => t.replace(/\+ ?(\d+) commands?\b/g, (_m, n: string) => `+ ${n} ${n === "1" ? "comando" : "comandos"}`);
+/** Prévia do passo em português ("echo a + 2 commands" → "echo a + 2 comandos"); o backend é compartilhado com terminal/desktop e manda em inglês. */
+export const ptPreview = (t: string) =>
+  t
+    .replace(/\+ ?(\d+) commands?\b/g, (_m, n: string) => `+ ${n} ${n === "1" ? "comando" : "comandos"}`)
+    .replace(/^Reading tool details(?: · (\d+) tools?)?$/, (_m, n?: string) => (n ? `${n} ${n === "1" ? "ferramenta" : "ferramentas"}` : "Detalhes de ferramentas"))
+    .replace(/^Searching tools(?: · (.*))?$/, (_m, q?: string) => (q ? `Buscando ferramentas · ${q}` : "Buscando ferramentas"));
 
 /** Saída de ferramenta legível: JSON {output, error, exit_code} vira o texto + o erro; outro JSON, formatado. */
 export function toolOutput(raw: unknown): string {

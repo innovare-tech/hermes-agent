@@ -87,6 +87,9 @@ describe("formatação", async () => {
   it("prévia do passo em português", () => {
     expect(ptPreview("echo um + 2 commands")).toBe("echo um + 2 comandos");
     expect(ptPreview("ls + 1 command")).toBe("ls + 1 comando");
+    expect(ptPreview("Reading tool details · 2 tools")).toBe("2 ferramentas");
+    expect(ptPreview("Reading tool details · 1 tool")).toBe("1 ferramenta");
+    expect(ptPreview("Searching tools · métricas")).toBe("Buscando ferramentas · métricas");
   });
 
   it("saída de terminal legível; JSON qualquer formatado", () => {
