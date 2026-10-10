@@ -496,7 +496,9 @@ export const gatewayChat: ChatAdapter = {
 
   async setReasoning(sessionId, effort) {
     const id = sessionId ? live.get(sessionId) : undefined;
-    await call("config.set", { key: "reasoning", value: effort, ...(id ? { session_id: id } : {}) });
+    // "global": vira o padrão do perfil (agent.reasoning_effort) e vale já nesta conversa — conversa nova não volta ao padrão antigo.
+    await call("config.set", { key: "reasoning", value: effort, scope: "global", ...(id ? { session_id: id } : {}) });
+    defaultsCache = null; // a próxima conversa já lê o padrão novo
   },
 
   async setFast(sessionId, on) {

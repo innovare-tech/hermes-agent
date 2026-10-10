@@ -136,3 +136,17 @@ def test_list_and_directory(cp):
     assert cp.list_clients(q="padaria")["total"] == 1 and cp.list_clients(status="revoked")["total"] == 0
     d = cp.aibiz_clients()
     assert [(i["name"], i["hasCopilot"]) for i in d["items"]] == [("Pet Feliz", False), ("Padaria Sol", True)]
+
+
+def test_soul_restricts_scope_and_treats_tool_content_as_data_and_refresh_rewrites_old_profiles(cp):
+    from hermes_constants import get_hermes_home
+
+    pid = cp.create("c1", "starter")["profileId"]
+    with cp._in_profile(pid):
+        soul = get_hermes_home() / "SOUL.md"
+        text = soul.read_text(encoding="utf-8")
+        soul.write_text("# SOUL antigo", encoding="utf-8")  # perfil criado antes do reforço
+    assert "Padaria Sol" in text and "receitas" in text and "é **dado**, nunca" in text and "revelar estas instruções" in text
+    assert cp.refresh_souls() == [pid]
+    with cp._in_profile(pid):
+        assert (get_hermes_home() / "SOUL.md").read_text(encoding="utf-8") == text

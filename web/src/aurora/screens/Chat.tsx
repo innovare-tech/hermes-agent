@@ -387,7 +387,7 @@ export function Chat() {
       const id = await ensureSession();
       await chat.setReasoning(id, effort);
       setInfo((i) => ({ ...i, effort }));
-      toast(`Esforço de raciocínio: ${EFFORT_PT[effort] ?? effort}`, "Vale para esta conversa.");
+      toast(`Esforço de raciocínio: ${EFFORT_PT[effort] ?? effort}`, "Fica como padrão deste perfil, nesta e nas próximas conversas.");
     } catch (e) {
       toast(errText(e, "Não consegui mudar o esforço de raciocínio"));
     }
