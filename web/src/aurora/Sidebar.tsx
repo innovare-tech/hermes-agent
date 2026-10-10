@@ -9,6 +9,7 @@ import { healthCount } from "./health/model";
 import "./health/health.css";
 import { refreshModelsHealth, useModelsProblem } from "./models/health";
 import { isListenSession } from "./chat/sources";
+import { keyDescription, keyName } from "./ops/ApiKeysEditor";
 import { ProfileSwitcher } from "./ProfileSwitcher";
 import type { Session } from "./adapter";
 import { ask, inBiz, loadSessions, setPrefs, setState, toast, useStore, type State } from "./store";
@@ -254,7 +255,7 @@ export function Sidebar() {
           <Icon name="key-round" size={15} color="var(--fg3)" />
           <div style={{ display: "flex", flexDirection: "column", minWidth: 0, gap: 1 }}>
             <span style={{ fontSize: 12, fontWeight: 500 }}>Chaves deste perfil</span>
-            <span title={s.keys.join(" · ")} style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.keys.length ? s.keys.join(" · ") : "Nenhuma chave ainda"}</span>
+            <span title={s.keys.map((k) => `${keyName(k)} — ${keyDescription(k)}`).join("\n")} style={{ fontFamily: "var(--fm)", fontSize: 10.5, color: "var(--fg3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.keys.length ? s.keys.map(keyName).join(" · ") : "Nenhuma chave ainda"}</span>
           </div>
         </NavLink>
         <button className="au-theme" title="Alternar tema" aria-label="Alternar tema" onClick={() => setPrefs({ theme: s.theme === "dark" ? "light" : "dark" })}>

@@ -19,3 +19,18 @@ export function hitParts(text: string, term: string): Part[] {
   }
   return out;
 }
+
+const MESES: Record<string, string> = { Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06", Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12" };
+
+/** Título de agendamento termina em "Oct 09 11:56" (data em inglês do backend): vira "09/10 11:56". */
+export const cronTitle = (title: string) => title.replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2}) (\d{2}:\d{2})$/, (_, m: string, d: string, h: string) => `${d.padStart(2, "0")}/${MESES[m]} ${h}`);
+
+/** Prévia sem as instruções de sistema ("[IMPORTANT: …]" do agendamento, "[SYSTEM …]") que o backend põe na frente do prompt.
+ *  Bloco sem fechamento (prévia cortada) conta como instrução inteira. Sobrou nada: "Execução agendada". */
+export function previewText(raw: string): string {
+  const BLOCK = /^\[(?:IMPORTANT|SYSTEM)[\s\S]*?\](?=\s*(?:\n|$))\s*/i;
+  let t = raw.trim();
+  if (!/^\[(?:IMPORTANT|SYSTEM)/i.test(t)) return raw;
+  while (/^\[(?:IMPORTANT|SYSTEM)/i.test(t)) t = BLOCK.test(t) ? t.replace(BLOCK, "") : "";
+  return t || "Execução agendada";
+}

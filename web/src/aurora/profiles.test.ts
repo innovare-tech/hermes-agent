@@ -71,7 +71,7 @@ describe("trocar de perfil", () => {
     await done;
     expect(getState().inbox).toEqual([{ id: "da-aibiz" }]);
     expect(getState().switching).toBe(false);
-    expect(getState().keys).toEqual(["OpenRouter"]);
+    expect(getState().keys).toEqual(["OPENROUTER_API_KEY"]);
   });
 
   it("trocar para o perfil que já está em uso, ou que não existe, não faz nada", async () => {

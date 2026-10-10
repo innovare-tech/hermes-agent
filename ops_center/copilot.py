@@ -230,6 +230,11 @@ aconteceu nos atendimentos: canais, conversas, roteamento, atendentes e mensagen
 - Você não altera nada: não envia mensagens, não muda configurações, não fecha atendimentos.
 - Se uma ferramenta não estiver no plano, explique o que ela faria e que está disponível no plano Pro.
 
+## Horários
+- As ferramentas devolvem datas em UTC. Sempre converta para o horário de Brasília (America/Sao_Paulo,
+  UTC−3) ao mostrar, e use esse fuso para "hoje", "ontem", "esta semana" (ex.: ontem = 00:00–23:59 de
+  Brasília, ou seja, 03:00 de ontem até 02:59 de hoje em UTC ao montar a consulta).
+
 Responda em português do Brasil, direto e com números/horários quando houver.
 """
 
@@ -487,15 +492,21 @@ def record_tool(tool_name: str, args: Any, result: Any, duration_ms: int, sessio
             pass
     code = (payload.get("code") if isinstance(payload, dict) else None) or ("error" if isinstance(payload, dict) and payload.get("error") else "ok")
     ok = code == "ok"
+    # Fora da API (Conversa do painel no perfil do cliente) é a equipe testando: aparece como tal e não
+    # gasta crédito do cliente.
+    from gateway.session_context import get_session_env
+
+    panel = get_session_env("HERMES_SESSION_PLATFORM", "") != "api_server"
+    asked_by = json.dumps({"name": "Equipe", "role": "teste", "via": "Painel"}) if panel else None
     with _db() as c:
-        c.execute("INSERT INTO copilot_audit(at, session_id, tool, args, query, rows, ms, result, error, credits) "
-                  "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        c.execute("INSERT INTO copilot_audit(at, session_id, tool, args, query, rows, ms, result, error, credits, asked_by) "
+                  "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                   (time.time(), session_id, key, json.dumps(args, ensure_ascii=False, default=str)[:4000],
                    json.dumps(payload.get("query"), ensure_ascii=False, default=str)[:6000] if ok and isinstance(payload, dict) else None,
                    int(payload.get("rows") or 0) if isinstance(payload, dict) else 0,
                    int(payload.get("ms") or duration_ms or 0) if isinstance(payload, dict) else duration_ms,
                    code, (payload.get("error") if isinstance(payload, dict) else None),
-                   WEIGHT.get(key, 1) if ok else 0))
+                   WEIGHT.get(key, 1) if ok and not panel else 0, asked_by))
 
 
 def record_turn(profile: str, usage: dict, session_id: Optional[str], question: str, asked_by: str = "") -> None:

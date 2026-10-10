@@ -105,7 +105,9 @@ def test_revoke_cuts_access_and_reactivate(cp):
     assert back["client"]["status"] == "active" and _client_env(cp, pid)["API_SERVER_KEY"] == back["apiKey"]
 
 
-def test_quota_audit_and_usage(cp):
+def test_quota_audit_and_usage(cp, monkeypatch):
+    monkeypatch.setattr("gateway.session_context.get_session_env",
+                        lambda name, default="": "api_server" if name == "HERMES_SESSION_PLATFORM" else default)
     pid = cp.create("c1", "starter")["profileId"]
     cp.save_settings({"plans": {"starter": {"credits": 10}}})
     with cp._in_profile(pid):
@@ -150,3 +152,15 @@ def test_soul_restricts_scope_and_treats_tool_content_as_data_and_refresh_rewrit
     assert cp.refresh_souls() == [pid]
     with cp._in_profile(pid):
         assert (get_hermes_home() / "SOUL.md").read_text(encoding="utf-8") == text
+
+
+def test_panel_test_of_a_copilot_is_labelled_and_free(cp, monkeypatch):
+    """Conversa do painel no perfil do cliente = equipe testando: não é "Gestor · API" nem gasta crédito."""
+    monkeypatch.setattr("gateway.session_context.get_session_env", lambda name, default="": "")
+    pid = cp.create("c1", "starter")["profileId"]
+    with cp._in_profile(pid):
+        ok = json.dumps({"data": [], "rows": 1, "ms": 5, "query": {"collection": "customer_services"}})
+        cp.record_tool("mcp__aibiz_ops__timeline", {"customerServiceId": "x"}, ok, 9, "p1")
+        assert cp.month_usage()["credits"] == 0
+    item = cp.audit("c1")["items"][0]
+    assert item["credits"] == 0 and item["askedBy"] == {"name": "Equipe", "role": "teste", "via": "Painel"}

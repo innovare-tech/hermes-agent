@@ -1,7 +1,7 @@
 // Conversa real: JSON-RPC do tui_gateway via /api/ws (mesmo cliente do ChatSidebar).
 import type { RpcMethods, SessionLiveInfo, TranscriptMessage, Usage } from "@hermes/shared";
 import { api, getManagementProfile } from "@/lib/api";
-import { normalizeEffort } from "@/lib/reasoning-effort";
+import { VALID_EFFORTS } from "@/lib/reasoning-effort";
 import { ask } from "../store";
 import { GatewayClient } from "@/lib/gatewayClient";
 import type { Session } from "../adapter";
@@ -9,11 +9,12 @@ import { fileToDataUrl } from "./attachments";
 import { classifyError, failedTurnError, isErrorText, isFailedTurnText, stripFailedTurn } from "./errors";
 import { ptConfirm } from "./commandOutput";
 import { applyExtras, loadExtras } from "./persist";
+import { cronTitle, previewText } from "./snippet";
 import { shortWhen, sourceIcon, sourceLabel } from "./sources";
 import { buildSlashMenu } from "./slashMenu";
 import { mergeStat } from "./turn";
 import { summarizeArgs } from "./toolLabels";
-import { summarizeOutput, toolDenied } from "./toolSummary";
+import { summarizeOutput, toolDenied, toolPending } from "./toolSummary";
 import type { AgentMessage, ApprovalChoice, ChatAdapter, ChatMessage, ModelSwitch, SendOpts, SessionInfo, SessionUsage, SlashResult, StepStatus, ToolStep, TurnStat, TurnSummary } from "./types";
 
 let gw: GatewayClient | null = null;
@@ -98,9 +99,9 @@ export function toolFailed(raw: unknown): boolean {
   }
 }
 
-/** Desfecho do passo: negado por você (não rodou), erro da ferramenta ou ok — e o resumo da saída. */
+/** Desfecho do passo: negado por você (não rodou), aguardando aprovação (não rodou ainda), erro da ferramenta ou ok — e o resumo da saída. */
 export function stepResult(name: string, raw: unknown): Pick<ToolStep, "status" | "summary"> {
-  const status: StepStatus = toolDenied(raw) ? "denied" : toolFailed(raw) ? "err" : "ok";
+  const status: StepStatus = toolDenied(raw) ? "denied" : toolPending(raw) ? "pending" : toolFailed(raw) ? "err" : "ok";
   return { status, summary: status === "ok" ? summarizeOutput(name, raw) : undefined };
 }
 
@@ -262,7 +263,13 @@ function group(startedAt?: number | null): Session["group"] {
   return days < 1 ? "Hoje" : days < 2 ? "Ontem" : days < 7 ? "Esta semana" : "Mais antigas";
 }
 
-let defaultsCache: { key: string; at: number; p: Promise<Record<string, unknown> | null> } | null = null;
+/** Esforço padrão do perfil (`agent.reasoning_effort`): valor válido, ou "" quando o perfil não define — o menu mostra "padrão". */
+export function defaultEffort(raw: unknown): string {
+  const v = String(raw ?? "").trim().toLowerCase();
+  return VALID_EFFORTS.has(v) ? v : "";
+}
+
+let defaultsCache: { key: string; at: number; p: Promise<Record<string, unknown>> } | null = null;
 
 const msgOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -306,13 +313,13 @@ export const gatewayChat: ChatAdapter = {
       const recent = group(s.started_at);
       return {
         id: s.id,
-        title: s.title || s.preview || "Sem título",
+        title: cronTitle(s.title || previewText(s.preview ?? "") || "Sem título"),
         source: sourceLabel(s.source),
         icon: sourceIcon(s.source),
         when: !when ? "" : recent === "Hoje" || recent === "Ontem" ? when.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : shortWhen(s.started_at),
         group: recent,
         msgs: s.message_count ?? 0,
-        snippet: s.preview ?? "",
+        snippet: previewText(s.preview ?? ""),
       };
     });
   },
@@ -514,10 +521,16 @@ export const gatewayChat: ChatAdapter = {
 
   async defaults() {
     // A tela pede ao montar e de novo quando o histórico chega: uma leitura só a cada poucos segundos.
-    if (!defaultsCache || defaultsCache.key !== (profile() ?? "") || Date.now() - defaultsCache.at > 8000) defaultsCache = { key: profile() ?? "", at: Date.now(), p: api.getConfig(profile()).catch(() => null) };
-    const cfg = await defaultsCache.p;
+    if (!defaultsCache || defaultsCache.key !== (profile() ?? "") || Date.now() - defaultsCache.at > 8000) defaultsCache = { key: profile() ?? "", at: Date.now(), p: api.getConfig(profile()) };
+    let cfg: Record<string, unknown> | null;
+    try {
+      cfg = await defaultsCache.p;
+    } catch (e) {
+      defaultsCache = null; // falha não fica em cache: quem chamou tenta de novo
+      throw e;
+    }
     const sh = (cfg?.display as Record<string, unknown> | undefined)?.show_reasoning;
-    return { effort: normalizeEffort(((cfg?.agent as Record<string, unknown> | undefined) ?? {}).reasoning_effort), showReasoning: typeof sh === "boolean" ? sh : null };
+    return { effort: defaultEffort(((cfg?.agent as Record<string, unknown> | undefined) ?? {}).reasoning_effort), showReasoning: typeof sh === "boolean" ? sh : null };
   },
 
   async info(sessionId) {

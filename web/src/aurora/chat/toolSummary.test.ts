@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeOutput, toolDenied } from "./toolSummary";
+import { summarizeOutput, toolDenied, toolPending } from "./toolSummary";
 
 describe("summarizeOutput", () => {
   it("search_files com lista de arquivos vira '102 arquivos encontrados', lista recolhida", () => {
@@ -60,5 +60,16 @@ describe("terminal com saída em texto (não JSON)", () => {
   });
   it("outras ferramentas com texto puro continuam sem resumo", () => {
     expect(summarizeOutput("read_file", "texto puro")).toBeUndefined();
+  });
+});
+
+describe("toolPending", () => {
+  it("escrita esperando aprovação não é 'feita' nem erro", () => {
+    expect(toolPending("Pedi aprovação no Telegram (pedido #12) para: escrever arquivo. Expira em 15 min.")).toBe(true);
+    expect(toolPending('{"error":"Pedi aprova\\u00e7\\u00e3o no Telegram (pedido #3)"}')).toBe(true);
+    expect(toolPending('{"approved":false,"status":"pending_approval","approval_pending":true}')).toBe(true);
+    expect(toolPending('{"status":"approval_required","message":"Asking the user for approval."}')).toBe(true);
+    expect(toolPending('{"bytes_written":12}')).toBe(false);
+    expect(toolPending("BLOCKED: User denied this command.")).toBe(false);
   });
 });

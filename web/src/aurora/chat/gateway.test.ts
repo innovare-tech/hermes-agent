@@ -186,6 +186,8 @@ describe("transcrição (recarregar /chat/<id>)", async () => {
     expect(denied.status).toBe("denied");
     expect(stepResult("search_files", '{"total_count":2,"files":["a","b"]}')).toMatchObject({ status: "ok", summary: { line: "2 arquivos encontrados" } });
     expect(stepResult("terminal", '{"error":"falhou"}').status).toBe("err");
+    expect(stepResult("write_file", "Pedi aprovação no Telegram (pedido #7) para: escrever arquivo.").status).toBe("pending");
+    expect(stepResult("write_file", '{"error":"Pedi aprovação no Telegram (pedido #7)"}').status).toBe("pending");
     const [, a] = fromTranscript([{ role: "user", text: "x", row_id: 1 }, { role: "tool", name: "execute_code", tool_call_id: "t", args: { code: "a\nb" }, content: "BLOCKED: User denied this command." }, { role: "assistant", text: "ok", row_id: 3 }] as never, {});
     expect((a as { steps: { status: string }[] }).steps[0].status).toBe("denied");
   });
@@ -286,5 +288,27 @@ describe("message.complete com turn_summary", () => {
     expect((await run({ status: "interrupted", turn_summary: { ...summary, status: "interrupted", tokens: { total: 800 } } })).at(-1)).toMatchObject({ type: "interrupted", stat: { tokens: 800, cost: 0.02 } });
     // backend antigo, sem resumo: continua com a conta local
     expect((await run({ status: "complete", text: "oi" })).at(-1)).toMatchObject({ type: "done" });
+  });
+});
+
+describe("esforço padrão do perfil", () => {
+  it("sem valor (ou inválido) vira \"\" — o menu mostra \"padrão\", nunca \"…\"", async () => {
+    const { defaultEffort } = await import("./gateway");
+    for (const raw of [undefined, null, "", "  ", "turbo", 42]) expect(defaultEffort(raw)).toBe("");
+    expect(defaultEffort(" HIGH ")).toBe("high");
+  });
+
+  it("leitura que falha não fica em cache (a tela tenta de novo) e perfil sem valor volta \"\"", async () => {
+    const { api } = (await import("@/lib/api")) as unknown as { api: Record<string, unknown> };
+    api.getConfig = vi.fn().mockRejectedValueOnce(new Error("fora do ar")).mockResolvedValue({ agent: {}, display: { show_reasoning: true } });
+    await expect(gatewayChat.defaults()).rejects.toThrow("fora do ar");
+    await expect(gatewayChat.defaults()).resolves.toEqual({ effort: "", showReasoning: true });
+  });
+
+  it("sem sessão, setReasoning grava o padrão do perfil sem session_id", async () => {
+    fake.calls.length = 0;
+    await gatewayChat.setReasoning(null, "high");
+    const p = fake.calls.find(([m]) => m === "config.set")![1];
+    expect(p).toEqual({ key: "reasoning", value: "high", scope: "global" });
   });
 });

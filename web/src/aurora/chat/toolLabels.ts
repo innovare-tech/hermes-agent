@@ -32,6 +32,21 @@ const LABELS: Record<string, [string, string]> = {
   clarify: ["Perguntando a você", "Pergunta"],
   send_message: ["Enviando mensagem", "Mensagem enviada"],
   computer_use: ["Usando o computador", "Computador usado"],
+  tool_describe: ["Consultando detalhes da ferramenta", "Detalhes da ferramenta consultados"],
+};
+
+/** Ferramentas MCP do Copiloto (servidor `aibiz_ops`): uma só frase, rodando ou pronta. */
+const AIBIZ_OPS: Record<string, string> = {
+  my_channels_status: "Status dos canais",
+  channel_metrics: "Métricas dos canais",
+  search_conversations: "Buscar conversas",
+  timeline: "Linha do tempo do atendimento",
+  trace_routing: "Rastrear roteamento",
+  audit_operator: "Atividade do atendente",
+  dead_letters: "Mensagens que não entraram",
+  describe_domain: "Descrever dados disponíveis",
+  query: "Consulta",
+  aggregate: "Análise de dados",
 };
 
 const BROWSER = /^browser_/;
@@ -42,9 +57,17 @@ const humanize = (n: string) => {
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : "Ferramenta";
 };
 
+/** `mcp__servidor__ferramenta` (o servidor pode ter `_`): [servidor, ferramenta]. O `mcp_servidor_ferramenta` antigo cai no humanize. */
+const MCP = /^mcp__(.+?)__(.+)$/;
+const AIBIZ_OPS_NAME = /^mcp_{1,2}aibiz_ops_{1,2}(.+)$/;
+
 export function toolLabel(name: string, running = false): string {
   const l = LABELS[name];
   if (l) return l[running ? 0 : 1];
+  const ops = AIBIZ_OPS_NAME.exec(name);
+  if (ops && AIBIZ_OPS[ops[1]]) return AIBIZ_OPS[ops[1]];
+  const mcp = MCP.exec(name);
+  if (mcp) return `${humanize(mcp[2])} (via ${mcp[1].replace(/_+/g, " ")})`;
   if (BROWSER.test(name)) return running ? "Usando o navegador" : "Navegador";
   return humanize(name);
 }
