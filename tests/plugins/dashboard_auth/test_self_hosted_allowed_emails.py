@@ -77,3 +77,25 @@ def test_settings_feed_the_provider_end_to_end(monkeypatch):
     assert p._session("tok", "", _claims(ME)).email == ME
     with pytest.raises(oidc.EmailNotAllowedError):
         p._session("tok", "", _claims("outro@gmail.com"))
+
+
+def test_google_login_asks_offline_access_so_the_session_outlives_the_1h_id_token(monkeypatch):
+    """Sem access_type=offline o Google não manda refresh token: a sessão do painel caía em ~1h."""
+    import urllib.parse
+
+    p = _provider([ME])
+    monkeypatch.setattr(p, "_get_discovery", lambda: {"authorization_endpoint": "https://accounts.google.com/o/oauth2/v2/auth"})
+    q = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(p.start_login(redirect_uri="https://agent.innv.dev/auth/callback").redirect_url).query))
+    assert q["access_type"] == "offline" and q["prompt"] == "consent"
+    assert q["code_challenge_method"] == "S256" and q["client_id"] == "cid"
+
+
+def test_auth_params_never_override_pkce_core_and_other_idps_get_none(monkeypatch):
+    import urllib.parse
+
+    p = oidc.SelfHostedOIDCProvider(issuer="https://auth.example.com", client_id="cid",
+                                    auth_params={"state": "x", "foo": "bar"})
+    monkeypatch.setattr(p, "_get_discovery", lambda: {"authorization_endpoint": "https://auth.example.com/authorize"})
+    q = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(p.start_login(redirect_uri="https://agent.innv.dev/auth/callback").redirect_url).query))
+    assert q["foo"] == "bar" and q["state"] != "x"
+    assert oidc.SelfHostedOIDCProvider(issuer="https://auth.example.com", client_id="cid")._auth_params == {}

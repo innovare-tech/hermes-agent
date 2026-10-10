@@ -101,6 +101,7 @@ class SelfHostedOIDCProvider(JwtOAuthProvider):
     def __init__(
         self, *, issuer: str, client_id: str, scopes: str = _DEFAULT_SCOPES, client_secret: str = "",
         id_token_leeway: float = DEFAULT_TOKEN_LEEWAY_SECONDS, allowed_emails: Any = (),
+        auth_params: Optional[Dict[str, str]] = None,
     ) -> None:
         if not issuer:
             raise ValueError("issuer is required")
@@ -121,6 +122,11 @@ class SelfHostedOIDCProvider(JwtOAuthProvider):
         # Empty ⇒ any account the IDP authenticates (upstream behaviour). A public IDP such as
         # Google authenticates EVERY Google account, so a public dashboard must set this.
         self._allowed_emails = _parse_allowed_emails(allowed_emails)
+        # Google only issues a refresh token for access_type=offline (prompt=consent makes it re-issue one
+        # for an account that already consented). Without it the session died with the 1h ID token.
+        google = urllib.parse.urlparse(self._issuer).hostname == "accounts.google.com"
+        self._auth_params = dict(auth_params) if auth_params is not None else (
+            {"access_type": "offline", "prompt": "consent"} if google else {})
         # Discovery + JWKS resolve lazily so registration never hits the network
         # (the IDP may be down at boot; fail per-request instead).
         self._discovery: Dict[str, Any] | None = None
@@ -133,7 +139,8 @@ class SelfHostedOIDCProvider(JwtOAuthProvider):
         validate_redirect_uri(redirect_uri)
         disco = self._get_discovery()
         return pkce_login_start(
-            disco["authorization_endpoint"], client_id=self._client_id, scope=self._scopes, redirect_uri=redirect_uri)
+            disco["authorization_endpoint"], client_id=self._client_id, scope=self._scopes, redirect_uri=redirect_uri,
+            extra_params=self._auth_params)
 
     def revoke_session(self, *, refresh_token: str) -> None:
         # Best-effort RFC 7009 revocation when the IDP advertises an endpoint.
@@ -347,6 +354,9 @@ def _settings() -> dict:
         # Clock-skew tolerance for ID-token exp/nbf/iat (config.yaml only; default 60s, 0 = strict).
         "id_token_leeway": parse_leeway(oidc_cfg.get("id_token_leeway")),
         # Who may log in (comma-separated env, or a list in config.yaml). Empty ⇒ anyone the IDP accepts.
+        # Extra authorize-URL params, e.g. "access_type=offline&prompt=consent" (Google gets these by default).
+        "auth_params": (dict(urllib.parse.parse_qsl(raw)) if (raw := setting("HERMES_DASHBOARD_OIDC_AUTH_PARAMS", "auth_params"))
+                        else None),
         "allowed_emails": _parse_allowed_emails(
             resolve_env_or_cfg("HERMES_DASHBOARD_OIDC_ALLOWED_EMAILS", None) or oidc_cfg.get("allowed_emails"))}
 
