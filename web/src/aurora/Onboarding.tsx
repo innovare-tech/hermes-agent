@@ -178,7 +178,7 @@ export function Onboarding() {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step]);  
 
   if (step < 0) return null;
   const close = () => {
