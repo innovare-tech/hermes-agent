@@ -21,6 +21,7 @@ const TOOL_ICON: Record<string, string> = {
   timeline: "history",
   trace_routing: "git-branch",
   audit_operator: "user-round",
+  team_quality: "users",
   dead_letters: "inbox",
   describe_domain: "database",
   query: "code-xml",

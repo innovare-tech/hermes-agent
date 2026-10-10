@@ -46,6 +46,7 @@ def test_create_isolated_profile(cp):
     assert pid == "cli-padaria-sol" and out["apiKey"].startswith("hcp_")
     cfg = _client_cfg(cp, pid)
     assert cfg["platform_toolsets"]["api_server"] == ["aibiz_ops"]
+    assert cfg["tools"]["tool_search"]["enabled"] == "off"  # ferramentas direto, sem a ponte de descoberta
     assert {"terminal", "file", "code_execution", "web", "delegation", "cronjob"} <= set(cfg["agent"]["disabled_toolsets"])
     mcp = cfg["mcp_servers"]["aibiz_ops"]
     assert mcp["trust"] == "untrusted" and mcp["headers"]["Authorization"] == "Bearer ${AIBIZ_MCP_TOKEN}"
@@ -164,3 +165,22 @@ def test_panel_test_of_a_copilot_is_labelled_and_free(cp, monkeypatch):
         assert cp.month_usage()["credits"] == 0
     item = cp.audit("c1")["items"][0]
     assert item["credits"] == 0 and item["askedBy"] == {"name": "Equipe", "role": "teste", "via": "Painel"}
+
+
+def test_soul_teaches_the_database_and_refresh_reapplies_plan_tools(cp):
+    from hermes_cli.config import read_raw_config, save_config
+    from hermes_constants import get_hermes_home
+
+    pid = cp.create("c1", "pro")["profileId"]
+    with cp._in_profile(pid):
+        soul = (get_hermes_home() / "SOUL.md").read_text(encoding="utf-8")
+        cfg = read_raw_config()
+        cfg["mcp_servers"]["aibiz_ops"]["tools"]["include"] = ["timeline"]  # perfil criado antes da ferramenta nova
+        cfg.setdefault("tools", {}).setdefault("tool_search", {})["enabled"] = "auto"
+        save_config(cfg)
+    assert 'attendantName "system"' in soul and "describe_domain" in soul and "haveResponse" in soul
+    cp.refresh_souls()
+    with cp._in_profile(pid):
+        cfg = read_raw_config()
+    assert "team_quality" in cfg["mcp_servers"]["aibiz_ops"]["tools"]["include"]
+    assert cfg["tools"]["tool_search"]["enabled"] == "off"

@@ -48,6 +48,7 @@ const AIBIZ_OPS: Record<string, string> = {
   timeline: "Linha do tempo do atendimento",
   trace_routing: "Rastrear roteamento",
   audit_operator: "Atividade do atendente",
+  team_quality: "Qualidade da equipe",
   dead_letters: "Mensagens que não entraram",
   describe_domain: "Descrever dados disponíveis",
   query: "Consulta",
