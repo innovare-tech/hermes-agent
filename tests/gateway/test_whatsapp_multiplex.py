@@ -255,3 +255,22 @@ def test_port_is_free_true_while_previous_bridge_connections_linger_in_time_wait
     cli.close()
     srv.close()
     assert port_is_free(port) is True
+
+
+def test_python_gate_follows_panel_group_allowlist_like_the_bridge(tmp_path):
+    """Grupo liberado no painel passava na ponte e era descartado aqui (só a env era lida)."""
+    import json as _json
+
+    adapter = WhatsAppAdapter.__new__(WhatsAppAdapter)
+    adapter._session_path = tmp_path
+    adapter._group_policy = "allowlist"
+    adapter._group_allow_from = ["120363000000000001@g.us"]  # env antiga
+    g1, g2 = "120363000000000001@g.us", "120363000000000002@g.us"
+    assert adapter._is_group_allowed(g1) is True and adapter._is_group_allowed(g2) is False  # sem arquivo: env
+    (tmp_path / "group-allowlist.json").write_text(_json.dumps([g2]))
+    assert adapter._is_group_allowed(g2) is True and adapter._is_group_allowed(g1) is False  # arquivo manda
+    (tmp_path / "group-allowlist.json").write_text("{quebrado")
+    os.utime(tmp_path / "group-allowlist.json", ns=(1, 1))
+    assert adapter._is_group_allowed(g2) is True  # ilegível: última lista boa
+    adapter._group_policy = "pairing"
+    assert adapter._is_group_allowed(g2) is False

@@ -2,6 +2,7 @@
 client; messages are polled over a local HTTP API and responses are posted back through it."""
 
 import asyncio
+import json
 import logging
 import mimetypes
 import os
@@ -921,6 +922,35 @@ class WhatsAppAdapter(WhatsAppBehaviorMixin, BasePlatformAdapter):
         if bridge_exit:
             print(f"[{self.name}] {bridge_exit}")
         return bool(bridge_exit)
+
+    def _panel_group_allowlist(self) -> Optional[set]:
+        """Grupos liberados pelo painel (``<session>/group-allowlist.json``, ops_center/wa_groups.py), relido
+        quando muda; ``None`` = sem arquivo (vale a env). A ponte usa o MESMO arquivo — se só ela lesse, grupo
+        liberado passava na ponte e morria aqui em silêncio."""
+        session = getattr(self, "_session_path", None)
+        if session is None:
+            return None
+        path = Path(session) / "group-allowlist.json"
+        try:
+            mtime = path.stat().st_mtime_ns
+        except OSError:
+            return None
+        cached = getattr(self, "_panel_groups_cache", None)
+        if cached is None or cached[0] != mtime:
+            try:
+                ids = json.loads(path.read_text(encoding="utf-8"))
+                groups = {str(i).split("@", 1)[0] for i in ids} if isinstance(ids, list) else set()
+            except (OSError, ValueError):
+                groups = cached[1] if cached else set()  # ilegível: última lista boa; nunca abre para todos
+            self._panel_groups_cache = cached = (mtime, groups)
+        return cached[1]
+
+    def _is_group_allowed(self, chat_id: str, sender_id: str = "") -> bool:
+        if self._group_policy == "allowlist":
+            panel = self._panel_group_allowlist()
+            if panel is not None:
+                return str(chat_id or "").split("@", 1)[0] in panel
+        return super()._is_group_allowed(chat_id, sender_id)
 
     async def _poll_messages(self) -> None:
         while self._running:
