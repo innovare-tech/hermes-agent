@@ -16,6 +16,9 @@ import { teamApi, type TeamMember } from "../channels/team";
 import {
   applyFilters,
   channelsApi,
+  chatIdOf,
+  groupsApi,
+  groupsSummary,
   filtersActive,
   linkedClients,
   modeCounts,
@@ -27,10 +30,11 @@ import {
   type ChannelPatch,
   type ChannelRow,
   type Filters,
+  type WaGroupsInfo,
 } from "../channels/model";
 import "../channels/channels.css";
 import { fetchJSON } from "@/lib/api";
-import { setState, toast } from "../store";
+import { ask, setState, toast } from "../store";
 
 const errMsg = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 type Pair = { silenceMin: number; maxMin: number };
@@ -38,13 +42,14 @@ type Load = "loading" | "ok" | "error";
 
 /** O que desfaz uma troca de vínculo (volta a vincular, a "não é cliente" ou a sem vínculo). */
 const relinkPatch = (c: ChannelRow): ChannelPatch => (c.notClient ? { notClient: true } : c.clientId ? { clientId: c.clientId } : { clientId: null, notClient: false });
-const windowPatch = (c: ChannelRow): ChannelPatch => ({ window: c.window.useDefault ? null : { silenceMin: c.window.silenceMin, maxMin: c.window.maxMin } });
+const windowPatch = (c: ChannelRow): ChannelPatch => ({ window: !c.window || c.window.useDefault ? null : { silenceMin: c.window.silenceMin, maxMin: c.window.maxMin } });
 
 export function Channels() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<ChannelRow[]>([]);
   const [load, setLoad] = useState<Load>("loading");
   const [def, setDef] = useState<Pair | null>(null);
+  const [wa, setWa] = useState<WaGroupsInfo | null>(null);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [open, setOpen] = useState<string | null>(null); // gaveta
   const [menu, setMenu] = useState<string | null>(null); // menu de modo aberto (id do canal)
@@ -63,9 +68,10 @@ export function Channels() {
   const reload = useCallback(async (silent = false) => {
     if (!silent) setLoad("loading");
     try {
-      const [list, d] = await Promise.all([channelsApi.list(), channelsApi.defaultWindow().catch(() => null)]);
+      const [list, d, g] = await Promise.all([channelsApi.list(), channelsApi.defaultWindow().catch(() => null), groupsApi.info().catch(() => null)]);
       setRows(list);
       if (d) setDef(d);
+      setWa(g);
       setLoad("ok");
     } catch {
       if (!silent) setLoad("error"); // atualização em segundo plano que falha não derruba o que já está na tela
@@ -156,6 +162,21 @@ export function Channels() {
     });
   };
 
+  /** Libera ou corta o grupo na ponte do WhatsApp. Cortar pede confirmação; o histórico fica. */
+  const listen = async (row: ChannelRow, on: boolean) => {
+    if (!on && !(await ask({ title: `Parar de escutar “${row.name}”?`, body: "O Hermes deixa de ler as mensagens deste grupo. O histórico fica.", confirm: "Parar de escutar", danger: true }))) return;
+    setBusy(true);
+    try {
+      await groupsApi.listen(chatIdOf(row), on);
+      toast(on ? `Hermes passou a escutar ${row.name}` : `Hermes parou de escutar ${row.name}`);
+      await reload(true);
+    } catch (e) {
+      toast(errMsg(e, on ? "Não consegui liberar o grupo" : "Não consegui cortar o grupo"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handlers = (row: ChannelRow) => ({
     onOpen: () => {
       setMenu(null);
@@ -167,15 +188,18 @@ export function Channels() {
     onConfirmSuggestion: () => confirmSuggestion(row),
     onChoose: () => setPicker(row.id),
     onNotClient: () => notClient(row),
+    onListen: (on: boolean) => listen(row, on),
   });
 
   const visible = useMemo(() => applyFilters(rows, filters), [rows, filters]);
   const unlinkedCount = rows.filter(needsLink).length;
   const problemCount = rows.filter((r) => r.problem).length;
-  const usingDefault = rows.filter((r) => r.window.useDefault && (r.mode === 1 || r.mode === 3)).length;
+  const usingDefault = rows.filter((r) => r.window?.useDefault && (r.mode === 1 || r.mode === 3)).length;
   const clients = useMemo(() => linkedClients(rows), [rows]);
   const set = (p: Partial<Filters>) => setFilters((f) => ({ ...f, ...p }));
   const active = filtersActive(filters);
+  const canListen = wa?.policy === "allowlist";
+  const waSummary = wa && rows.some((r) => r.platform === "whatsapp" && r.kind === "group") ? groupsSummary(wa, rows) : null;
 
   return (
     <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
@@ -290,6 +314,12 @@ export function Channels() {
                       <span style={{ fontFamily: "var(--fm)", fontSize: 11.5, color: "var(--fg3)" }}>{list.length}</span>
                       <span style={{ fontSize: 12.5, color: "var(--fg3)", marginLeft: 6 }}>{sec.sub}</span>
                     </div>
+                    {sec.id === "group" && waSummary && (waSummary.text || waSummary.warn) && (
+                      <p role="status" style={{ margin: 0, padding: "0 16px 12px", display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: waSummary.warn ? "var(--warn)" : "var(--fg2)" }}>
+                        <Icon name={waSummary.warn ? "triangle-alert" : "phone"} size={13} />
+                        {waSummary.warn ?? waSummary.text}
+                      </p>
+                    )}
                     <div className="au-ch-cols au-ch-head au-label" aria-hidden="true">
                       <span>Canal</span>
                       <span>Última mensagem</span>
@@ -299,7 +329,7 @@ export function Channels() {
                     </div>
                     <div role="list">
                       {list.map((row) => (
-                        <ChannelRowView key={row.id} row={row} menuOpen={menu === row.id} h={handlers(row)} />
+                        <ChannelRowView key={row.id} row={row} menuOpen={menu === row.id} canListen={canListen} busy={busy} h={handlers(row)} />
                       ))}
                     </div>
                   </section>
@@ -315,6 +345,7 @@ export function Channels() {
           row={drawerRow}
           def={def}
           busy={busy}
+          canListen={canListen}
           onTeamChanged={loadTeam}
           onClose={() => setOpen(null)}
           actions={{
@@ -324,6 +355,7 @@ export function Channels() {
             onNotClient: () => notClient(drawerRow),
             onUnlink: () => unlink(drawerRow),
             onSaveWindow: (w) => saveWindow(drawerRow, w),
+            onListen: (on) => listen(drawerRow, on),
           }}
         />
       )}

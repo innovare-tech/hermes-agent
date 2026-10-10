@@ -4,7 +4,7 @@ import { Icon } from "../Icon";
 import { plural } from "../chat/sources";
 import { whenLabel } from "../live";
 import { channelSubtitle, ChannelAvatar } from "./Row";
-import { windowAppliesNote, type ChannelRow } from "./model";
+import { channelActions, notListened, windowAppliesNote, type ChannelRow } from "./model";
 import { ModeSegment, SuggestionBar, useEscape } from "./parts";
 import { Participants } from "./Participants";
 import { ChannelWindow } from "./Window";
@@ -17,6 +17,7 @@ export type DrawerActions = {
   onNotClient: () => void;
   onUnlink: () => void;
   onSaveWindow: (patch: { useDefault: true } | Pair) => Promise<void>;
+  onListen: (on: boolean) => void;
 };
 
 function Sec({ title, children }: { title: string; children: ReactNode }) {
@@ -34,10 +35,12 @@ const when = (ts: number) => {
 };
 
 /** Gaveta de detalhes (460 px, à direita): problema, modo, cliente, janela de análise e atividade. */
-export function ChannelDrawer({ row, def, busy, actions, onTeamChanged, onClose }: { row: ChannelRow; def: Pair | null; busy: boolean; actions: DrawerActions; onTeamChanged: () => void; onClose: () => void }) {
+export function ChannelDrawer({ row, def, busy, canListen, actions, onTeamChanged, onClose }: { row: ChannelRow; def: Pair | null; busy: boolean; canListen: boolean; actions: DrawerActions; onTeamChanged: () => void; onClose: () => void }) {
   useEscape(onClose);
   const note = windowAppliesNote(row.mode);
   const isTeam = row.section === "team";
+  const act = channelActions(row, canListen);
+  const off = notListened(row);
   return (
     <>
       <div aria-hidden="true" style={{ position: "absolute", inset: 0, zIndex: 59 }} onMouseDown={onClose} />
@@ -67,10 +70,33 @@ export function ChannelDrawer({ row, def, busy, actions, onTeamChanged, onClose 
             </Sec>
           )}
 
+          {act.listen && (
+            <Sec title="Escuta do grupo">
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: "var(--fg2)" }}>
+                {off ? "Não escutado: o Hermes não recebe as mensagens deste grupo." : "O Hermes recebe e lê as mensagens deste grupo."}
+                {row.discovered && " Este grupo ainda não falou com o Hermes; ao escutar, ele passa a aparecer como canal em Escutar."}
+              </p>
+              <div>
+                {off ? (
+                  <button className="au-primary" disabled={busy} onClick={() => actions.onListen(true)}>
+                    Escutar este grupo
+                  </button>
+                ) : (
+                  <button className="au-outline danger" disabled={busy} onClick={() => actions.onListen(false)}>
+                    Parar de escutar
+                  </button>
+                )}
+              </div>
+            </Sec>
+          )}
+
+          {act.mode && (
           <Sec title="Modo">
             <ModeSegment row={row} onPick={actions.onMode} />
           </Sec>
+          )}
 
+          {act.link || isTeam ? (
           <Sec title="Cliente vinculado">
             {isTeam ? (
               <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: "var(--fg2)" }}>{row.receivesAlerts ? "Este canal recebe os avisos do Escutar. Canal da equipe: não tem cliente." : "Canal da equipe: não tem cliente."}</p>
@@ -103,18 +129,22 @@ export function ChannelDrawer({ row, def, busy, actions, onTeamChanged, onClose 
             )}
             {!isTeam && <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.45, color: "var(--fg3)" }}>systemClientId é o código do cliente no sistema da empresa.</p>}
           </Sec>
+          ) : null}
 
+          {act.window && row.window && (
           <Sec title="Janela de análise">
             {note ? <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: "var(--fg2)" }}>{note}</p> : <ChannelWindow key={`${row.id}:${row.window.useDefault}:${row.window.silenceMin}:${row.window.maxMin}`} window={row.window} def={def} onSave={actions.onSaveWindow} />}
             {row.mode === 1 && <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.45, color: "var(--fg3)" }}>Hoje só o Escutar analisa em lote; no Rascunhar a janela fica guardada para quando isso for ligado.</p>}
           </Sec>
+          )}
 
-          {row.platform === "whatsapp" && row.section === "group" && (
+          {act.participants && (
             <Sec title="Participantes">
               <Participants key={row.id} channelId={row.id} onTeamChanged={onTeamChanged} />
             </Sec>
           )}
 
+          {!row.discovered && (
           <Sec title="Atividade">
             <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "auto minmax(0,1fr)", gap: "8px 16px", fontSize: 13 }}>
               <dt style={{ color: "var(--fg3)" }}>Última mensagem</dt>
@@ -135,6 +165,7 @@ export function ChannelDrawer({ row, def, busy, actions, onTeamChanged, onClose 
               <dd style={{ margin: 0 }}>{plural(row.todayCount, "mensagem", "mensagens")}</dd>
             </dl>
           </Sec>
+          )}
         </div>
       </aside>
     </>

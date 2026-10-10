@@ -1,11 +1,13 @@
 /* Tela Canais (A2). Usa só os tokens do Aurora; o acento (--acc) segue a cor do perfil. */
-.au-ch-cols{display:grid;grid-template-columns:minmax(0,2.3fr) minmax(0,2fr) 52px minmax(0,1.6fr) 132px;gap:14px;align-items:center}
+.au-ch-cols{display:grid;grid-template-columns:minmax(0,2.3fr) minmax(0,2fr) 52px minmax(0,1.6fr) 156px;gap:14px;align-items:center}
 .au-ch-head{padding:10px 16px;border-bottom:1px solid var(--line)}
 .au-ch-row{position:relative;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .2s}
 .au-ch-row:last-child{border-bottom:0}
 .au-ch-row:hover{background:var(--panel2)}
 .au-ch-row.unlinked{background:color-mix(in srgb,var(--warn) 5%,transparent)}
 .au-ch-row.unlinked:hover{background:color-mix(in srgb,var(--warn) 9%,var(--panel2))}
+.au-ch-row.off .au-ch-cols>:not(:last-child){opacity:.6}
+.au-ch-off{margin-right:6px;padding:1px 7px;color:var(--fg2);font-family:inherit;font-size:10.5px}
 .au-ch-name{border:0;background:transparent;padding:0;color:var(--fg);font-size:13.5px;font-weight:500;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .au-ch-name:hover{text-decoration:underline}
 .au-ch-clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -40,3 +42,4 @@
 .au-ch-pick:hover{background:var(--panel2)}
 .au-ch-pick[aria-selected="true"]{border-color:var(--acc);background:var(--accSoft)}
 @media (prefers-reduced-motion:reduce){.au-ch-skel{animation:none}.au-ch-drawer{animation:none}}
+
