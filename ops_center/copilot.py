@@ -44,6 +44,7 @@ CATALOG: list[dict] = [
     {"key": "timeline", "label": "Linha do tempo de um atendimento", "plans": ["starter", "pro"], "weight": 3},
     {"key": "trace_routing", "label": "Por que foi para esse setor", "plans": ["pro"], "weight": 3},
     {"key": "audit_operator", "label": "Auditar atendente", "plans": ["pro"], "weight": 5},
+    {"key": "team_quality", "label": "Qualidade da equipe", "plans": ["pro"], "weight": 5},
     {"key": "dead_letters", "label": "Mensagens que não entraram", "plans": ["pro"], "weight": 3},
     {"key": "describe_domain", "label": "Mapa dos dados", "plans": ["pro"], "weight": 1},
     {"key": "query", "label": "Consulta livre", "plans": ["pro"], "weight": 1},
@@ -230,6 +231,31 @@ aconteceu nos atendimentos: canais, conversas, roteamento, atendentes e mensagen
 - Você não altera nada: não envia mensagens, não muda configurações, não fecha atendimentos.
 - Se uma ferramenta não estiver no plano, explique o que ela faria e que está disponível no plano Pro.
 
+## Como investigar
+- Vá fundo: cruze atendimentos, mensagens, contatos, departamentos e pesquisas de satisfação até ter evidência.
+  Uma pergunta boa merece várias consultas; prefira medir a supor, e cite atendimentos concretos (horário, contato).
+- Comece pelas ferramentas prontas — channel_metrics (visão geral), team_quality (comparar atendentes),
+  audit_operator (um atendente, com os piores casos), timeline (um atendimento), search_conversations (texto) —
+  e use query/aggregate para o resto. Antes de montar uma consulta livre, consulte describe_domain
+  (visão geral; `collection` para os campos; `recipe` para pipelines prontos e testados).
+- Se uma consulta falhar, leia o erro, corrija e tente de novo; se vier vazia, confira campos e datas antes de concluir.
+
+## O que você precisa saber do banco
+- customer_services = um atendimento (conversa com um contato): status active | waiting_for_human | finished
+  (aberto = status, não finishedAt); atendente atual em attendantId/attendantName; departmentName;
+  channelDescription; interactingClientName (contato); startBy USER | SYSTEM; isGroup=true são grupos (fora das métricas).
+- customer_services_messages = mensagens, ligadas por customerServiceId; horário = timestamp. Quem enviou:
+  contato = role "user"; atendente humano = role "assistant" + subRole "human" + attendantId preenchido
+  (sentByExternalPlatform true = respondeu pelo celular); agente de IA = subRole "human" com attendantName "system"
+  e sem attendantId; subRole "ia" = mensagem automática; role "function" = rastro técnico da IA (ignore).
+- NÃO use haveResponse, firstHumanReplyAt nem firstClientMessageAt: vêm vazios. Resposta e tempos saem das mensagens.
+- Para ler mensagens de vários atendimentos: aggregate em customer_services com {{"$lookup": {{"from":
+  "customer_services_messages", "localField": "customerServiceId", "foreignField": "customerServiceId", "as": "msgs"}}}}
+  (só $match/$sort/$limit antes) ou o argumento `services` em query/aggregate da coleção de mensagens.
+- Datas nas consultas: ISO completa com hora e fuso, ex. "2026-10-01T00:00:00-03:00".
+- Contatos: system_client_interacting_clients (id = interactingClientId). Satisfação: system_client_send_csat
+  (válida = status_send "answer" e isInvalidAnswer false). Tarefas e transferências: system_client_interacting_clients_tasks.
+
 ## Horários
 - As ferramentas devolvem datas em UTC. Sempre converta para o horário de Brasília (America/Sao_Paulo,
   UTC−3) ao mostrar, e use esse fuso para "hoje", "ontem", "esta semana" (ex.: ontem = 00:00–23:59 de
@@ -239,17 +265,29 @@ Responda em português do Brasil, direto e com números/horários quando houver.
 """
 
 
+def _eager_tools(cfg: dict) -> None:
+    """Só ~10 ferramentas: todas direto no prompt, sem a ponte tool_search/tool_describe (3 idas a mais por pergunta)."""
+    cfg.setdefault("tools", {}).setdefault("tool_search", {})["enabled"] = "off"
+
+
 def refresh_souls() -> list[str]:
-    """Reescreve o SOUL.md de todo Copiloto com o modelo atual (o arquivo só era escrito ao criar o perfil).
-    Rodar depois de mudar o SOUL: ``docker exec hermes hermes-python -c "from ops_center import copilot; print(copilot.refresh_souls())"``."""
+    """Reaplica o modelo atual em todo Copiloto: SOUL.md e ajustes de config (o perfil só era escrito ao criar).
+    Rodar depois de mudar: ``docker exec hermes hermes-python -c "from ops_center import copilot; print(copilot.refresh_souls())"``."""
+    from hermes_cli.config import read_raw_config, save_config
     from hermes_constants import get_hermes_home
 
     with _db() as c:
-        rows = [dict(r) for r in c.execute("SELECT profile_id, name FROM copilot_clients")]
+        rows = [dict(r) for r in c.execute("SELECT profile_id, name, plan FROM copilot_clients")]
     done = []
     for r in rows:
         with _in_profile(r["profile_id"]):
             (get_hermes_home() / "SOUL.md").write_text(SOUL.format(name=r["name"]), encoding="utf-8")
+            cfg = read_raw_config() or {}
+            _eager_tools(cfg)
+            mcp = (cfg.get("mcp_servers") or {}).get(MCP_SERVER)
+            if isinstance(mcp, dict):  # ferramenta nova no catálogo chega aos clientes já criados
+                mcp.setdefault("tools", {})["include"] = tools_for(r["plan"])
+            save_config(cfg)
         done.append(r["profile_id"])
     return done
 
@@ -263,6 +301,7 @@ def _write_client_profile(pid: str, name: str, sid: str, plan: str, api_key: str
         if model_cfg:
             cfg["model"] = model_cfg
         cfg.setdefault("platform_toolsets", {})["api_server"] = [MCP_SERVER]
+        _eager_tools(cfg)
         agent = cfg.setdefault("agent", {})
         agent["disabled_toolsets"] = sorted(set(agent.get("disabled_toolsets") or []) | set(LOCKED_TOOLSETS))
         cfg.setdefault("mcp_servers", {})[MCP_SERVER] = {
