@@ -1,0 +1,10 @@
+name: operacao
+version: 1.0.0
+description: "Operação (Central do Hermes): grupos de clientes, mensagens (histórico completo pelo Mongo da Aibiz), análises, incidentes e Saúde — só leitura. Desligado em perfis de cliente do Copiloto (cli-*)."
+author: Innovare
+kind: backend
+provides_tools:
+  - ops_groups
+  - ops_group_messages
+  - ops_analyses
+  - ops_incidents
