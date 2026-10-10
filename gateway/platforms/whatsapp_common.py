@@ -286,6 +286,26 @@ class WhatsAppBehaviorMixin(OwnAccessPolicyMixin):
         return result
 
 
+def _sync_bridge_mirror(src: Path, dst: Path) -> None:
+    """Bring a HERMES_HOME mirror up to date with the install tree. Without this the mirror kept the
+    bridge.js of the FIRST install forever and every image upgrade ran stale bridge code in Docker.
+    Only differing files are copied; node_modules (installed in the mirror) is left alone — a changed
+    package.json is picked up by the adapter's dependency hash stamp."""
+    import shutil
+    try:
+        for f in src.rglob("*"):
+            rel = f.relative_to(src)
+            if not f.is_file() or "node_modules" in rel.parts or f.name == ".write_test":
+                continue
+            target = dst / rel
+            if target.is_file() and target.stat().st_size == f.stat().st_size and target.read_bytes() == f.read_bytes():
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, target)
+    except OSError:
+        logger.warning("WhatsApp bridge mirror sync failed (%s -> %s); running the existing copy", src, dst, exc_info=True)
+
+
 def resolve_whatsapp_bridge_dir() -> Path:
     """Bridge directory for CLI and adapter. A read-only install tree (e.g. Docker
     /opt/hermes) is mirrored to HERMES_HOME so npm install works."""
@@ -300,6 +320,7 @@ def resolve_whatsapp_bridge_dir() -> Path:
     except OSError:
         pass
     if hermes_home_bridge.exists():
+        _sync_bridge_mirror(install_bridge, hermes_home_bridge)
         return hermes_home_bridge
     try:
         hermes_home_bridge.parent.mkdir(parents=True, exist_ok=True)
