@@ -94,3 +94,11 @@ def test_prompt_guide_only_where_the_central_exists_and_never_for_copilot_client
     assert "ops_group_messages" in operacao._guide({"profile_name": "aibiz"})
     assert operacao._guide({"profile_name": "cli-padaria-sol"}) == ""
     assert len(operacao.GUIDE) < 1500
+
+
+def test_epoch_reads_baileys_long_and_ignores_garbage():
+    assert t._epoch(1791600000) == 1791600000
+    assert t._epoch("1791600000") == 1791600000
+    assert t._epoch({"low": 1791600000, "high": 0, "unsigned": True}) == 1791600000
+    assert t._epoch(1791600000123) == 1791600000.123
+    assert t._epoch(None) is None and t._epoch({"x": 1}) is None and t._epoch(5) is None
