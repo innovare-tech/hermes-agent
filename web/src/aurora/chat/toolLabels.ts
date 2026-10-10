@@ -33,6 +33,11 @@ const LABELS: Record<string, [string, string]> = {
   send_message: ["Enviando mensagem", "Mensagem enviada"],
   computer_use: ["Usando o computador", "Computador usado"],
   tool_describe: ["Consultando detalhes da ferramenta", "Detalhes da ferramenta consultados"],
+  // Plugin operacao (Central do Hermes)
+  ops_groups: ["Consultando os grupos", "Grupos consultados"],
+  ops_group_messages: ["Lendo as mensagens do grupo", "Mensagens do grupo lidas"],
+  ops_analyses: ["Consultando as análises", "Análises consultadas"],
+  ops_incidents: ["Consultando a Saúde", "Saúde consultada"],
 };
 
 /** Ferramentas MCP do Copiloto (servidor `aibiz_ops`): uma só frase, rodando ou pronta. */

@@ -59,7 +59,7 @@ REVOKED_KEEP_DAYS = 30
 # Tudo que dá poder fora do MCP fica desligado no perfil do cliente (o API Server oferece terminal por padrão).
 LOCKED_TOOLSETS = ["terminal", "file", "code_execution", "browser", "web", "delegation", "cronjob", "skills",
                    "image_gen", "video_gen", "tts", "computer_use", "kanban", "connections", "x_search", "spotify",
-                   "discord", "discord_admin", "yuanbao", "vision", "video", "todo"]
+                   "discord", "discord_admin", "yuanbao", "vision", "video", "todo", "operacao"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS copilot_clients (
