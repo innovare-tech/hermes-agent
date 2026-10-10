@@ -152,6 +152,18 @@ def _wa_text(msg: dict) -> Optional[str]:
     return None
 
 
+def _epoch(v: Any) -> Optional[float]:
+    """``messageTimestamp`` do Baileys: segundos como número, string ou Long serializado ``{low, high}``.
+    (Histórico importado chega com createdAt da importação — usar só ele embaralha a ordem e a data.)"""
+    if isinstance(v, dict) and "low" in v:
+        v = (int(v.get("high") or 0) << 32) + (int(v["low"]) & 0xFFFFFFFF)
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f / 1000 if f > 1e12 else (f if f > 1e9 else None)
+
+
 def _from_aibiz(jid: str, since: float, until: float) -> Optional[list[dict]]:
     """Histórico da plataforma Aibiz; ``None`` se o Mongo não estiver configurado/alcançável."""
     from agent.secret_scope import get_secret_str
@@ -173,12 +185,11 @@ def _from_aibiz(jid: str, since: float, until: float) -> Optional[list[dict]]:
         text = _wa_text(payload.get("message") or {})
         if text is None:
             continue
-        ts = payload.get("messageTimestamp")
-        ts = float(ts) if isinstance(ts, (int, float)) else d["createdAt"].replace(tzinfo=dt.timezone.utc).timestamp()
+        ts = _epoch(payload.get("messageTimestamp")) or d["createdAt"].replace(tzinfo=dt.timezone.utc).timestamp()
         who = "Suporte (número da Aibiz)" if key.get("fromMe") else (d.get("pushName") or payload.get("pushName")
                                                                     or str((payload.get("key") or {}).get("participant") or "?"))
         out.append({"id": mid, "ts": ts, "de": who, "texto": text})
-    return out
+    return sorted(out, key=lambda m: m["ts"])
 
 
 def _from_inbox(channel_id: str, since: float, until: float) -> list[dict]:
