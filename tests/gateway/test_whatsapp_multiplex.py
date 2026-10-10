@@ -223,3 +223,35 @@ async def test_launch_startup_and_standalone_send_agree_after_role_change(tmp_pa
     monkeypatch.setattr(default_like, "_preflight", lambda: False)
     await default_like.connect()
     assert default_like._bridge_port == 3000 == standalone_bridge_port(fresh, None)  # no record: unchanged
+
+
+def test_port_is_free_false_for_live_listener():
+    import socket
+
+    from plugins.platforms.whatsapp.bridge_ownership import port_is_free
+
+    with socket.socket() as srv:
+        srv.bind(("127.0.0.1", 0))
+        srv.listen()
+        assert port_is_free(srv.getsockname()[1]) is False
+
+
+@pytest.mark.skipif(os.name == "nt", reason="TIME_WAIT/SO_REUSEADDR semantics are POSIX")
+def test_port_is_free_true_while_previous_bridge_connections_linger_in_time_wait():
+    """Deploy/restart: the old bridge closed its listener but its connections sit in TIME_WAIT —
+    nobody owns the port, so it must not read as taken (that made WhatsApp fatal after each deploy)."""
+    import socket
+
+    from plugins.platforms.whatsapp.bridge_ownership import port_is_free
+
+    srv = socket.socket()
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen()
+    port = srv.getsockname()[1]
+    cli = socket.create_connection(("127.0.0.1", port))
+    conn, _ = srv.accept()
+    conn.close()  # server side closes first → TIME_WAIT on the bridge's port
+    cli.close()
+    srv.close()
+    assert port_is_free(port) is True

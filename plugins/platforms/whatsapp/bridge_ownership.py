@@ -1,4 +1,5 @@
 """Non-destructive bridge allocation for multiplexed secondary profiles."""
+import os
 import socket
 from contextlib import suppress
 from pathlib import Path
@@ -11,6 +12,12 @@ SECONDARY_PORT_LAST = 3999
 
 def port_is_free(port: int) -> bool:
     with socket.socket() as sock:
+        # POSIX: without SO_REUSEADDR the probe fails for ~60s after the previous bridge exits (its
+        # connections linger in TIME_WAIT) and a gateway restart/deploy marks the port "owned by someone
+        # else" — fatal. A live listener still makes the bind fail. Windows' SO_REUSEADDR would let us
+        # bind over a live listener, so it stays off there.
+        if os.name != "nt":
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind(("127.0.0.1", port))
         except OSError:
