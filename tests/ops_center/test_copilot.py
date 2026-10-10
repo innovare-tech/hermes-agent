@@ -50,7 +50,7 @@ def test_create_isolated_profile(cp):
     assert {"terminal", "file", "code_execution", "web", "delegation", "cronjob"} <= set(cfg["agent"]["disabled_toolsets"])
     mcp = cfg["mcp_servers"]["aibiz_ops"]
     assert mcp["trust"] == "untrusted" and mcp["headers"]["Authorization"] == "Bearer ${AIBIZ_MCP_TOKEN}"
-    assert mcp["tools"]["include"] == ["my_channels_status", "channel_metrics", "search_conversations", "timeline"]
+    assert mcp["tools"]["include"] == ["my_channels_status", "channel_metrics", "search_conversations", "timeline", "waiting_now"]
     env = _client_env(cp, pid)
     assert env["API_SERVER_KEY"] == out["apiKey"]
     claims = jwt.decode(env["AIBIZ_MCP_TOKEN"], SECRET, algorithms=["HS256"], audience="aibiz-copilot-mcp")
@@ -184,3 +184,20 @@ def test_soul_teaches_the_database_and_refresh_reapplies_plan_tools(cp):
         cfg = read_raw_config()
     assert "team_quality" in cfg["mcp_servers"]["aibiz_ops"]["tools"]["include"]
     assert cfg["tools"]["tool_search"]["enabled"] == "off"
+
+
+def test_copilot_model_defaults_to_strongest_and_changes_reach_every_client(cp):
+    from hermes_cli.config import read_raw_config
+
+    pid = cp.create("c1", "pro")["profileId"]
+    with cp._in_profile(pid):
+        cfg = read_raw_config()
+    assert cfg["model"]["default"] == "gemini-3.1-pro-preview" and cfg["agent"]["reasoning_effort"] == "high"
+    cp.save_settings({"model": "gemini-3.8-flash", "reasoningEffort": "medium"})
+    with cp._in_profile(pid):
+        cfg = read_raw_config()
+    assert cfg["model"]["default"] == "gemini-3.8-flash" and cfg["agent"]["reasoning_effort"] == "medium"
+    for bad in ({"model": "x y; rm"}, {"reasoningEffort": "turbo"}):
+        with pytest.raises(ValueError):
+            cp.save_settings(bad)
+    assert {"waiting_now", "stuck_services", "transfers", "ai_overlap"} <= set(cfg["mcp_servers"]["aibiz_ops"]["tools"]["include"])

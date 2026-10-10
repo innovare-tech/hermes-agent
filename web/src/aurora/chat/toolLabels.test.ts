@@ -10,7 +10,7 @@ describe("toolLabel", () => {
     expect(toolLabel("web_search", true)).toBe("Pesquisando na web");
   });
   it("ferramentas do Copiloto (aibiz_ops) e MCP genérico em português", () => {
-    expect(toolLabel("mcp__aibiz_ops__my_channels_status")).toBe("Status dos canais");
+    expect(toolLabel("mcp__aibiz_ops__my_channels_status")).toBe("Saúde dos canais");
     expect(toolLabel("mcp__aibiz_ops__channel_metrics", true)).toBe("Métricas dos canais");
     expect(toolLabel("mcp_aibiz_ops_dead_letters")).toBe("Mensagens que não entraram");
     expect(toolLabel("mcp__aibiz_ops__aggregate")).toBe("Análise de dados");

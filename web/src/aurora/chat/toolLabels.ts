@@ -42,13 +42,17 @@ const LABELS: Record<string, [string, string]> = {
 
 /** Ferramentas MCP do Copiloto (servidor `aibiz_ops`): uma só frase, rodando ou pronta. */
 const AIBIZ_OPS: Record<string, string> = {
-  my_channels_status: "Status dos canais",
+  my_channels_status: "Saúde dos canais",
   channel_metrics: "Métricas dos canais",
   search_conversations: "Buscar conversas",
   timeline: "Linha do tempo do atendimento",
   trace_routing: "Rastrear roteamento",
   audit_operator: "Atividade do atendente",
   team_quality: "Qualidade da equipe",
+  waiting_now: "Fila agora",
+  stuck_services: "Atendimentos presos",
+  transfers: "Transferências",
+  ai_overlap: "IA x humano",
   dead_letters: "Mensagens que não entraram",
   describe_domain: "Descrever dados disponíveis",
   query: "Consulta",
