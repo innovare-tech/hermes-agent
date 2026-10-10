@@ -45,3 +45,23 @@ def test_settings_read_env_list(monkeypatch):
     monkeypatch.setenv("HERMES_DASHBOARD_OIDC_ALLOWED_EMAILS", f"{ME}, Ivair@Exemplo.com")
     monkeypatch.setattr(oidc, "_load_config_oauth_section", lambda: {})
     assert oidc._settings()["allowed_emails"] == {ME, "ivair@exemplo.com"}
+
+
+def test_limited_response_reads_gzip_body_once(monkeypatch):
+    """Google serve a descoberta OIDC com gzip: o corpo lido já vem descompactado e não pode ser decodificado de novo."""
+    import gzip
+    import json
+
+    import httpx
+
+    import plugins.dashboard_auth._shared as shared
+
+    body = json.dumps({"issuer": "https://accounts.google.com"}).encode()
+    transport = httpx.MockTransport(lambda req: httpx.Response(
+        200, headers={"content-encoding": "gzip", "content-type": "application/json"}, content=gzip.compress(body)))
+    real_stream = httpx.stream
+    monkeypatch.setattr(shared.httpx, "stream",
+                        lambda method, url, **kw: httpx.Client(transport=transport).stream(method, url, **kw))
+    r = shared._request_limited_response("GET", "https://accounts.google.com/.well-known/openid-configuration")
+    assert r.json()["issuer"] == "https://accounts.google.com"
+    assert real_stream is not None

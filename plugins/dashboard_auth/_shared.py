@@ -69,9 +69,13 @@ def _request_limited_response(method: str, url: str, **kwargs: Any) -> httpx.Res
                 )
             chunks.append(chunk)
 
+        # iter_bytes() already decoded the body: drop Content-Encoding/Length or the rebuilt
+        # Response decodes it a second time (gzip from Google → "incorrect header check").
+        headers = {k: v for k, v in response.headers.items()
+                   if k.lower() not in ("content-encoding", "content-length")}
         return httpx.Response(
             status_code=response.status_code,
-            headers=response.headers,
+            headers=headers,
             content=b"".join(chunks),
             request=response.request,
         )
