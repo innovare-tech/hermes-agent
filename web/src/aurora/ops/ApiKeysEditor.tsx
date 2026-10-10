@@ -30,6 +30,9 @@ const KEY_DESC: Record<string, string> = {
   COPILOT_MCP_JWT_SECRET: "Segredo que assina os tokens do Copiloto do Gestor (o mesmo do MCP)",
   TYPESAFE_API_KEY: "Chave da TypeSafe (Jev), usada na triagem dos grupos",
   TELEGRAM_BOT_TOKEN: "Token do bot do Telegram (BotFather)",
+  GEMINI_API_KEY: "Chave do Google AI Studio (Gemini)",
+  GOOGLE_API_KEY: "Chave do Google AI Studio (Gemini)",
+  NVIDIA_API_KEY: "Chave da NVIDIA NIM",
 };
 /** Descrição em pt-BR: a própria, senão uma genérica pelo nome (o catálogo vem em inglês). */
 export const keyDescription = (key: string) =>

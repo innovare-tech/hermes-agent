@@ -93,21 +93,36 @@ export function Chat() {
 
   useEffect(() => {
     chat.slashCommands().then(setCommands, () => {});
-    chat.defaults().then((d) => {
-      setShowThinking(d.showReasoning);
-      // Padrão do agente enquanto a sessão não informa o esforço dela.
-      setInfo((i) => (i.effort === undefined ? { ...i, effort: d.effort } : i));
-    }, () => {});
     const onResize = () => !wide() && setInsp(false);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Esforço padrão chega depois do histórico: não pisa no que a sessão já informou.
+  // Padrão do perfil (esforço e "mostrar pensamento"), enquanto a sessão não informa o dela. Se a leitura falhar, tenta mais algumas vezes.
+  const semEsforco = info.effort === undefined;
   useEffect(() => {
-    if (info.effort !== undefined) return;
-    chat.defaults().then((d) => setInfo((i) => (i.effort === undefined ? { ...i, effort: d.effort } : i)), () => {});
-  }, [info.effort]);
+    if (!semEsforco) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = (left: number) =>
+      chat.defaults().then(
+        (d) => {
+          // Sem checar `alive`: se o histórico chegou antes, o esforço dele vence (guarda no setInfo) e o "mostrar pensamento" ainda é preenchido.
+          setShowThinking((cur) => cur ?? d.showReasoning);
+          setInfo((i) => (i.effort === undefined ? { ...i, effort: d.effort } : i));
+        },
+        () => {
+          if (alive && left > 0) timer = setTimeout(() => load(left - 1), 1500);
+          // Esgotou as tentativas: sem leitura, o menu mostra "padrão" em vez de "…" eterno.
+          else if (alive) setInfo((i) => (i.effort === undefined ? { ...i, effort: "" } : i));
+        },
+      );
+    load(3);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [semEsforco]);
 
   // O gateway avisa quando algo muda na sessão (inclusive por /model e /reasoning digitados): o painel acompanha.
   useEffect(() => {
@@ -384,8 +399,8 @@ export function Chat() {
 
   async function pickEffort(effort: string) {
     try {
-      const id = await ensureSession();
-      await chat.setReasoning(id, effort);
+      // O esforço vira padrão do perfil: não precisa de sessão (não cria conversa vazia nem muda a URL).
+      await chat.setReasoning(sidRef.current, effort);
       setInfo((i) => ({ ...i, effort }));
       toast(`Esforço de raciocínio: ${EFFORT_PT[effort] ?? effort}`, "Fica como padrão deste perfil, nesta e nas próximas conversas.");
     } catch (e) {

@@ -234,7 +234,10 @@ function UsageTab({ d, now }: { d: ClientDetail; now: number }) {
               <Icon name={r.key === "_tokens" ? "sparkles" : toolIcon(r.key)} size={13} color="var(--fg3)" />
               <span className="cp-ellip">{r.label}</span>
             </span>
-            <span className="cp-mono">{r.uses ?? "—"}</span>
+            <span className="cp-mono">
+              {r.uses ?? "—"}
+              {r.free > 0 && <span title="Consulta recusada, com erro ou teste da equipe no painel: não gasta crédito." style={{ display: "block", fontSize: 10.5, color: "var(--fg3)" }}>{r.free} sem custo</span>}
+            </span>
             <span className="cp-mono">{fmtInt(r.credits)}</span>
             <span className="cp-share">
               <span aria-hidden="true">
@@ -249,6 +252,7 @@ function UsageTab({ d, now }: { d: ClientDetail; now: number }) {
           <span>Gasto com IA: {fmtUsd(m.spendUsd)}</span>
         </div>
       </div>
+      <span style={{ fontSize: 11.5, color: "var(--fg2)" }}>Consultas que falharam ou foram recusadas não gastam créditos. Testes feitos pela equipe no painel também não.</span>
       <span style={{ fontSize: 11.5, color: "var(--fg2)" }}>Tokens são os pedaços de texto que a IA lê e escreve; é por eles que o provedor cobra.</span>
     </div>
   );

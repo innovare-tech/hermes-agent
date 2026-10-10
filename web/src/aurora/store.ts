@@ -34,7 +34,7 @@ export type State = Omit<OpsSnapshot, "account"> & {
   profileId: string;
   /** Trocando de perfil: barra de 2px e esqueleto até os dados do novo perfil chegarem. */
   switching: boolean;
-  /** Nomes das chaves de API do perfil atual (rodapé da barra lateral). */
+  /** Variáveis das chaves salvas (ex.: OPENROUTER_API_KEY); o rodapé da barra lateral dá nome e descrição em pt-BR. */
   keys: string[];
   /** Diálogo de perfil aberto (criar/clonar, editar, apagar). */
   profileDialog: ProfileDialog | null;

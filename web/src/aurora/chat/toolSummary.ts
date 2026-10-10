@@ -21,6 +21,10 @@ function parse(raw: unknown): Record<string, unknown> | null {
 /** O usuário negou a aprovação: o backend devolve "BLOCKED: User denied …" no lugar do resultado. */
 export const toolDenied = (raw: unknown) => /BLOCKED:[^\n]*\bdenied\b|\bUser denied\b|denied by (?:the )?user|was denied by the user/i.test(str(raw));
 
+/** Escrita/ação que parou esperando alguém aprovar (ainda NÃO rodou): `pending_approval`/`approval_required` do approval.py ou "Pedi aprovação no Telegram (pedido #N)" do guardrails. */
+export const toolPending = (raw: unknown) =>
+  /"status"\s*:\s*"(?:pending_approval|approval_required)"|"approval_pending"\s*:\s*true|Asking the user for approval|Pedi aprova(?:ç|\\u00e7)(?:ã|\\u00e3)o/i.test(str(raw));
+
 const item = (x: unknown) => (typeof x === "string" ? x : x && typeof x === "object" ? str((x as { path?: unknown }).path ?? (x as { url?: unknown }).url ?? x) : str(x));
 
 const HEAD_LINES = 5;

@@ -2,6 +2,7 @@
 import { ask } from "../store";
 import { api, fetchJSON, getManagementProfile, type CronJob as ApiCron } from "@/lib/api";
 import { classifyLine } from "@/lib/log-classify";
+import { cronTitle, previewText } from "../chat/snippet";
 import { shortWhen, sourceIcon, sourceLabel } from "../chat/sources";
 import { CHANNEL_PT, FIELD_PT, MAIN_CHANNELS, TOOL_PT } from "./channelText";
 import { parseCronPt } from "./cron";
@@ -81,10 +82,10 @@ export function logFrom(line: string, i: number): LogLine {
 /** Linha da lista de Sessões: `questions` = `question_count` do backend (as perguntas do usuário, o que a Conversa também mostra). */
 export const sessionRow = (s: { id: string; title?: string | null; preview?: string | null; source?: string | null; message_count?: number; question_count?: number; started_at?: number }): SessionRow => ({
   id: s.id,
-  title: s.title || s.preview || "Sem título",
+  title: cronTitle(s.title || previewText(s.preview ?? "") || "Sem título"),
   source: sourceLabel(s.source),
   icon: sourceIcon(s.source),
-  snippet: cleanSnippet(s.preview ?? ""),
+  snippet: cleanSnippet(previewText(s.preview ?? "")),
   msgs: s.message_count ?? 0,
   questions: s.question_count,
   when: shortWhen(s.started_at),

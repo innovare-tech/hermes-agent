@@ -158,6 +158,14 @@ describe("consumo", () => {
       ["Texto lido e escrito pela IA", null, 40, 50],
     ]);
   });
+  it("usos que não gastaram crédito (recusados, com erro, teste da equipe) aparecem como 'sem custo'", () => {
+    const rows = toolUsage({ daily: [], byTool: [{ key: "a", uses: 5, credits: 6 }, { key: "b", uses: 3, credits: 3 }, { key: "c", uses: 2, credits: 0 }], tokens: 0, tokenCredits: 0 }, [
+      { key: "a", label: "A", weight: 2 },
+      { key: "b", label: "B", weight: 1 },
+      { key: "c", label: "C" },
+    ]);
+    expect(rows.map((r) => r.free)).toEqual([2, 0, 0]);
+  });
   it("sem consumo nenhum: lista vazia e 0%", () => {
     expect(toolUsage({ daily: [], byTool: [], tokens: 0, tokenCredits: 0 }, CATALOG)).toEqual([]);
   });
@@ -186,6 +194,7 @@ describe("auditoria", () => {
   it("quem perguntou", () => {
     expect(askedBy({ name: "Cláudio", role: "dono", via: "Aibiz Manager" })).toBe("Cláudio (dono) · Aibiz Manager");
     expect(askedBy({ name: "Gestor", role: "", via: "API" })).toBe("Gestor · API");
+    expect(askedBy({ name: "Equipe", role: "teste", via: "Painel" })).toBe("Equipe · teste · Painel");
   });
 });
 

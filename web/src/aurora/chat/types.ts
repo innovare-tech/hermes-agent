@@ -1,7 +1,7 @@
 import type { Session } from "../adapter";
 
 /** `denied`: o usuário negou a aprovação — a ferramenta não rodou (não é falha). */
-export type StepStatus = "run" | "ok" | "err" | "denied";
+export type StepStatus = "run" | "ok" | "err" | "denied" | "pending";
 
 /** Resumo em português da saída da ferramenta; o texto/JSON original fica no detalhe. */
 export type ToolSummary = { line: string; /** Primeiras linhas da saída, sempre à vista. */ head?: string; /** Conteúdo recolhido (lista de arquivos, texto lido…). */ more?: string; moreLabel?: string; /** Mostra `more` já aberto. */ open?: boolean };

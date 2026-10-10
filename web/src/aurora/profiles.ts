@@ -6,6 +6,7 @@ import { agent } from "./agent";
 import { CHANNEL_PT } from "./agent/channelText";
 import { resetChatProfile } from "./chat";
 import { PLATFORM_ICON } from "./live";
+import { keyName } from "./ops/ApiKeysEditor";
 import { pickInitialProfile, type CopyOptions, type Inventory, type Profile } from "./profileLogic";
 import { EMPTY_OPS, getState, loadOps, loadSessions, setState, toast } from "./store";
 
@@ -15,7 +16,6 @@ const errMsg = (e: unknown, fallback: string) => (e instanceof Error && e.messag
 const json = (method: string, body?: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
 const q = encodeURIComponent;
 /** "OpenRouter API key" → "OpenRouter". */
-const keyName = (description: string, key: string) => description.replace(/\s*(API\s*)?(key|token)s?\s*$/i, "").trim() || key;
 
 /** Nome e ícone de um canal pelo id da plataforma ("whatsapp" → "WhatsApp (QR code)"). */
 export const channelMeta = (id: string) => ({ name: CHANNEL_PT[id]?.name ?? id.charAt(0).toUpperCase() + id.slice(1).replace(/_/g, " "), icon: PLATFORM_ICON[id] ?? "radio-tower" });
@@ -67,11 +67,11 @@ export async function bootProfiles() {
   }
 }
 
-/** Nomes das chaves de API do perfil atual, para o rodapé da barra lateral. */
+/** Chaves de API salvas no perfil atual (nomes de variável), para o rodapé da barra lateral. */
 export async function loadKeys() {
   const pid = getState().profileId;
   const keys = await agent.apiKeys().then(
-    (ks) => ks.filter((k) => k.isSet).map((k) => keyName(k.description, k.key)),
+    (ks) => ks.filter((k) => k.isSet).map((k) => k.key),
     () => [] as string[],
   );
   if (getState().profileId === pid) setState({ keys });
@@ -175,6 +175,6 @@ export async function profileInventory(id: string): Promise<Inventory> {
     skills: ok(skills)?.length ?? null,
     tools: t ? t.filter((x) => x.enabled).length : null,
     convs: ok(sess)?.total ?? null,
-    keys: e ? Object.entries(e).filter(([, v]) => v.is_set && !v.channel_managed && (v.category === "provider" || v.category === "tool" || v.custom)).map(([k, v]) => keyName(v.description, k)) : null,
+    keys: e ? Object.entries(e).filter(([, v]) => v.is_set && !v.channel_managed && (v.category === "provider" || v.category === "tool" || v.custom)).map(([k]) => keyName(k)) : null,
   };
 }

@@ -164,12 +164,18 @@ export function dayBars(daily: Usage["daily"], now: number): DayBar[] {
   return out;
 }
 
-export type ToolUse = { key: string; label: string; uses: number | null; credits: number; pct: number };
+export type ToolUse = { key: string; label: string; uses: number | null; credits: number; pct: number; /** Usos que não gastaram crédito (recusados, com erro ou testes da equipe). */ free: number };
 
 /** Linhas da tabela de consumo. Os créditos dos tokens entram como uma linha própria, então as partes fecham 100%. */
-export function toolUsage(usage: Usage, catalog: Pick<CatalogTool, "key" | "label">[]): ToolUse[] {
-  const rows = usage.byTool.map((t) => ({ key: t.key, label: catalog.find((c) => c.key === t.key)?.label ?? t.key, uses: t.uses as number | null, credits: t.credits ?? 0 }));
-  if (usage.tokenCredits > 0) rows.push({ key: "_tokens", label: "Texto lido e escrito pela IA", uses: null, credits: usage.tokenCredits });
+export function toolUsage(usage: Usage, catalog: (Pick<CatalogTool, "key" | "label"> & { weight?: number })[]): ToolUse[] {
+  const rows = usage.byTool.map((t) => {
+    const c = catalog.find((x) => x.key === t.key);
+    const credits = t.credits ?? 0;
+    // Cada uso que cobra rende `peso` créditos: o que faltar são usos sem custo.
+    const free = c?.weight && credits < t.uses * c.weight ? t.uses - Math.floor(credits / c.weight) : 0;
+    return { key: t.key, label: c?.label ?? t.key, uses: t.uses as number | null, credits, free };
+  });
+  if (usage.tokenCredits > 0) rows.push({ key: "_tokens", label: "Texto lido e escrito pela IA", uses: null, credits: usage.tokenCredits, free: 0 });
   const total = rows.reduce((a, r) => a + r.credits, 0);
   return rows.map((r) => ({ ...r, pct: total ? Math.round((r.credits / total) * 100) : 0 }));
 }
@@ -228,8 +234,8 @@ export function queryText(a: Pick<AuditItem, "query" | "args">): string {
   return typeof v === "string" ? v : JSON.stringify(v, null, 2);
 }
 
-/** "Cláudio (dono) · Aibiz Manager". */
-export const askedBy = (b: AuditItem["askedBy"]) => `${b.name}${b.role ? ` (${b.role})` : ""} · ${b.via}`;
+/** "Cláudio (dono) · Aibiz Manager"; o teste da equipe pelo painel, "Equipe · teste · Painel". */
+export const askedBy = (b: AuditItem["askedBy"]) => (b.via === "Painel" ? [b.name, b.role, b.via].filter(Boolean).join(" · ") : `${b.name}${b.role ? ` (${b.role})` : ""} · ${b.via}`);
 
 export const auditDay = (ts: number, now: number) => {
   const g = dayGap(ts, now);
