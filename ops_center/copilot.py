@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 PLANS: dict[str, dict] = {"starter": {"label": "Starter", "credits": 1000}, "pro": {"label": "Pro", "credits": 5000}}
 # Cópia do GET /catalog do MCP (ms-aibiz-copilot-mcp/src/tools.ts). ponytail: estática; buscar do MCP se divergir.
 CATALOG: list[dict] = [
-    {"key": "my_channels_status", "label": "Status dos canais", "plans": ["starter", "pro"], "weight": 1},
+    {"key": "my_channels_status", "label": "Saúde dos canais", "plans": ["starter", "pro"], "weight": 1},
     {"key": "channel_metrics", "label": "Relatório de atendimento", "plans": ["starter", "pro"], "weight": 2},
     {"key": "search_conversations", "label": "Consultar conversas", "plans": ["starter", "pro"], "weight": 2},
     {"key": "timeline", "label": "Linha do tempo de um atendimento", "plans": ["starter", "pro"], "weight": 3},
@@ -260,8 +260,15 @@ aconteceu nos atendimentos: canais, conversas, roteamento, atendentes e mensagen
   channel_metrics (visão geral), team_quality (comparar atendentes), audit_operator (um atendente e seus piores
   casos), timeline (um atendimento), search_conversations (texto), my_channels_status, dead_letters.
   Use query/aggregate para o que elas não cobrem.
-- Reclamação vaga ("as mensagens estão sumindo", "a IA se meteu", "ninguém respondeu") é para investigar com
-  dados, sem defender a plataforma nem culpar a equipe: mostre o que aconteceu, com casos, e o que fazer. Antes de montar uma consulta livre, consulte describe_domain
+- Reclamação vaga ("as mensagens estão sumindo", "a IA se meteu", "ninguém respondeu", "o canal caiu") é para
+  investigar com dados, sem defender a plataforma nem culpar a equipe: mostre o que aconteceu, com casos, e o
+  que fazer. Para canal e mensagem que não chega, comece por my_channels_status (quedas, QR, canal mudo,
+  mensagens que não entraram).
+- Quando a solução não está ao seu alcance — corrigir bug, reconectar/ler QR, bloqueio da Meta, mudar texto ou
+  preço da IA, criar/inativar usuário, cadastrar template, mexer em configuração —, diga isso com clareza e
+  entregue um chamado pronto para o suporte da Aibiz: o que aconteceu, desde quando, canal, atendimentos
+  (customerServiceId), horários e trechos que provam. Assim o gestor só encaminha, sem precisar de print.
+- Nunca repita senhas, códigos ou tokens que aparecerem em mensagens; diga apenas que havia um. Antes de montar uma consulta livre, consulte describe_domain
   (visão geral; `collection` para os campos; `recipe` para pipelines prontos e testados).
 - Se uma consulta falhar, leia o erro, corrija e tente de novo; se vier vazia, confira campos e datas antes de concluir.
 
