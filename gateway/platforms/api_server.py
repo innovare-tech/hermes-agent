@@ -1781,6 +1781,7 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             ("POST", "/v1/chat/completions", self._handle_chat_completions),
             ("GET", "/v1/radar/clients", self._handle_radar_clients),
             ("GET", "/v1/radar/clients/{system_client_id}", self._handle_radar_client),
+            ("GET", "/v1/radar/clients/{system_client_id}/usage", self._handle_radar_usage),
             ("POST", "/v1/responses", self._handle_responses),
             ("GET", "/v1/responses/{response_id}", self._handle_get_response),
             ("DELETE", "/v1/responses/{response_id}", self._handle_delete_response),
@@ -4145,6 +4146,16 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         sid = request.match_info["system_client_id"]
         # to_thread leva o perfil da requisição (ContextVar); run_in_executor caía no banco padrão: "none" para todos.
         return web.json_response(await asyncio.to_thread(copilot.radar_status, sid))
+
+    async def _handle_radar_usage(self, request: "web.Request") -> "web.Response":
+        """Uso do mês de uma empresa ("Seu plano"), só contagens. Só a chave de serviço, como ``_handle_radar_client``."""
+        if not self._is_radar_gateway(request):
+            return self._auth_failed_response()
+        from ops_center import copilot
+        try:
+            return web.json_response(await asyncio.to_thread(copilot.radar_usage, request.match_info["system_client_id"]))
+        except KeyError:
+            return web.json_response({"error": "sem Radar"}, status=404)
 
     def _concurrency_limited_response(self) -> Optional["web.Response"]:
         """429 when the concurrent-run cap is reached (0 disables), else None. Uses the same

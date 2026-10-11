@@ -239,3 +239,28 @@ def test_trial_extra_credits_and_radar_status(cp, monkeypatch):
         cp.set_trial("c1", 90)
     with pytest.raises(ValueError):
         cp.add_extra_credits("c1", 0)
+
+
+def test_radar_usage_counts_by_session_and_day_without_question_text(cp, monkeypatch):
+    import json
+    import time
+
+    monkeypatch.setattr("gateway.session_context.get_session_env",
+                        lambda name, default="": "api_server" if name == "HERMES_SESSION_PLATFORM" else default)
+    with pytest.raises(KeyError):
+        cp.radar_usage("c2")
+    pid = cp.create("c1", "starter")["profileId"]
+    cp.save_settings({"plans": {"starter": {"credits": 100}}})
+    with cp._in_profile(pid):
+        cp.record_tool(f"{cp.TOOL_PREFIX}waiting_now", {}, json.dumps({"rows": 1}), 5, "s1")
+        cp.record_turn(pid, {"total_tokens": 10000}, "s1", "quem espera?", json.dumps({"name": "Renata"}))
+        cp.record_turn(pid, {"total_tokens": 5000}, "s1", "e agora?", json.dumps({"name": "Renata"}))
+        cp.record_turn(pid, {"total_tokens": 5000}, "s2", "canais?", "")
+    u = cp.radar_usage("c1")
+    by = {x["sessionId"]: x for x in u["bySession"]}
+    assert by["s1"]["questions"] == 2 and by["s1"]["name"] == "Renata" and by["s1"]["credits"] == cp.WEIGHT.get("waiting_now", 1) + 2 + 1
+    assert by["s2"] == {"sessionId": "s2", "credits": 1, "questions": 1, "name": None}
+    assert u["credits"]["used"] == sum(x["credits"] for x in u["bySession"]) == sum(d["credits"] for d in u["byDay"])
+    assert "quem espera?" not in json.dumps(u)
+    assert u["renewsAt"] > time.time()
+    assert u["forecastDepletesAt"] is None or u["forecastDepletesAt"] < u["renewsAt"]  # só avisa se acabar antes de renovar
