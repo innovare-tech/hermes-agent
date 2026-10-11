@@ -4,10 +4,11 @@
 import { fetchJSON } from "@/lib/api";
 
 export type Plan = "starter" | "pro";
-export type Status = "active" | "no_credit" | "revoked";
+export type Status = "active" | "trial" | "trial_ended" | "no_credit" | "revoked";
 export type AuditResult = "ok" | "blocked_scope" | "blocked_query" | "error";
 
-export type Month = { conversations: number; credits: number; creditsLimit: number; tokens: number; toolCalls: number; spendUsd: number | null };
+/** `creditsLimit` = franquia do plano + extras do mês. */
+export type Month = { conversations: number; credits: number; creditsLimit: number; planCredits?: number; extraCredits?: number; tokens: number; toolCalls: number; spendUsd: number | null };
 
 export type Client = {
   systemClientId: string;
@@ -23,6 +24,8 @@ export type Client = {
   month: Month;
   lastActivityAt: number | null;
   keyRotatedAt: number | null;
+  /** Fim do teste do Pro (segundos); null = contratado. */
+  trialUntil?: number | null;
   revoked: { at: number; by: string | null; reason: string | null; purgeAt: number } | null;
 };
 
@@ -30,7 +33,7 @@ export type ToolRow = { key: string; label: string; weight: number; enabled: boo
 export type Usage = { daily: { day: string; credits: number }[]; byTool: { key: string; uses: number; credits: number }[]; tokens: number; tokenCredits: number };
 export type ClientDetail = Client & { tools: ToolRow[]; usage: Usage; filter: { systemClientId: string } };
 
-export type Counts = { all: number; active: number; no_credit: number; revoked: number };
+export type Counts = { all: number; active: number; trial?: number; trial_ended?: number; no_credit: number; revoked: number };
 export type ClientsPage = {
   items: Client[];
   /** Total com a busca e os filtros aplicados. */
@@ -96,4 +99,7 @@ export const copilotApi = {
   revoke: (id: string, reason: string) => fetchJSON<ClientDetail>(`/api/copilot/clients/${sid(id)}/revoke`, j("POST", { confirm: id, reason: reason.trim() || undefined })),
   reactivate: (id: string) => fetchJSON<Secret>(`/api/copilot/clients/${sid(id)}/reactivate`, j("POST", {})),
   setPlan: (id: string, plan: Plan) => fetchJSON<ClientDetail>(`/api/copilot/clients/${sid(id)}`, j("PATCH", { plan })),
+  /** Teste do Pro por `days` dias; `null` = contratou (sai do teste). */
+  setTrial: (id: string, days: number | null) => fetchJSON<ClientDetail>(`/api/copilot/clients/${sid(id)}/trial`, j("POST", { days })),
+  addExtraCredits: (id: string, credits: number) => fetchJSON<ClientDetail>(`/api/copilot/clients/${sid(id)}/extra-credits`, j("POST", { credits })),
 };

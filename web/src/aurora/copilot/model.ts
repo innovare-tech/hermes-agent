@@ -8,6 +8,8 @@ export { plural };
 
 export const STATUS: Record<Status, { label: string; color: string }> = {
   active: { label: "Ativo", color: "var(--ok)" },
+  trial: { label: "Em teste", color: "var(--ok)" },
+  trial_ended: { label: "Teste terminou", color: "var(--warn)" },
   no_credit: { label: "Sem saldo", color: "var(--warn)" },
   revoked: { label: "Revogado", color: "var(--fg2)" },
 };
@@ -15,6 +17,7 @@ export const STATUS: Record<Status, { label: string; color: string }> = {
 export const STATUS_FILTERS: { key: "" | Status; label: string }[] = [
   { key: "", label: "Todos" },
   { key: "active", label: "Ativos" },
+  { key: "trial", label: "Em teste" },
   { key: "no_credit", label: "Sem saldo" },
   { key: "revoked", label: "Revogados" },
 ];
@@ -25,7 +28,7 @@ export const PLANS: Plan[] = ["starter", "pro"];
 export const planName = (p: Plan | string, labels?: Record<string, string>) => labels?.[p] ?? p.charAt(0).toUpperCase() + p.slice(1);
 
 /** Contagem do chip: "Todos" usa `all`; o resto, o status. */
-export const countOf = (c: Counts | null | undefined, key: "" | Status): number => (c ? (key === "" ? c.all : c[key]) : 0);
+export const countOf = (c: Counts | null | undefined, key: "" | Status): number => (c ? (key === "" ? c.all : (c[key] ?? 0)) : 0);
 
 // ---- avatar ----
 
@@ -42,7 +45,7 @@ export const initial = (name: string) => (name.trim().match(/[\p{L}\p{N}]/u)?.[0
 
 // ---- ordem e cliente novo ----
 
-const RANK: Record<Status, number> = { no_credit: 1, active: 2, revoked: 3 };
+const RANK: Record<Status, number> = { no_credit: 1, trial_ended: 1, trial: 2, active: 2, revoked: 3 };
 const WEEK = 7 * 86400;
 
 /** O backend marca `isNew` na lista; o detalhe não traz, então vale a mesma regra: ativo, sem uso, criado há menos de 7 dias. */
@@ -249,7 +252,16 @@ export const rowsLabel = (n: number | null) => (n == null ? "—" : String(n));
 
 export type Banner = { tone: "warn" | "muted" | "ok"; icon: string; text: string; action?: { label: string; plan: Plan } };
 
-export function bannerOf(d: Pick<ClientDetail, "status" | "plan" | "revoked" | "lastActivityAt" | "createdAt"> & { isNew?: boolean }, now: number): Banner | null {
+const dayMonth = (ts: number) => new Date(ts * 1000).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+
+export function bannerOf(d: Pick<ClientDetail, "status" | "plan" | "revoked" | "lastActivityAt" | "createdAt"> & { isNew?: boolean; trialUntil?: number | null }, now: number): Banner | null {
+  if (d.status === "trial_ended" && d.trialUntil) {
+    return { tone: "warn", icon: "hourglass", text: `O teste do Pro terminou em ${dayMonth(d.trialUntil)}. O gestor vê “Seu teste terminou” e as conversas ficam só leitura. Contratou? Use “Encerrar teste”.` };
+  }
+  if (d.trialUntil && d.status !== "revoked") {
+    const left = Math.max(0, Math.ceil((d.trialUntil - now) / 86400));
+    return { tone: "ok", icon: "hourglass", text: `Em teste do Pro até ${dayMonth(d.trialUntil)} (${plural(left, "dia", "dias")}). Termina sozinho; se contratar, use “Encerrar teste”.` };
+  }
   if (d.status === "revoked" && d.revoked) {
     const why = d.revoked.reason ? ` (${d.revoked.reason})` : "";
     return {

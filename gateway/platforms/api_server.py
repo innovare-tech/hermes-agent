@@ -1205,6 +1205,10 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         extra = config.extra or {}
         self._host, self._port = listen_address(extra)
         self._api_key: str = extra.get("key", _get_scoped_secret("API_SERVER_KEY", ""))
+        # Porta do Aibiz Radar (ms-aibiz-copilot-mcp): uma chave de serviço vale para qualquer perfil cli-*
+        # e para GET /v1/radar/clients/{id}. Vem do ambiente do processo (compose), nunca de um perfil.
+        _gk = os.getenv("COPILOT_GATEWAY_KEY", "").strip()
+        self._copilot_gateway_key: str = _gk if len(_gk) >= 32 else ""
         self._cors_origins: tuple[str, ...] = self._parse_cors_origins(
             extra.get("cors_origins", os.getenv("API_SERVER_CORS_ORIGINS", "")))
         self._model_name: str = self._resolve_model_name(
@@ -1602,10 +1606,11 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:].strip()
+            gateway = (self._copilot_gateway_key,) if profile and profile.startswith("cli-") and self._copilot_gateway_key else ()
             # Compare as bytes: compare_digest raises TypeError on non-ASCII str, and the
             # token is raw client input — a stray byte must 401, not 500.
             if any(hmac.compare_digest(token.encode(), k.encode())
-                   for k in (expected_key, *self._previous_api_key())):
+                   for k in (expected_key, *self._previous_api_key(), *gateway)):
                 return None
         logger.warning("API server rejected invalid API key: %s", self._request_audit_log_suffix(request))
         return self._auth_failed_response()
@@ -1774,6 +1779,7 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             ("POST", "/api/sessions/{session_id}/chat/stream", self._handle_session_chat_stream),
             ("POST", "/api/sessions/{session_id}/model", self._handle_session_model_lock),
             ("POST", "/v1/chat/completions", self._handle_chat_completions),
+            ("GET", "/v1/radar/clients/{system_client_id}", self._handle_radar_client),
             ("POST", "/v1/responses", self._handle_responses),
             ("GET", "/v1/responses/{response_id}", self._handle_get_response),
             ("DELETE", "/v1/responses/{response_id}", self._handle_delete_response),
@@ -4118,6 +4124,16 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         if hasattr(task, "add_done_callback"):
             task.add_done_callback(self._background_tasks.discard)
 
+    async def _handle_radar_client(self, request: "web.Request") -> "web.Response":
+        """Estado do Aibiz Radar de uma empresa (plano, teste, créditos) para a porta do Radar.
+        Só a chave de serviço; chamado em /p/<perfil-administrador>/ (onde mora o registro dos clientes)."""
+        token = request.headers.get("Authorization", "")[7:].strip()
+        if not (self._copilot_gateway_key and hmac.compare_digest(token.encode(), self._copilot_gateway_key.encode())):
+            return self._auth_failed_response()
+        from ops_center import copilot
+        sid = request.match_info["system_client_id"]
+        return web.json_response(await asyncio.get_running_loop().run_in_executor(None, copilot.radar_status, sid))
+
     def _concurrency_limited_response(self) -> Optional["web.Response"]:
         """429 when the concurrent-run cap is reached (0 disables), else None. Uses the same
         adapter-owned work count as shutdown draining (admitted requests included)."""
@@ -4130,7 +4146,10 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
                 logger.warning("copilot: cota de %s ilegível", profile, exc_info=True)
                 blocked = None
             if blocked:
-                return _error_response(blocked, 402, err_type="insufficient_quota", code="copilot_no_credit")
+                state, msg = blocked
+                if state == "no_credit":
+                    return _error_response(msg, 402, err_type="insufficient_quota", code="copilot_no_credit")
+                return _error_response(msg, 403, err_type="copilot_unavailable", code=f"copilot_{state}")
         limit = self._max_concurrent_runs
         if limit <= 0:
             return None
@@ -4354,10 +4373,12 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
                     if _profile.startswith("cli-"):
                         try:
                             from ops_center import copilot
-                            copilot.record_turn(
+                            spent = copilot.record_turn(
                                 _profile, usage, (result or {}).get("session_id") or session_id, user_message,
                                 json.dumps({"name": (turn_author or {}).get("name"), "via": "Aibiz Manager"})
                                 if turn_author else "")
+                            if isinstance(result, dict) and spent is not None:
+                                result = {**result, "copilot_credits": spent}
                         except Exception:  # noqa: BLE001
                             logger.warning("copilot: consumo do turno não registrado", exc_info=True)
                     if muted and isinstance(result, dict):

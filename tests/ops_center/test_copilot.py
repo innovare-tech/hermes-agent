@@ -102,7 +102,7 @@ def test_revoke_cuts_access_and_reactivate(cp):
     env = _client_env(cp, pid)
     assert "API_SERVER_KEY" not in env and "AIBIZ_MCP_TOKEN" not in env
     with cp._in_profile(pid):
-        assert cp.quota_block(pid) == "Copiloto indisponível para esta empresa."
+        assert cp.quota_block(pid)[0] == "revoked"
     back = cp.reactivate("c1")
     assert back["client"]["status"] == "active" and _client_env(cp, pid)["API_SERVER_KEY"] == back["apiKey"]
 
@@ -119,11 +119,12 @@ def test_quota_audit_and_usage(cp, monkeypatch):
         scope = json.dumps({"error": "outro cliente", "code": "blocked_scope"})
         cp.record_tool("mcp__aibiz_ops__query", {"collection": "customer_services"}, scope, 5, "s1")
         cp.record_tool("terminal", {}, "x", 1, "s1")  # fora do MCP: ignorado
-        cp.record_turn(pid, {"input_tokens": 100, "output_tokens": 50, "total_tokens": 4100}, "s1", "Por que caiu?",
-                       json.dumps({"name": "Ana", "via": "Aibiz Manager"}))
+        spent = cp.record_turn(pid, {"input_tokens": 100, "output_tokens": 50, "total_tokens": 4100}, "s1",
+                               "Por que caiu?", json.dumps({"name": "Ana", "via": "Aibiz Manager"}))
+        assert spent == 3 + 3  # o turno devolve o que gastou (rodapé "usou N créditos")
         assert cp.month_usage()["credits"] == 3 + 3  # peso do timeline + 3 créditos de tokens (4100/2000, pra cima)
         cp.record_turn(pid, {"total_tokens": 9000}, "s2", "mais", "")
-        assert "Sem saldo" in cp.quota_block(pid)
+        assert cp.quota_block(pid)[0] == "no_credit"
     audit = cp.audit("c1")["items"]
     assert [a["result"] for a in audit] == ["blocked_scope", "ok"]
     assert audit[1]["question"] == "Por que caiu?" and audit[1]["askedBy"]["name"] == "Ana" and audit[1]["rows"] == 3
@@ -202,3 +203,36 @@ def test_copilot_model_defaults_to_strongest_and_changes_reach_every_client(cp):
         with pytest.raises(ValueError):
             cp.save_settings(bad)
     assert {"waiting_now", "stuck_services", "transfers", "ai_overlap"} <= set(cfg["mcp_servers"]["aibiz_ops"]["tools"]["include"])
+
+
+def test_trial_extra_credits_and_radar_status(cp, monkeypatch):
+    import time
+
+    monkeypatch.setattr("gateway.session_context.get_session_env",
+                        lambda name, default="": "api_server" if name == "HERMES_SESSION_PLATFORM" else default)
+    assert cp.radar_status("c2") == {"state": "none"}
+    pid = cp.create("c1", "starter")["profileId"]
+    out = cp.set_trial("c1", 14)  # teste é do Pro
+    assert out["plan"] == "pro" and out["status"] == "trial" and out["trialUntil"] > time.time() + 13 * 86400
+    st = cp.radar_status("c1")
+    assert st["state"] == "trial" and st["profileId"] == pid and st["credits"] == {"used": 0, "limit": 5000, "extra": 0}
+    assert st["renewsAt"] > time.time()
+    cp.save_settings({"plans": {"pro": {"credits": 10}}})
+    with cp._in_profile(pid):
+        cp.record_turn(pid, {"total_tokens": 20000}, "s1", "tudo", "")  # 10 créditos: acabou
+        assert cp.quota_block(pid)[0] == "no_credit"
+    assert cp.radar_status("c1")["state"] == "trial"  # sem crédito continua em teste (alertas seguem)
+    cp.add_extra_credits("c1", 5)
+    cp.add_extra_credits("c1", 5)
+    with cp._in_profile(pid):
+        assert cp.quota_block(pid) is None  # 10 + 10 extras
+    assert cp.get("c1")["month"]["extraCredits"] == 10
+    cp._set_meta("c1", trialUntil=time.time() - 1)  # o teste venceu
+    with cp._in_profile(pid):
+        assert cp.quota_block(pid)[0] == "trial_ended"
+    assert cp.radar_status("c1")["state"] == "trial_ended" and cp.list_clients()["counts"]["trial_ended"] == 1
+    assert cp.set_trial("c1", None)["status"] == "active"  # contratou
+    with pytest.raises(ValueError):
+        cp.set_trial("c1", 90)
+    with pytest.raises(ValueError):
+        cp.add_extra_credits("c1", 0)

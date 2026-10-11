@@ -973,6 +973,28 @@ async def copilot_plan(sid: str, body: PlanBody):
     return out
 
 
+class TrialBody(BaseModel):
+    days: Optional[int] = None  # None = contratou (sai do teste)
+
+
+@copilot_router.post("/clients/{sid}/trial")
+async def copilot_trial(sid: str, body: TrialBody):
+    out = await _run(_copilot().set_trial, sid, body.days)
+    await _act(f"Aibiz Radar: {out['name']} " + (f"em teste do Pro por {body.days} dias" if body.days else "saiu do teste"))
+    return out
+
+
+class ExtraBody(BaseModel):
+    credits: int
+
+
+@copilot_router.post("/clients/{sid}/extra-credits")
+async def copilot_extra(sid: str, body: ExtraBody):
+    out = await _run(_copilot().add_extra_credits, sid, body.credits)
+    await _act(f"Aibiz Radar: +{body.credits} créditos extras para {out['name']} neste mês")
+    return out
+
+
 @copilot_router.get("/settings")
 async def copilot_settings():
     c = _copilot()

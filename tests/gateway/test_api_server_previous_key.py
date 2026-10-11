@@ -42,3 +42,27 @@ def test_previous_key_only_inside_window(tmp_path, monkeypatch, until_delta, acc
             assert adapter._check_auth(_req("hcp_qualquer-outra-123456789")).status == 401
     finally:
         _api_request_profile.reset(token)
+
+
+@pytest.mark.parametrize("profile, accepted", [("cli-x", True), ("aibiz", False)])
+def test_radar_gateway_key_only_for_copilot_profiles(tmp_path, monkeypatch, profile, accepted):
+    """A chave de serviço da porta do Aibiz Radar abre qualquer perfil cli-*, nunca um perfil da equipe."""
+    home = tmp_path / "profiles" / profile
+    home.mkdir(parents=True)
+    (home / ".env").write_text("API_SERVER_KEY=hcp_own-key-1234567890abcdef\n", encoding="utf-8")
+    monkeypatch.setattr("hermes_cli.profiles.get_profile_dir", lambda name: home)
+    gateway = "g" * 40
+    monkeypatch.setenv("COPILOT_GATEWAY_KEY", gateway)
+    adapter = APIServerAdapter(PlatformConfig(enabled=True))
+    ss.set_multiplex_active(True)
+    token = _api_request_profile.set(profile)
+    try:
+        with adapter._profile_scope(profile):
+            assert (adapter._check_auth(_req(gateway)) is None) is accepted
+    finally:
+        _api_request_profile.reset(token)
+
+
+def test_radar_gateway_key_ignored_when_short(monkeypatch):
+    monkeypatch.setenv("COPILOT_GATEWAY_KEY", "curta")
+    assert APIServerAdapter(PlatformConfig(enabled=True))._copilot_gateway_key == ""
