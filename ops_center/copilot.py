@@ -555,6 +555,39 @@ def add_extra_credits(sid: str, credits: int) -> dict:
     return get(sid)
 
 
+def set_extra_credits(sid: str, credits: int) -> dict:
+    """Extras deste mês com valor exato (corrigir um pacote lançado errado; 0 tira os extras)."""
+    if not 0 <= int(credits) <= 100_000:
+        raise ValueError("créditos extras: de 0 a 100.000")
+    _set_meta(sid, extra={"month": _month_key(time.time()), "credits": int(credits)})
+    return get(sid)
+
+
+def set_monthly_credits(sid: str, credits: Optional[int]) -> dict:
+    """Franquia mensal combinada com este cliente; ``None`` volta à do plano."""
+    if credits is not None and not 1 <= int(credits) <= 1_000_000:
+        raise ValueError("franquia mensal: de 1 a 1.000.000 créditos")
+    _set_meta(sid, credits=int(credits) if credits is not None else None)
+    return get(sid)
+
+
+def reset_month_credits(sid: str) -> dict:
+    """Zera o consumo deste mês a partir de agora (o histórico continua na auditoria). No mês seguinte não importa."""
+    _set_meta(sid, creditsResetAt=time.time())
+    return get(sid)
+
+
+def pause(sid: str, reason: str = "", by: str = "painel") -> dict:
+    """Pausa sem revogar: chave e memória ficam; perguntas, alertas e briefing param até retomar."""
+    _set_meta(sid, paused={"at": time.time(), "by": by, "reason": (reason or "").strip()[:300] or None})
+    return get(sid)
+
+
+def resume(sid: str) -> dict:
+    _set_meta(sid, paused=None)
+    return get(sid)
+
+
 def radar_status(sid: str) -> dict:
     """Estado do Aibiz Radar de uma empresa, para a porta do Radar (chave de serviço). ``state: none`` sem Copiloto."""
     try:
@@ -584,7 +617,7 @@ def radar_usage(sid: str, now: Optional[float] = None, since: Optional[float] = 
     ``since`` troca o começo do mês por outro instante (resumo do teste); créditos e previsão continuam sendo do mês."""
     now = time.time() if now is None else now
     out = _summary(_row(sid))  # KeyError = sem Radar
-    start = since if since is not None else _month_start(now)
+    start = since if since is not None else max(_month_start(now), float(out["creditsResetAt"] or 0))
     try:
         with _db(_profile_home(out["profileId"]) / "ops.db") as c:
             by_session = [dict(x) for x in c.execute(
@@ -654,9 +687,14 @@ def _month_start(now: float) -> float:
     return d.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp()
 
 
-def month_usage(path: Optional[Path] = None, now: Optional[float] = None) -> dict:
+def _usage_start(meta: dict, now: float) -> float:
+    """Começo da contagem de créditos: o mês, ou o instante em que a Aibiz zerou o consumo deste mês."""
+    return max(_month_start(now), float(meta.get("creditsResetAt") or 0))
+
+
+def month_usage(path: Optional[Path] = None, now: Optional[float] = None, start: Optional[float] = None) -> dict:
     now = time.time() if now is None else now
-    start = _month_start(now)
+    start = _month_start(now) if start is None else start
     with _db(path) as c:
         tools = c.execute("SELECT COALESCE(SUM(credits),0), COUNT(*) FROM copilot_audit WHERE at>=?", (start,)).fetchone()
         turns = c.execute("SELECT COALESCE(SUM(credits),0), COALESCE(SUM(total_tokens),0), COUNT(DISTINCT session_id), "
@@ -680,9 +718,11 @@ def _limit(meta: dict, now: float, plan_credits: Optional[int] = None) -> tuple[
 
 
 def _state(revoked: bool, meta: dict, used: int, limit: int, now: float) -> str:
-    """revoked | trial_ended | no_credit | trial | active — o mesmo para a API, o painel e o Aibiz Radar."""
+    """revoked | paused | trial_ended | no_credit | trial | active — o mesmo para a API, o painel e o Aibiz Radar."""
     if revoked:
         return "revoked"
+    if meta.get("paused"):
+        return "paused"
     trial = meta.get("trialUntil")
     if trial and now >= trial:
         return "trial_ended"
@@ -700,8 +740,10 @@ def quota_block(profile: str) -> Optional[tuple[str, str]]:
         return None
     now = time.time()
     base, extra = _limit(meta, now)
-    state = _state(meta.get("status") == "revoked", meta, month_usage(now=now)["credits"], base + extra, now)
+    used = month_usage(now=now, start=_usage_start(meta, now))["credits"]
+    state = _state(meta.get("status") == "revoked", meta, used, base + extra, now)
     return {"revoked": (state, "O Aibiz Radar está indisponível para esta empresa."),
+            "paused": (state, "O Aibiz Radar está pausado. Fale com a Aibiz para reativar."),
             "trial_ended": (state, "O teste do Aibiz Radar terminou."),
             "no_credit": (state, "Os créditos de perguntas deste mês acabaram.")}.get(state)
 
@@ -764,16 +806,18 @@ def record_turn(profile: str, usage: dict, session_id: Optional[str], question: 
 
 def _summary(r: dict) -> dict:
     home = _profile_home(r["profile_id"])
-    try:
-        u = month_usage(home / "ops.db")
-    except Exception:  # noqa: BLE001 — perfil apagado à mão
-        u = {"credits": 0, "toolCalls": 0, "tokens": 0, "conversations": 0, "lastActivityAt": None}
     now = time.time()
     meta = profile_state(home) or {}  # o mesmo limite que a API aplica (meta do perfil do cliente)
+    try:
+        u = month_usage(home / "ops.db", now, _usage_start(meta, now))
+    except Exception:  # noqa: BLE001 — perfil apagado à mão
+        u = {"credits": 0, "toolCalls": 0, "tokens": 0, "conversations": 0, "lastActivityAt": None}
     base, extra = _limit(meta, now, settings()["plans"][r["plan"]]["credits"])
     return {"systemClientId": r["system_client_id"], "name": r["name"], "plan": r["plan"], "profileId": r["profile_id"],
             "status": _state(bool(r["revoked_at"]), meta, u["credits"], base + extra, now), "createdAt": r["created_at"],
-            "trialUntil": meta.get("trialUntil"), "trialStartedAt": meta.get("trialStartedAt"), "firstScanDone": bool(meta.get("firstScanDone")),
+            "trialUntil": meta.get("trialUntil"), "trialStartedAt": meta.get("trialStartedAt"),
+            "paused": meta.get("paused"), "monthlyCredits": meta.get("credits"), "creditsResetAt": meta.get("creditsResetAt"),
+            "firstScanDone": bool(meta.get("firstScanDone")),
             "month": {"conversations": u["conversations"], "credits": u["credits"], "creditsLimit": base + extra,
                       "planCredits": base, "extraCredits": extra,
                       "tokens": u["tokens"], "toolCalls": u["toolCalls"], "spendUsd": _spend(r["profile_id"])},
@@ -801,7 +845,7 @@ def _spend(pid: str) -> Optional[float]:
         return None
 
 
-_ORDER = {"new": 0, "no_credit": 1, "trial_ended": 2, "trial": 3, "active": 4, "revoked": 5}
+_ORDER = {"new": 0, "no_credit": 1, "paused": 2, "trial_ended": 3, "trial": 4, "active": 5, "revoked": 6}
 
 
 def list_clients(q: str = "", status: str = "", plan: str = "", cursor: Optional[str] = None, limit: int = 20) -> dict:
@@ -809,7 +853,7 @@ def list_clients(q: str = "", status: str = "", plan: str = "", cursor: Optional
         rows = [dict(r) for r in c.execute("SELECT * FROM copilot_clients")]
     items = [_summary(r) for r in rows]
     counts = {"all": len(items), **{s: sum(1 for i in items if i["status"] == s)
-                                    for s in ("active", "trial", "trial_ended", "no_credit", "revoked")}}
+                                    for s in ("active", "trial", "trial_ended", "no_credit", "paused", "revoked")}}
     spend_all = round(sum(i["month"]["spendUsd"] or 0 for i in items), 2)  # KPIs são de todos, não do filtro
     needle = store._norm(q)
     if needle:
