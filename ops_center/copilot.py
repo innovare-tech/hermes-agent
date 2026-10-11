@@ -537,7 +537,8 @@ def set_trial(sid: str, days: Optional[int]) -> dict:
         raise ValueError("o teste vai de 1 a 60 dias")
     if days is not None and _row(sid)["plan"] != "pro":
         set_plan(sid, "pro")
-    _set_meta(sid, trialUntil=time.time() + int(days) * 86400 if days else None)
+    now = time.time()
+    _set_meta(sid, trialUntil=now + int(days) * 86400 if days else None, trialStartedAt=now if days else None)
     return get(sid)
 
 
@@ -556,21 +557,57 @@ def add_extra_credits(sid: str, credits: int) -> dict:
 
 def radar_status(sid: str) -> dict:
     """Estado do Aibiz Radar de uma empresa, para a porta do Radar (chave de serviço). ``state: none`` sem Copiloto."""
-    from datetime import datetime
-
     try:
         out = _summary(_row(sid))
     except KeyError:
         return {"state": "none"}
-    start = datetime.fromtimestamp(_month_start(time.time()))
-    renews = start.replace(year=start.year + start.month // 12, month=start.month % 12 + 1)
     m = out["month"]
     # Sem crédito não é um estado do Radar (alertas e briefing seguem): vale o do contrato, teste ou ativo.
     state = ("trial" if out["trialUntil"] else "active") if out["status"] == "no_credit" else out["status"]
     return {"state": state, "plan": out["plan"],
             "profileId": out["profileId"], "name": out["name"], "trialEndsAt": out["trialUntil"],
-            "renewsAt": renews.timestamp(), "firstScanDone": out["firstScanDone"],
+            "trialStartedAt": out["trialStartedAt"],
+            "renewsAt": _renews_at(time.time()), "firstScanDone": out["firstScanDone"],
             "credits": {"used": m["credits"], "limit": m["planCredits"], "extra": m["extraCredits"]}}
+
+
+def _renews_at(now: float) -> float:
+    from datetime import datetime
+
+    start = datetime.fromtimestamp(_month_start(now))
+    return start.replace(year=start.year + start.month // 12, month=start.month % 12 + 1).timestamp()
+
+
+def radar_usage(sid: str, now: Optional[float] = None, since: Optional[float] = None) -> dict:
+    """Uso do mês para "Seu plano" (porta do Radar): créditos por conversa e por dia, e quando acabam no ritmo atual.
+    Só contagens: o texto das perguntas nunca sai daqui. A porta junta as conversas por pessoa (ela sabe de quem é cada uma).
+    ``since`` troca o começo do mês por outro instante (resumo do teste); créditos e previsão continuam sendo do mês."""
+    now = time.time() if now is None else now
+    out = _summary(_row(sid))  # KeyError = sem Radar
+    start = since if since is not None else _month_start(now)
+    try:
+        with _db(_profile_home(out["profileId"]) / "ops.db") as c:
+            by_session = [dict(x) for x in c.execute(
+                "SELECT session_id AS sessionId, SUM(credits) AS credits, SUM(q) AS questions, MAX(name) AS name FROM ("
+                " SELECT session_id, credits, 1 AS q, json_extract(NULLIF(asked_by, ''), '$.name') AS name"
+                " FROM copilot_usage WHERE at>=?"
+                " UNION ALL SELECT session_id, credits, 0, NULL FROM copilot_audit WHERE at>=?"
+                ") WHERE session_id IS NOT NULL GROUP BY session_id", (start, start))]
+            by_day = [dict(x) for x in c.execute(
+                "SELECT date(at, 'unixepoch', '-3 hours') AS day, SUM(credits) AS credits FROM ("
+                " SELECT at, credits FROM copilot_audit WHERE at>=? UNION ALL SELECT at, credits FROM copilot_usage WHERE at>=?"
+                ") GROUP BY day ORDER BY day", (start, start))]
+    except Exception:  # noqa: BLE001 — perfil apagado à mão
+        by_session, by_day = [], []
+    m = out["month"]
+    used, limit, renews = m["credits"], m["creditsLimit"], _renews_at(now)
+    # Ritmo do mês até agora; só interessa se acabar antes de renovar.
+    rate = used / max((now - start) / 86400, 1)
+    depletes = now + (limit - used) / rate * 86400 if rate and used < limit else None
+    return {"month": _month_key(now), "renewsAt": renews,
+            "credits": {"used": used, "limit": m["planCredits"], "extra": m["extraCredits"]},
+            "bySession": by_session, "byDay": by_day,
+            "forecastDepletesAt": depletes if depletes and depletes < renews else None}
 
 
 def radar_clients() -> list[dict]:
@@ -580,7 +617,8 @@ def radar_clients() -> list[dict]:
     out = []
     for sid in sids:
         st = radar_status(sid)
-        out.append({"systemClientId": sid, "state": st["state"], "plan": st.get("plan"), "name": st.get("name")})
+        out.append({"systemClientId": sid, "state": st["state"], "plan": st.get("plan"), "name": st.get("name"),
+                    "trialEndsAt": st.get("trialEndsAt"), "trialStartedAt": st.get("trialStartedAt")})
     return out
 
 
@@ -735,7 +773,7 @@ def _summary(r: dict) -> dict:
     base, extra = _limit(meta, now, settings()["plans"][r["plan"]]["credits"])
     return {"systemClientId": r["system_client_id"], "name": r["name"], "plan": r["plan"], "profileId": r["profile_id"],
             "status": _state(bool(r["revoked_at"]), meta, u["credits"], base + extra, now), "createdAt": r["created_at"],
-            "trialUntil": meta.get("trialUntil"), "firstScanDone": bool(meta.get("firstScanDone")),
+            "trialUntil": meta.get("trialUntil"), "trialStartedAt": meta.get("trialStartedAt"), "firstScanDone": bool(meta.get("firstScanDone")),
             "month": {"conversations": u["conversations"], "credits": u["credits"], "creditsLimit": base + extra,
                       "planCredits": base, "extraCredits": extra,
                       "tokens": u["tokens"], "toolCalls": u["toolCalls"], "spendUsd": _spend(r["profile_id"])},
