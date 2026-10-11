@@ -4132,7 +4132,8 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             return self._auth_failed_response()
         from ops_center import copilot
         sid = request.match_info["system_client_id"]
-        return web.json_response(await asyncio.get_running_loop().run_in_executor(None, copilot.radar_status, sid))
+        # to_thread leva o perfil da requisição (ContextVar); run_in_executor caía no banco padrão: "none" para todos.
+        return web.json_response(await asyncio.to_thread(copilot.radar_status, sid))
 
     def _concurrency_limited_response(self) -> Optional["web.Response"]:
         """429 when the concurrent-run cap is reached (0 disables), else None. Uses the same

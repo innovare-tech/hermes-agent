@@ -1,6 +1,8 @@
 """Rotação com janela (Copiloto do Gestor): a chave anterior de um perfil nomeado vale até
 API_SERVER_KEY_PREVIOUS_UNTIL; depois, 401. O perfil padrão nunca usa chave anterior."""
 
+import asyncio
+import json
 import time
 from types import SimpleNamespace
 
@@ -66,3 +68,20 @@ def test_radar_gateway_key_only_for_copilot_profiles(tmp_path, monkeypatch, prof
 def test_radar_gateway_key_ignored_when_short(monkeypatch):
     monkeypatch.setenv("COPILOT_GATEWAY_KEY", "curta")
     assert APIServerAdapter(PlatformConfig(enabled=True))._copilot_gateway_key == ""
+
+
+def test_radar_client_reads_registry_in_the_request_profile(monkeypatch):
+    """O estado do Radar é lido no perfil da requisição (/p/aibiz), não no banco padrão."""
+    from ops_center import copilot
+
+    gateway = "g" * 40
+    monkeypatch.setenv("COPILOT_GATEWAY_KEY", gateway)
+    monkeypatch.setattr(copilot, "radar_status", lambda sid: {"sid": sid, "profile": _api_request_profile.get()})
+    adapter = APIServerAdapter(PlatformConfig(enabled=True))
+    req = SimpleNamespace(headers={"Authorization": f"Bearer {gateway}"}, match_info={"system_client_id": "emp-A"})
+    token = _api_request_profile.set("aibiz")
+    try:
+        resp = asyncio.run(adapter._handle_radar_client(req))
+    finally:
+        _api_request_profile.reset(token)
+    assert json.loads(resp.text) == {"sid": "emp-A", "profile": "aibiz"}
