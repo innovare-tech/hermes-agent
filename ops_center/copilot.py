@@ -618,7 +618,7 @@ def radar_clients() -> list[dict]:
     for sid in sids:
         st = radar_status(sid)
         out.append({"systemClientId": sid, "state": st["state"], "plan": st.get("plan"), "name": st.get("name"),
-                    "trialEndsAt": st.get("trialEndsAt")})
+                    "trialEndsAt": st.get("trialEndsAt"), "trialStartedAt": st.get("trialStartedAt")})
     return out
 
 
