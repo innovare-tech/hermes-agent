@@ -230,7 +230,7 @@ function UsageTab({ d, now }: { d: ClientDetail; now: number }) {
           <span style={{ width: `${band.pct}%`, background: band.color }} />
         </div>
         <span style={{ fontSize: 11.5, color: "var(--fg2)", lineHeight: 1.45 }}>
-          Cada consulta gasta o peso da ferramenta{range ? ` (${range} créditos)` : ""} e mais 1 crédito a cada 2.000 tokens da conversa. Renova {renewLabel(now)}.
+          Cada consulta gasta o peso da ferramenta{range ? ` (${range} créditos)` : ""} e mais 1 crédito a cada 5.000 tokens da conversa. Renova {renewLabel(now)}.
         </span>
       </div>
 
