@@ -47,6 +47,7 @@ def test_create_isolated_profile(cp):
     cfg = _client_cfg(cp, pid)
     assert cfg["platform_toolsets"]["api_server"] == ["aibiz_ops"]
     assert cfg["tools"]["tool_search"]["enabled"] == "off"  # ferramentas direto, sem a ponte de descoberta
+    assert cfg["timezone"] == "America/Sao_Paulo"
     assert {"terminal", "file", "code_execution", "web", "delegation", "cronjob"} <= set(cfg["agent"]["disabled_toolsets"])
     mcp = cfg["mcp_servers"]["aibiz_ops"]
     assert mcp["trust"] == "untrusted" and mcp["headers"]["Authorization"] == "Bearer ${AIBIZ_MCP_TOKEN}"

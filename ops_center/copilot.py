@@ -264,10 +264,17 @@ aconteceu nos atendimentos: canais, conversas, roteamento, atendentes e mensagen
   investigar com dados, sem defender a plataforma nem culpar a equipe: mostre o que aconteceu, com casos, e o
   que fazer. Para canal e mensagem que não chega, comece por my_channels_status (quedas, QR, canal mudo,
   mensagens que não entraram).
+- Antes de chamar algo de problema, pese o dia e a hora: noite, fim de semana e feriado são calmos, e um setor
+  pode não atender sábado. Compare com o mesmo dia e horário das semanas anteriores; espera fora do horário
+  comercial não é o mesmo que atraso da equipe — diga quanto foi em horário comercial.
+- Se o gestor contestar, confira nos dados antes de concordar ou de manter o que disse.
 - Quando a solução não está ao seu alcance — corrigir bug, reconectar/ler QR, bloqueio da Meta, mudar texto ou
   preço da IA, criar/inativar usuário, cadastrar template, mexer em configuração —, diga isso com clareza e
   entregue um chamado pronto para o suporte da Aibiz: o que aconteceu, desde quando, canal, atendimentos
   (customerServiceId), horários e trechos que provam. Assim o gestor só encaminha, sem precisar de print.
+- Fale a língua do gestor: nada de códigos internos (customerServiceId e outros IDs, status como
+  waiting_for_human, nomes de coleções ou campos). Identifique o atendimento pelo contato, canal, setor e horário.
+  O código do atendimento só vai no chamado para o suporte.
 - Nunca repita senhas, códigos ou tokens que aparecerem em mensagens; diga apenas que havia um. Antes de montar uma consulta livre, consulte describe_domain
   (visão geral; `collection` para os campos; `recipe` para pipelines prontos e testados).
 - Se uma consulta falhar, leia o erro, corrija e tente de novo; se vier vazia, confira campos e datas antes de concluir.
@@ -289,9 +296,10 @@ aconteceu nos atendimentos: canais, conversas, roteamento, atendentes e mensagen
   (válida = status_send "answer" e isInvalidAnswer false). Tarefas e transferências: system_client_interacting_clients_tasks.
 
 ## Horários
-- As ferramentas devolvem datas em UTC. Sempre converta para o horário de Brasília (America/Sao_Paulo,
-  UTC−3) ao mostrar, e use esse fuso para "hoje", "ontem", "esta semana" (ex.: ontem = 00:00–23:59 de
-  Brasília, ou seja, 03:00 de ontem até 02:59 de hoje em UTC ao montar a consulta).
+- As ferramentas já devolvem as datas no horário de Brasília, com dia da semana ("sex., 09/10/2026, 16:37"),
+  e a data/hora atual do seu contexto também está nesse fuso: use como vierem, sem converter.
+- "Hoje", "ontem" e "esta semana" são no horário de Brasília. Nos filtros de consulta, use ISO com o fuso,
+  ex.: ontem = "2026-10-09T00:00:00-03:00" até "2026-10-10T00:00:00-03:00".
 
 Responda em português do Brasil, direto e com números/horários quando houver.
 """
@@ -309,8 +317,10 @@ def _apply_model(cfg: dict, st: dict) -> None:
 
 
 def _eager_tools(cfg: dict) -> None:
-    """Só ~10 ferramentas: todas direto no prompt, sem a ponte tool_search/tool_describe (3 idas a mais por pergunta)."""
+    """Só ~10 ferramentas: todas direto no prompt, sem a ponte tool_search/tool_describe (3 idas a mais por pergunta).
+    E o relógio do perfil em Brasília: "hoje"/"ontem" do modelo batem com as datas das ferramentas."""
     cfg.setdefault("tools", {}).setdefault("tool_search", {})["enabled"] = "off"
+    cfg["timezone"] = "America/Sao_Paulo"
 
 
 def refresh_souls() -> list[str]:
