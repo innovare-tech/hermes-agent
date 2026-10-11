@@ -876,7 +876,13 @@ describe("Pausar e Plano e créditos", () => {
     await flush();
     expect(calls.filter((c) => c.url.endsWith("/trial")).at(-1)?.body).toEqual({ days: 30 });
     expect(dialog()!.textContent).toContain("faltam 30 dias");
+    const before = calls.length;
     await click(dlgBtn("Encerrar teste (contratou)"));
+    expect(calls.length).toBe(before); // pede confirmação antes
+    await click(dlgBtn("Cancelar"));
+    expect(dialog()!.textContent).toContain("faltam 30 dias");
+    await click(dlgBtn("Encerrar teste (contratou)"));
+    await click(dlgBtn("Sim, encerrar teste"));
     await flush();
     expect(calls.filter((c) => c.url.endsWith("/trial")).at(-1)?.body).toEqual({ days: null });
     expect(dialog()!.textContent).toContain("Sem teste em andamento.");

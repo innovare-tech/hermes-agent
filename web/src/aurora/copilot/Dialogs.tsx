@@ -413,6 +413,7 @@ export function CreditsDialog({ client, settings, now, onClose, onChanged }: { c
   const [busy, setBusy] = useState<Sec>("");
   const [err, setErr] = useState<{ k: Sec; t: string } | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmEnd, setConfirmEnd] = useState(false);
 
   const daysN = intIn(days, 1, 60);
   const franN = intIn(fran, 1, 1_000_000);
@@ -431,6 +432,7 @@ export function CreditsDialog({ client, settings, now, onClose, onChanged }: { c
     try {
       const c = await call();
       setConfirmReset(false);
+      setConfirmEnd(false);
       onChanged(c, title(c), sub);
     } catch (e) {
       setErr({ k, t: errText(e, failMsg) });
@@ -477,13 +479,27 @@ export function CreditsDialog({ client, settings, now, onClose, onChanged }: { c
             {spinIcon(busy === "trial", "hourglass")}
             {running ? "Redefinir teste" : "Iniciar teste"}
           </button>
-          {until && (
-            <button type="button" className="au-outline" style={btn} disabled={!!busy} onClick={() => run("end", () => copilotApi.setTrial(sid, null), (c) => `${c.name} saiu do teste`, "Segue no plano atual, sem data de fim.", "Não consegui encerrar o teste. Nada mudou.")}>
-              {spinIcon(busy === "end", "check")}
+          {until && !confirmEnd && (
+            <button type="button" className="au-outline" style={btn} disabled={!!busy} onClick={() => setConfirmEnd(true)}>
+              <Icon name="check" size={13} />
               Encerrar teste (contratou)
             </button>
           )}
         </div>
+        {until && confirmEnd && (
+          <div className="cp-warn" role="alert" style={{ flexDirection: "column", alignItems: "flex-start" }}>
+            <span>O cliente sai do teste e segue no plano {planName(client.plan, settings.planLabels)}, sem data de fim. Use só quando ele contratou.</span>
+            <div style={row}>
+              <button type="button" className="au-primary" style={btn} disabled={!!busy} onClick={() => run("end", () => copilotApi.setTrial(sid, null), (c) => `${c.name} saiu do teste`, "Segue no plano atual, sem data de fim.", "Não consegui encerrar o teste. Nada mudou.")}>
+                {spinIcon(busy === "end", "check")}
+                Sim, encerrar teste
+              </button>
+              <button type="button" className="au-outline" style={btn} disabled={!!busy} onClick={() => setConfirmEnd(false)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
         {fail("trial")}
         {fail("end")}
       </Section>
