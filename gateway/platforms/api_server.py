@@ -1779,6 +1779,7 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             ("POST", "/api/sessions/{session_id}/chat/stream", self._handle_session_chat_stream),
             ("POST", "/api/sessions/{session_id}/model", self._handle_session_model_lock),
             ("POST", "/v1/chat/completions", self._handle_chat_completions),
+            ("GET", "/v1/radar/clients", self._handle_radar_clients),
             ("GET", "/v1/radar/clients/{system_client_id}", self._handle_radar_client),
             ("POST", "/v1/responses", self._handle_responses),
             ("GET", "/v1/responses/{response_id}", self._handle_get_response),
@@ -4124,11 +4125,21 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         if hasattr(task, "add_done_callback"):
             task.add_done_callback(self._background_tasks.discard)
 
+    def _is_radar_gateway(self, request: "web.Request") -> bool:
+        token = request.headers.get("Authorization", "")[7:].strip()
+        return bool(self._copilot_gateway_key and hmac.compare_digest(token.encode(), self._copilot_gateway_key.encode()))
+
+    async def _handle_radar_clients(self, request: "web.Request") -> "web.Response":
+        """Empresas com Aibiz Radar (o motor de alertas da porta varre as ativas). Só a chave de serviço."""
+        if not self._is_radar_gateway(request):
+            return self._auth_failed_response()
+        from ops_center import copilot
+        return web.json_response({"items": await asyncio.to_thread(copilot.radar_clients)})
+
     async def _handle_radar_client(self, request: "web.Request") -> "web.Response":
         """Estado do Aibiz Radar de uma empresa (plano, teste, créditos) para a porta do Radar.
         Só a chave de serviço; chamado em /p/<perfil-administrador>/ (onde mora o registro dos clientes)."""
-        token = request.headers.get("Authorization", "")[7:].strip()
-        if not (self._copilot_gateway_key and hmac.compare_digest(token.encode(), self._copilot_gateway_key.encode())):
+        if not self._is_radar_gateway(request):
             return self._auth_failed_response()
         from ops_center import copilot
         sid = request.match_info["system_client_id"]

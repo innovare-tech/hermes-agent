@@ -224,6 +224,7 @@ def test_trial_extra_credits_and_radar_status(cp, monkeypatch):
         cp.record_turn(pid, {"total_tokens": 50000}, "s1", "tudo", "")  # 10 créditos: acabou
         assert cp.quota_block(pid)[0] == "no_credit"
     assert cp.radar_status("c1")["state"] == "trial"  # sem crédito continua em teste (alertas seguem)
+    assert cp.radar_clients() == [{"systemClientId": "c1", "state": "trial", "plan": "pro", "name": "Padaria Sol"}]
     cp.add_extra_credits("c1", 5)
     cp.add_extra_credits("c1", 5)
     with cp._in_profile(pid):

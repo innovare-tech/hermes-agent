@@ -573,6 +573,17 @@ def radar_status(sid: str) -> dict:
             "credits": {"used": m["credits"], "limit": m["planCredits"], "extra": m["extraCredits"]}}
 
 
+def radar_clients() -> list[dict]:
+    """Empresas com Radar e o estado de cada uma (``radar_status`` sem créditos nem perfil), para o motor de alertas."""
+    with _db() as c:
+        sids = [r[0] for r in c.execute("SELECT system_client_id FROM copilot_clients WHERE revoked_at IS NULL")]
+    out = []
+    for sid in sids:
+        st = radar_status(sid)
+        out.append({"systemClientId": sid, "state": st["state"], "plan": st.get("plan"), "name": st.get("name")})
+    return out
+
+
 def purge_revoked(now: Optional[float] = None) -> list[str]:
     """Apaga o perfil (memória, sessões) de quem está revogado há mais de ``REVOKED_KEEP_DAYS`` dias."""
     from hermes_cli.profiles import delete_profile
