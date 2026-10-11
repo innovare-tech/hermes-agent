@@ -576,12 +576,13 @@ def _renews_at(now: float) -> float:
     return start.replace(year=start.year + start.month // 12, month=start.month % 12 + 1).timestamp()
 
 
-def radar_usage(sid: str, now: Optional[float] = None) -> dict:
+def radar_usage(sid: str, now: Optional[float] = None, since: Optional[float] = None) -> dict:
     """Uso do mês para "Seu plano" (porta do Radar): créditos por conversa e por dia, e quando acabam no ritmo atual.
-    Só contagens: o texto das perguntas nunca sai daqui. A porta junta as conversas por pessoa (ela sabe de quem é cada uma)."""
+    Só contagens: o texto das perguntas nunca sai daqui. A porta junta as conversas por pessoa (ela sabe de quem é cada uma).
+    ``since`` troca o começo do mês por outro instante (resumo do teste); créditos e previsão continuam sendo do mês."""
     now = time.time() if now is None else now
     out = _summary(_row(sid))  # KeyError = sem Radar
-    start = _month_start(now)
+    start = since if since is not None else _month_start(now)
     try:
         with _db(_profile_home(out["profileId"]) / "ops.db") as c:
             by_session = [dict(x) for x in c.execute(
@@ -614,7 +615,8 @@ def radar_clients() -> list[dict]:
     out = []
     for sid in sids:
         st = radar_status(sid)
-        out.append({"systemClientId": sid, "state": st["state"], "plan": st.get("plan"), "name": st.get("name")})
+        out.append({"systemClientId": sid, "state": st["state"], "plan": st.get("plan"), "name": st.get("name"),
+                    "trialEndsAt": st.get("trialEndsAt")})
     return out
 
 

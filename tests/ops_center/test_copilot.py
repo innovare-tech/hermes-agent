@@ -224,7 +224,8 @@ def test_trial_extra_credits_and_radar_status(cp, monkeypatch):
         cp.record_turn(pid, {"total_tokens": 50000}, "s1", "tudo", "")  # 10 créditos: acabou
         assert cp.quota_block(pid)[0] == "no_credit"
     assert cp.radar_status("c1")["state"] == "trial"  # sem crédito continua em teste (alertas seguem)
-    assert cp.radar_clients() == [{"systemClientId": "c1", "state": "trial", "plan": "pro", "name": "Padaria Sol"}]
+    assert cp.radar_clients() == [{"systemClientId": "c1", "state": "trial", "plan": "pro", "name": "Padaria Sol",
+                                   "trialEndsAt": st["trialEndsAt"]}]
     cp.add_extra_credits("c1", 5)
     cp.add_extra_credits("c1", 5)
     with cp._in_profile(pid):
@@ -264,3 +265,4 @@ def test_radar_usage_counts_by_session_and_day_without_question_text(cp, monkeyp
     assert "quem espera?" not in json.dumps(u)
     assert u["renewsAt"] > time.time()
     assert u["forecastDepletesAt"] is None or u["forecastDepletesAt"] < u["renewsAt"]  # só avisa se acabar antes de renovar
+    assert cp.radar_usage("c1", since=time.time() + 60)["bySession"] == []  # resumo do teste: só o que veio depois

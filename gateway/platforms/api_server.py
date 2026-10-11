@@ -4153,9 +4153,13 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             return self._auth_failed_response()
         from ops_center import copilot
         try:
-            return web.json_response(await asyncio.to_thread(copilot.radar_usage, request.match_info["system_client_id"]))
+            since = request.query.get("since")
+            return web.json_response(await asyncio.to_thread(
+                copilot.radar_usage, request.match_info["system_client_id"], None, float(since) if since else None))
         except KeyError:
             return web.json_response({"error": "sem Radar"}, status=404)
+        except ValueError:
+            return web.json_response({"error": "since inválido"}, status=400)
 
     def _concurrency_limited_response(self) -> Optional["web.Response"]:
         """429 when the concurrent-run cap is reached (0 disables), else None. Uses the same
