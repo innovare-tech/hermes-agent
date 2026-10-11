@@ -194,7 +194,7 @@ describe("Clientes do Copiloto", () => {
     expect(kpis).toContain("1sem saldo");
     expect(kpis).toContain("US$ 42,50");
     const chips = qa('[aria-label="Situação"] .cp-chip').map((b) => b.textContent);
-    expect(chips).toEqual(["Todos4", "Ativos2", "Sem saldo1", "Revogados1"]);
+    expect(chips).toEqual(["Todos4", "Ativos2", "Em teste0", "Sem saldo1", "Revogados1"]);
     // item: plano, id em mono, conversas e gasto, status e última atividade
     const padaria = qa("button.cp-item").find((b) => b.textContent?.includes("Padaria Sol"))!;
     expect(padaria.textContent).toContain("Starter");

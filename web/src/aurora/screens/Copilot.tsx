@@ -294,6 +294,16 @@ export function Copilot() {
                     onRotate: () => setDlg({ kind: "rotate" }),
                     onRevoke: () => setDlg({ kind: "revoke" }),
                     onReactivate: () => setDlg({ kind: "reactivate" }),
+                    onTrial: (days) =>
+                      copilotApi.setTrial(detail.systemClientId, days).then(
+                        (c) => (apply(c), toast(days ? `${c.name} em teste do Pro` : `${c.name} saiu do teste`, days ? `${days} dias; termina sozinho.` : "Segue no plano atual, sem data de fim.")),
+                        () => toast("Não consegui mudar o teste", "Nada foi alterado. Tente de novo."),
+                      ),
+                    onExtra: (credits) =>
+                      copilotApi.addExtraCredits(detail.systemClientId, credits).then(
+                        (c) => (apply(c), toast(`+${credits} créditos para ${c.name}`, "Valem só neste mês.")),
+                        () => toast("Não consegui somar os créditos", "Nada foi alterado. Tente de novo."),
+                      ),
                   }}
                 />
               )}

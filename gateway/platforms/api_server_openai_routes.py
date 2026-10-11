@@ -750,12 +750,14 @@ class OpenAICompatRoutesMixin:
             # tool_call_ids with an emitted "running": a "completed" without one (internal/
             # filtered tools) is dropped rather than orphaned on the wire.
             _started_tool_call_ids: set[str] = set()
+            _tool_started_at: dict[str, float] = {}
 
             def _on_tool_start(tool_call_id, function_name, function_args):
                 """``hermes.tool.progress`` status=running; ``_``-prefixed tools stay off the wire."""
                 if not tool_call_id or function_name.startswith("_"):
                     return
                 _started_tool_call_ids.add(tool_call_id)
+                _tool_started_at[tool_call_id] = time.monotonic()
                 from agent.display import build_tool_preview, get_tool_emoji
                 label = build_tool_preview(function_name, function_args) or function_name
                 _stream_q.put_threadsafe(("__tool_progress__", {
@@ -766,8 +768,10 @@ class OpenAICompatRoutesMixin:
                 if not tool_call_id or tool_call_id not in _started_tool_call_ids:
                     return
                 _started_tool_call_ids.discard(tool_call_id)
+                started = _tool_started_at.pop(tool_call_id, None)
                 _stream_q.put_threadsafe(("__tool_progress__", {
-                    "tool": function_name, "toolCallId": tool_call_id, "status": "completed"}))
+                    "tool": function_name, "toolCallId": tool_call_id, "status": "completed",
+                    "durationMs": int((time.monotonic() - started) * 1000) if started else None}))
 
             # tool_progress_callback deliberately NOT wired: it would duplicate the structured
             # start/complete callbacks (which carry the tool_call id).
@@ -939,6 +943,8 @@ class OpenAICompatRoutesMixin:
                 err_msg = err_msg or str(agent_error)
             finish_reason = _finish_reason(completed, is_partial, is_failed, err_msg, agent_error)
             finish_chunk = _chunk({}, finish_reason, usage=_chat_usage_payload(usage))
+            if isinstance(result, dict) and result.get("copilot_credits") is not None:
+                finish_chunk["copilot"] = {"creditsUsed": result["copilot_credits"]}  # Aibiz Radar: "usou N créditos"
             presentation_muted = (
                 (isinstance(result, dict) and result.get("_notification_presentation_suppressed") is True)
                 or getattr(agent_error, "_notification_presentation_suppressed", False) is True

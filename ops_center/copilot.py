@@ -267,13 +267,16 @@ aconteceu nos atendimentos: canais, conversas, roteamento, atendentes e mensagen
 - Antes de chamar algo de problema, pese o dia e a hora: noite, fim de semana e feriado são calmos, e um setor
   pode não atender sábado. Compare com o mesmo dia e horário das semanas anteriores; espera fora do horário
   comercial não é o mesmo que atraso da equipe — diga quanto foi em horário comercial.
+- Números que se somam precisam bater: se disser "16 esperando agora", não cite outro total de espera sem
+  explicar a diferença (ex.: "16 esperando há menos de 1 dia e 52 esquecidos há mais de 3 dias").
 - Se o gestor contestar, confira nos dados antes de concordar ou de manter o que disse.
 - Quando a solução não está ao seu alcance — corrigir bug, reconectar/ler QR, bloqueio da Meta, mudar texto ou
   preço da IA, criar/inativar usuário, cadastrar template, mexer em configuração —, diga isso com clareza e
   entregue um chamado pronto para o suporte da Aibiz: o que aconteceu, desde quando, canal, atendimentos
   (customerServiceId), horários e trechos que provam. Assim o gestor só encaminha, sem precisar de print.
-- Fale a língua do gestor: nada de códigos internos (customerServiceId e outros IDs, status como
-  waiting_for_human, nomes de coleções ou campos). Identifique o atendimento pelo contato, canal, setor e horário.
+- Fale a língua do gestor: nada de códigos internos (customerServiceId e outros IDs, status em inglês como
+  waiting_for_human ou ready, valores como null/true, nomes de coleções ou campos) — diga "sem atendente",
+  "conectado", "aguardando resposta". Identifique o atendimento pelo contato, canal, setor e horário.
   O código do atendimento só vai no chamado para o suporte.
 - Nunca repita senhas, códigos ou tokens que aparecerem em mensagens; diga apenas que havia um. Antes de montar uma consulta livre, consulte describe_domain
   (visão geral; `collection` para os campos; `recipe` para pipelines prontos e testados).
@@ -513,6 +516,56 @@ def reactivate(sid: str) -> dict:
     return {"apiKey": key, "client": get(sid)}
 
 
+def _set_meta(sid: str, **fields: Any) -> None:
+    r = _row(sid)
+    if r["revoked_at"]:
+        raise ValueError("Copiloto revogado: reative antes")
+    with _in_profile(r["profile_id"]):
+        store.set_meta("copilot", {**(store.get_meta("copilot") or {}), **fields})
+
+
+def set_trial(sid: str, days: Optional[int]) -> dict:
+    """Teste do Pro: ``days`` dias a partir de agora (termina sozinho); ``None`` = contratou, sai do teste."""
+    if days is not None and not 1 <= int(days) <= 60:
+        raise ValueError("o teste vai de 1 a 60 dias")
+    if days is not None and _row(sid)["plan"] != "pro":
+        set_plan(sid, "pro")
+    _set_meta(sid, trialUntil=time.time() + int(days) * 86400 if days else None)
+    return get(sid)
+
+
+def add_extra_credits(sid: str, credits: int) -> dict:
+    """Pacote avulso: soma aos extras deste mês (no mês seguinte zera)."""
+    if not 1 <= int(credits) <= 100_000:
+        raise ValueError("créditos extras: de 1 a 100.000")
+    r = _row(sid)
+    month = _month_key(time.time())
+    with _in_profile(r["profile_id"]):
+        cur = (store.get_meta("copilot") or {}).get("extra") or {}
+    total = (int(cur.get("credits") or 0) if cur.get("month") == month else 0) + int(credits)
+    _set_meta(sid, extra={"month": month, "credits": total})
+    return get(sid)
+
+
+def radar_status(sid: str) -> dict:
+    """Estado do Aibiz Radar de uma empresa, para a porta do Radar (chave de serviço). ``state: none`` sem Copiloto."""
+    from datetime import datetime
+
+    try:
+        out = _summary(_row(sid))
+    except KeyError:
+        return {"state": "none"}
+    start = datetime.fromtimestamp(_month_start(time.time()))
+    renews = start.replace(year=start.year + start.month // 12, month=start.month % 12 + 1)
+    m = out["month"]
+    # Sem crédito não é um estado do Radar (alertas e briefing seguem): vale o do contrato, teste ou ativo.
+    state = ("trial" if out["trialUntil"] else "active") if out["status"] == "no_credit" else out["status"]
+    return {"state": state, "plan": out["plan"],
+            "profileId": out["profileId"], "name": out["name"], "trialEndsAt": out["trialUntil"],
+            "renewsAt": renews.timestamp(), "firstScanDone": out["firstScanDone"],
+            "credits": {"used": m["credits"], "limit": m["planCredits"], "extra": m["extraCredits"]}}
+
+
 def purge_revoked(now: Optional[float] = None) -> list[str]:
     """Apaga o perfil (memória, sessões) de quem está revogado há mais de ``REVOKED_KEEP_DAYS`` dias."""
     from hermes_cli.profiles import delete_profile
@@ -557,19 +610,44 @@ def month_usage(path: Optional[Path] = None, now: Optional[float] = None) -> dic
             "conversations": turns[2], "lastActivityAt": last}
 
 
-def quota_block(profile: str) -> Optional[str]:
-    """Na API (escopo do perfil): motivo para recusar o turno, ou ``None``. Só perfis ``cli-``."""
+def _month_key(now: float) -> str:
+    from ops_center import notify
+
+    return notify._local(now, notify.routes()["quietHours"]["tz"]).strftime("%Y-%m")
+
+
+def _limit(meta: dict, now: float, plan_credits: Optional[int] = None) -> tuple[int, int]:
+    """(franquia do plano, créditos extras deste mês). Extras de outro mês não valem mais."""
+    base = int(meta.get("credits") or plan_credits or PLANS.get(meta.get("plan") or "starter", PLANS["starter"])["credits"])
+    extra = meta.get("extra") or {}
+    return base, int(extra.get("credits") or 0) if extra.get("month") == _month_key(now) else 0
+
+
+def _state(revoked: bool, meta: dict, used: int, limit: int, now: float) -> str:
+    """revoked | trial_ended | no_credit | trial | active — o mesmo para a API, o painel e o Aibiz Radar."""
+    if revoked:
+        return "revoked"
+    trial = meta.get("trialUntil")
+    if trial and now >= trial:
+        return "trial_ended"
+    if used >= limit:
+        return "no_credit"
+    return "trial" if trial else "active"
+
+
+def quota_block(profile: str) -> Optional[tuple[str, str]]:
+    """Na API (escopo do perfil): ``(estado, motivo)`` para recusar o turno, ou ``None``. Só perfis ``cli-``."""
     if not profile.startswith("cli-"):
         return None
     meta = store.get_meta("copilot") or {}
     if not meta:
         return None
-    if meta.get("status") == "revoked":
-        return "Copiloto indisponível para esta empresa."
-    limit = int((meta.get("credits") or PLANS.get(meta.get("plan") or "starter", PLANS["starter"])["credits"]))
-    if month_usage()["credits"] >= limit:
-        return "Sem saldo: os créditos do Copiloto deste mês acabaram. Fale com a Aibiz para mudar de plano."
-    return None
+    now = time.time()
+    base, extra = _limit(meta, now)
+    state = _state(meta.get("status") == "revoked", meta, month_usage(now=now)["credits"], base + extra, now)
+    return {"revoked": (state, "O Aibiz Radar está indisponível para esta empresa."),
+            "trial_ended": (state, "O teste do Aibiz Radar terminou."),
+            "no_credit": (state, "Os créditos de perguntas deste mês acabaram.")}.get(state)
 
 
 def record_tool(tool_name: str, args: Any, result: Any, duration_ms: int, session_id: Optional[str]) -> None:
@@ -605,40 +683,43 @@ def record_tool(tool_name: str, args: Any, result: Any, duration_ms: int, sessio
                    WEIGHT.get(key, 1) if ok and not panel else 0, asked_by))
 
 
-def record_turn(profile: str, usage: dict, session_id: Optional[str], question: str, asked_by: str = "") -> None:
-    """Fim de um turno da API num perfil ``cli-``: tokens viram créditos e a pergunta entra na auditoria do turno."""
+def record_turn(profile: str, usage: dict, session_id: Optional[str], question: str,
+                asked_by: str = "") -> Optional[int]:
+    """Fim de um turno da API num perfil ``cli-``: tokens viram créditos e a pergunta entra na auditoria do turno.
+    Devolve os créditos gastos no turno (tokens + ferramentas), para o rodapé "usou N créditos"."""
     if not profile.startswith("cli-"):
-        return
+        return None
     total = int(usage.get("total_tokens") or 0)
     credits = -(-total // TOKENS_PER_CREDIT) if total else 0
     q = (question or "")[:1000]
     with _db() as c:
+        tools = c.execute("SELECT COALESCE(SUM(credits),0) FROM copilot_audit WHERE session_id IS ? AND question IS NULL",
+                          (session_id,)).fetchone()[0]
         c.execute("INSERT INTO copilot_usage(at, session_id, prompt_tokens, completion_tokens, total_tokens, credits, "
                   "question, asked_by) VALUES(?,?,?,?,?,?,?,?)",
                   (time.time(), session_id, int(usage.get("input_tokens") or 0), int(usage.get("output_tokens") or 0),
                    total, credits, q, asked_by[:200]))
         c.execute("UPDATE copilot_audit SET question=?, asked_by=? WHERE session_id IS ? AND question IS NULL",
                   (q, asked_by[:200], session_id))
+    return credits + int(tools)
 
 
 # ---- leitura (painel, perfil administrador) ----
 
-def _status(r: dict, used: int, limit: int) -> str:
-    if r["revoked_at"]:
-        return "revoked"
-    return "no_credit" if used >= limit else "active"
-
-
 def _summary(r: dict) -> dict:
-    db = _profile_home(r["profile_id"]) / "ops.db"
+    home = _profile_home(r["profile_id"])
     try:
-        u = month_usage(db)
+        u = month_usage(home / "ops.db")
     except Exception:  # noqa: BLE001 — perfil apagado à mão
         u = {"credits": 0, "toolCalls": 0, "tokens": 0, "conversations": 0, "lastActivityAt": None}
-    limit = settings()["plans"][r["plan"]]["credits"]
+    now = time.time()
+    meta = profile_state(home) or {}  # o mesmo limite que a API aplica (meta do perfil do cliente)
+    base, extra = _limit(meta, now, settings()["plans"][r["plan"]]["credits"])
     return {"systemClientId": r["system_client_id"], "name": r["name"], "plan": r["plan"], "profileId": r["profile_id"],
-            "status": _status(r, u["credits"], limit), "createdAt": r["created_at"],
-            "month": {"conversations": u["conversations"], "credits": u["credits"], "creditsLimit": limit,
+            "status": _state(bool(r["revoked_at"]), meta, u["credits"], base + extra, now), "createdAt": r["created_at"],
+            "trialUntil": meta.get("trialUntil"), "firstScanDone": bool(meta.get("firstScanDone")),
+            "month": {"conversations": u["conversations"], "credits": u["credits"], "creditsLimit": base + extra,
+                      "planCredits": base, "extraCredits": extra,
                       "tokens": u["tokens"], "toolCalls": u["toolCalls"], "spendUsd": _spend(r["profile_id"])},
             "lastActivityAt": u["lastActivityAt"], "keyRotatedAt": r["key_rotated_at"],
             "isNew": not r["revoked_at"] and not u["lastActivityAt"] and time.time() - r["created_at"] < 7 * 86400,
@@ -664,14 +745,15 @@ def _spend(pid: str) -> Optional[float]:
         return None
 
 
-_ORDER = {"new": 0, "no_credit": 1, "active": 2, "revoked": 3}
+_ORDER = {"new": 0, "no_credit": 1, "trial_ended": 2, "trial": 3, "active": 4, "revoked": 5}
 
 
 def list_clients(q: str = "", status: str = "", plan: str = "", cursor: Optional[str] = None, limit: int = 20) -> dict:
     with _db() as c:
         rows = [dict(r) for r in c.execute("SELECT * FROM copilot_clients")]
     items = [_summary(r) for r in rows]
-    counts = {"all": len(items), **{s: sum(1 for i in items if i["status"] == s) for s in ("active", "no_credit", "revoked")}}
+    counts = {"all": len(items), **{s: sum(1 for i in items if i["status"] == s)
+                                    for s in ("active", "trial", "trial_ended", "no_credit", "revoked")}}
     spend_all = round(sum(i["month"]["spendUsd"] or 0 for i in items), 2)  # KPIs são de todos, não do filtro
     needle = store._norm(q)
     if needle:
