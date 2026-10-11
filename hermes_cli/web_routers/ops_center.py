@@ -995,6 +995,48 @@ async def copilot_extra(sid: str, body: ExtraBody):
     return out
 
 
+class CreditsBody(BaseModel):
+    monthlyCredits: Optional[int] = None  # enviado como null = volta à franquia do plano
+    extraCredits: Optional[int] = None  # valor exato dos extras deste mês
+    reset: bool = False  # zera o consumo do mês a partir de agora
+
+
+@copilot_router.put("/clients/{sid}/credits")
+async def copilot_credits(sid: str, body: CreditsBody):
+    c, done = _copilot(), []
+    if "monthlyCredits" in body.model_fields_set:
+        out = await _run(c.set_monthly_credits, sid, body.monthlyCredits)
+        done.append(f"franquia de {body.monthlyCredits} créditos/mês" if body.monthlyCredits else "franquia do plano")
+    if body.extraCredits is not None:
+        out = await _run(c.set_extra_credits, sid, body.extraCredits)
+        done.append(f"{body.extraCredits} créditos extras neste mês")
+    if body.reset:
+        out = await _run(c.reset_month_credits, sid)
+        done.append("consumo do mês zerado")
+    if not done:
+        raise HTTPException(status_code=400, detail="nada para mudar")
+    await _act(f"Aibiz Radar: {out['name']} — " + ", ".join(done))
+    return out
+
+
+class PauseBody(BaseModel):
+    reason: str = ""
+
+
+@copilot_router.post("/clients/{sid}/pause")
+async def copilot_pause(sid: str, body: Optional[PauseBody] = None):
+    out = await _run(_copilot().pause, sid, (body or PauseBody()).reason, "painel")
+    await _act(f"Aibiz Radar pausado: {out['name']}")
+    return out
+
+
+@copilot_router.post("/clients/{sid}/resume")
+async def copilot_resume(sid: str):
+    out = await _run(_copilot().resume, sid)
+    await _act(f"Aibiz Radar retomado: {out['name']}")
+    return out
+
+
 @copilot_router.get("/settings")
 async def copilot_settings():
     c = _copilot()

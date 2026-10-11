@@ -11,6 +11,7 @@ export const STATUS: Record<Status, { label: string; color: string }> = {
   trial: { label: "Em teste", color: "var(--ok)" },
   trial_ended: { label: "Teste terminou", color: "var(--warn)" },
   no_credit: { label: "Sem saldo", color: "var(--warn)" },
+  paused: { label: "Pausado", color: "var(--warn)" },
   revoked: { label: "Revogado", color: "var(--fg2)" },
 };
 
@@ -19,6 +20,7 @@ export const STATUS_FILTERS: { key: "" | Status; label: string }[] = [
   { key: "active", label: "Ativos" },
   { key: "trial", label: "Em teste" },
   { key: "no_credit", label: "Sem saldo" },
+  { key: "paused", label: "Pausados" },
   { key: "revoked", label: "Revogados" },
 ];
 
@@ -45,7 +47,7 @@ export const initial = (name: string) => (name.trim().match(/[\p{L}\p{N}]/u)?.[0
 
 // ---- ordem e cliente novo ----
 
-const RANK: Record<Status, number> = { no_credit: 1, trial_ended: 1, trial: 2, active: 2, revoked: 3 };
+const RANK: Record<Status, number> = { no_credit: 1, trial_ended: 1, trial: 2, active: 2, paused: 3, revoked: 4 };
 const WEEK = 7 * 86400;
 
 /** O backend marca `isNew` na lista; o detalhe não traz, então vale a mesma regra: ativo, sem uso, criado há menos de 7 dias. */
@@ -207,6 +209,15 @@ export function planDiff(catalog: CatalogTool[], from: Plan, to: Plan, credits: 
 /** Plano acima do atual (para o atalho "Mudar para Pro"); `null` no último. */
 export const nextPlan = (p: Plan): Plan | null => PLANS[PLANS.indexOf(p) + 1] ?? null;
 
+/** Dias que faltam do teste (arredonda para cima; nunca negativo). */
+export const trialDaysLeft = (until: number, now: number) => Math.max(0, Math.ceil((until - now) / 86400));
+
+/** "Limite deste mês: franquia 1.000 + extras 500 = 1.500; usados 312". */
+export const limitSummary = (franchise: number, extras: number, used: number) => `Limite deste mês: franquia ${fmtInt(franchise)} + extras ${fmtInt(extras)} = ${fmtInt(franchise + extras)}; usados ${fmtInt(used)}`;
+
+/** Inteiro entre `min` e `max` ou `null` (campo vazio, quebrado ou fora da faixa). */
+export const intIn = (v: string, min: number, max: number): number | null => (/^\d+$/.test(v.trim()) && +v >= min && +v <= max ? +v : null);
+
 // ---- revogar ----
 
 export const canRevoke = (typed: string, sid: string) => typed.trim() === sid;
@@ -250,11 +261,16 @@ export const rowsLabel = (n: number | null) => (n == null ? "—" : String(n));
 
 // ---- faixa de contexto do detalhe ----
 
-export type Banner = { tone: "warn" | "muted" | "ok"; icon: string; text: string; action?: { label: string; plan: Plan } };
+export type Banner = { tone: "warn" | "muted" | "ok"; icon: string; text: string; action?: { label: string; plan?: Plan; resume?: true } };
 
-const dayMonth = (ts: number) => new Date(ts * 1000).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+export const dayMonth = (ts: number) => new Date(ts * 1000).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 
-export function bannerOf(d: Pick<ClientDetail, "status" | "plan" | "revoked" | "lastActivityAt" | "createdAt"> & { isNew?: boolean; trialUntil?: number | null }, now: number): Banner | null {
+export function bannerOf(d: Pick<ClientDetail, "status" | "plan" | "revoked" | "lastActivityAt" | "createdAt"> & { isNew?: boolean; trialUntil?: number | null; paused?: Client["paused"] }, now: number): Banner | null {
+  if (d.status === "paused") {
+    const p = d.paused;
+    const who = p ? ` em ${dayMonth(p.at)} ${byLabel(p.by)}` : "";
+    return { tone: "warn", icon: "circle-pause", text: `Pausado${who}${p?.reason ? ` — ${p.reason}` : ""}. Perguntas, alertas e briefing estão parados; a chave e o histórico ficam.`, action: { label: "Retomar", resume: true } };
+  }
   if (d.status === "trial_ended" && d.trialUntil) {
     return { tone: "warn", icon: "hourglass", text: `O teste do Pro terminou em ${dayMonth(d.trialUntil)}. O gestor vê “Seu teste terminou” e as conversas ficam só leitura. Contratou? Use “Encerrar teste”.` };
   }

@@ -4,6 +4,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router";
+import { ApiError } from "@/lib/api-error";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuditItem, CatalogTool, Client, ClientDetail, CopilotSettings, DirectoryClient } from "./api";
 import { sortClients } from "./model";
@@ -38,6 +39,7 @@ let directory: DirectoryClient[];
 let calls: { url: string; method: string; body: unknown }[];
 let failList = false;
 let failDetail = false;
+let creditsError = "";
 let slow = 0;
 let createDelay = 0;
 let nextKey = 1;
@@ -54,7 +56,7 @@ const recOf = (sid: string) => {
   if (!r) throw Object.assign(new Error("Cliente não encontrado"), { status: 404 });
   return r;
 };
-const counts = () => ({ all: db.length, active: db.filter((r) => r.c.status === "active").length, no_credit: db.filter((r) => r.c.status === "no_credit").length, revoked: db.filter((r) => r.c.status === "revoked").length });
+const counts = () => ({ all: db.length, active: db.filter((r) => r.c.status === "active").length, no_credit: db.filter((r) => r.c.status === "no_credit").length, paused: db.filter((r) => r.c.status === "paused").length, revoked: db.filter((r) => r.c.status === "revoked").length });
 const newKey = () => (lastKey = `hk_live_test${nextKey++}secretkey`);
 
 vi.mock("@/lib/api", async (orig) => ({
@@ -90,13 +92,34 @@ vi.mock("@/lib/api", async (orig) => ({
       const items = directory.filter((c) => !q || c.name.toLowerCase().includes(q) || c.systemClientId.includes(q));
       return { items: q ? items : [...items].sort((a, b) => Number(a.hasCopilot) - Number(b.hasCopilot)), total: items.length, nextCursor: null };
     }
-    const m = /^\/api\/copilot\/clients\/([^/]+)(?:\/(audit|rotate-key|revoke|reactivate))?$/.exec(p);
+    const m = /^\/api\/copilot\/clients\/([^/]+)(?:\/(audit|rotate-key|revoke|reactivate|pause|resume|credits|trial))?$/.exec(p);
     if (m) {
       if (failDetail) throw new Error("fora do ar");
       const r = recOf(decodeURIComponent(m[1]));
       if (!m[2] && method === "GET") return detail(r);
       if (!m[2] && method === "PATCH") {
         r.c = { ...r.c, plan: body.plan, month: { ...r.c.month, creditsLimit: SETTINGS.plans[body.plan as "pro"].credits } };
+        return detail(r);
+      }
+      if (m[2] === "pause") {
+        r.c = { ...r.c, status: "paused", paused: { at: NOW, by: "painel", reason: body.reason ?? null } };
+        return detail(r);
+      }
+      if (m[2] === "resume") {
+        r.c = { ...r.c, status: "active", paused: null };
+        return detail(r);
+      }
+      if (m[2] === "trial") {
+        r.c = { ...r.c, trialUntil: body.days ? NOW + body.days * DAY : null };
+        return detail(r);
+      }
+      if (m[2] === "credits") {
+        if (creditsError) throw new ApiError(creditsError, { status: 400, body: creditsError, url });
+        const mo = r.c.month;
+        const monthlyCredits = "monthlyCredits" in body ? body.monthlyCredits : (r.c.monthlyCredits ?? null);
+        const planCredits = monthlyCredits ?? SETTINGS.plans[r.c.plan].credits;
+        const extraCredits = body.extraCredits ?? mo.extraCredits ?? 0;
+        r.c = { ...r.c, monthlyCredits, creditsResetAt: body.reset ? NOW : (r.c.creditsResetAt ?? null), month: { ...mo, credits: body.reset ? 0 : mo.credits, planCredits, extraCredits, creditsLimit: planCredits + extraCredits } };
         return detail(r);
       }
       if (m[2] === "audit") return { items: r.audit, nextCursor: null };
@@ -154,6 +177,7 @@ beforeEach(() => {
   calls = [];
   failList = false;
   failDetail = false;
+  creditsError = "";
   slow = 0;
   createDelay = 0;
   lastKey = "";
@@ -194,7 +218,7 @@ describe("Clientes do Copiloto", () => {
     expect(kpis).toContain("1sem saldo");
     expect(kpis).toContain("US$ 42,50");
     const chips = qa('[aria-label="Situação"] .cp-chip').map((b) => b.textContent);
-    expect(chips).toEqual(["Todos4", "Ativos2", "Em teste0", "Sem saldo1", "Revogados1"]);
+    expect(chips).toEqual(["Todos4", "Ativos2", "Em teste0", "Sem saldo1", "Pausados0", "Revogados1"]);
     // item: plano, id em mono, conversas e gasto, status e última atividade
     const padaria = qa("button.cp-item").find((b) => b.textContent?.includes("Padaria Sol"))!;
     expect(padaria.textContent).toContain("Starter");
@@ -669,5 +693,221 @@ describe("Clientes do Copiloto", () => {
     await click(byText("button", "Limpar filtros"));
     await flush();
     expect(q("article")?.textContent).toContain("Padaria Sol"); // voltou à lista, volta o detalhe
+  });
+});
+
+describe("Pausar e Plano e créditos", () => {
+  const art = () => q("article")!;
+  const dlgBtn = (text: string) => [...dialog()!.querySelectorAll("button")].find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
+  const dlgInput = (label: string) => dialog()!.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
+  const putCredits = () => calls.filter((c) => c.url.endsWith("/credits")).map((c) => ({ method: c.method, body: c.body }));
+  const box = () => dialog()!.querySelector('[role="status"]')!.textContent!;
+  const openCredits = async () => {
+    await mount();
+    await open("Padaria Sol");
+    await click(byText("article button", "Plano e créditos"));
+  };
+
+  it("pausar com motivo: explica o efeito, chama /pause, mostra Pausado na pílula, no banner, na lista e no contador", async () => {
+    await mount();
+    await open("Padaria Sol");
+    await click(byText("article button", "Pausar"));
+    expect(dialog()?.textContent).toContain("Perguntas, alertas e briefing param; a chave e o histórico ficam. Retome quando quiser.");
+    await type(dialog()!.querySelector("input"), "Pagamento em atraso");
+    await click(dlgBtn("Pausar"));
+    await flush();
+    expect(calls.find((c) => c.url.endsWith("/pause"))).toMatchObject({ method: "POST", body: { reason: "Pagamento em atraso" } });
+    expect(dialog()).toBeNull();
+    expect(art().querySelector(".cp-pill")?.textContent).toBe("Pausado");
+    expect(q(".cp-banner")?.textContent).toMatch(/Pausado em \d\d\/\d\d pela equipe \(painel\) — Pagamento em atraso/);
+    expect(qa("button.cp-item").find((b) => b.textContent?.includes("Padaria Sol"))?.textContent).toContain("Pausado");
+    expect(byText('[aria-label="Situação"] button', "Pausados")?.textContent).toContain("1");
+    expect(byText("article button", "Retomar")?.className).toContain("solid");
+    expect(byText("article button", "Pausar")).toBeUndefined();
+    expect(toasts()).toContain("Padaria Sol pausado");
+  });
+
+  it("pausar sem motivo não manda motivo", async () => {
+    await mount();
+    await open("Padaria Sol");
+    await click(byText("article button", "Pausar"));
+    await click(dlgBtn("Pausar"));
+    await flush();
+    expect(calls.find((c) => c.url.endsWith("/pause"))?.body).toEqual({});
+  });
+
+  it("retomar pelo banner chama /resume e volta a mostrar Pausar", async () => {
+    db[0].c = { ...db[0].c, status: "paused", paused: { at: NOW - DAY, by: "Carla", reason: null } };
+    await mount();
+    await open("Padaria Sol");
+    expect(q(".cp-banner")?.textContent).toContain("por Carla");
+    expect(art().querySelector(".cp-pill")?.textContent).toBe("Pausado");
+    expect(byText("article .cp-acts button", "Retomar")?.className).toContain("solid");
+    await click(byText(".cp-banner button", "Retomar"));
+    await flush();
+    expect(calls.find((c) => c.url.endsWith("/resume"))).toMatchObject({ method: "POST" });
+    expect(q(".cp-banner")).toBeNull();
+    expect(art().querySelector(".cp-pill")?.textContent).toBe("Ativo");
+    expect(byText("article button", "Pausar")).toBeTruthy();
+    expect(toasts()).toContain("Padaria Sol retomado");
+  });
+
+  it("retomar pelo cabeçalho também chama /resume", async () => {
+    db[0].c = { ...db[0].c, status: "paused", paused: { at: NOW - DAY, by: null, reason: null } };
+    await mount();
+    await open("Padaria Sol");
+    await click(byText("article .cp-acts button", "Retomar"));
+    await flush();
+    expect(calls.filter((c) => c.url.endsWith("/resume"))).toHaveLength(1);
+  });
+
+  it("substitui os botões soltos de teste e créditos extras por 'Plano e créditos'", async () => {
+    await mount();
+    await open("Padaria Sol");
+    expect(byText("article button", "Teste do Pro")).toBeUndefined();
+    expect(byText("article button", "Créditos extras")).toBeUndefined();
+    expect(byText("article button", "Mudar plano")).toBeTruthy();
+    expect(byText("article button", "Rotacionar chave")).toBeTruthy();
+  });
+
+  it("resumo ao vivo do limite: acompanha o que se digita e avisa que ainda não foi salvo", async () => {
+    await openCredits();
+    expect(box()).toContain("Limite deste mês: franquia 1.000 + extras 0 = 1.000; usados 312");
+    expect(box()).not.toContain("Ainda não salvo");
+    await type(dlgInput("Extras deste mês"), "250");
+    expect(box()).toContain("franquia 1.000 + extras 250 = 1.250; usados 312");
+    expect(box()).toContain("Ainda não salvo");
+    await click(byText('[role="dialog"] [role="radio"]', "Combinada"));
+    await type(dlgInput("Créditos por mês combinados"), "3000");
+    expect(box()).toContain("franquia 3.000 + extras 250 = 3.250; usados 312");
+  });
+
+  it("franquia combinada e 'Usar a do plano' (monthlyCredits: null)", async () => {
+    await openCredits();
+    expect(dialog()!.textContent).toContain("Do plano Starter: 1.000 créditos/mês.");
+    expect(dlgBtn("Salvar franquia").disabled).toBe(true);
+    await click(byText('[role="dialog"] [role="radio"]', "Combinada"));
+    await type(dlgInput("Créditos por mês combinados"), "0");
+    expect(dlgBtn("Salvar franquia").disabled).toBe(true);
+    expect(dialog()!.textContent).toContain("Informe de 1 a 1.000.000");
+    await type(dlgInput("Créditos por mês combinados"), "3000");
+    await click(dlgBtn("Salvar franquia"));
+    await flush();
+    expect(putCredits()).toEqual([{ method: "PUT", body: { monthlyCredits: 3000 } }]);
+    expect(dialog()).not.toBeNull(); // o diálogo fica aberto
+    expect(dialog()!.textContent).toContain("Combinada com o cliente: 3.000 créditos/mês.");
+    expect(box()).toContain("franquia 3.000 + extras 0 = 3.000");
+    expect(art().textContent).toContain("de 3.000 no mês");
+    expect(toasts()).toContain("Franquia de Padaria Sol atualizada");
+    await click(byText('[role="dialog"] [role="radio"]', "Usar a do plano"));
+    await click(dlgBtn("Salvar franquia"));
+    await flush();
+    expect(putCredits().at(-1)).toEqual({ method: "PUT", body: { monthlyCredits: null } });
+    expect(dialog()!.textContent).not.toContain("Combinada com o cliente");
+    expect(box()).toContain("franquia 1.000");
+  });
+
+  it("extras exatos: atalhos somam ao campo, salvar manda o valor exato e 0 tira", async () => {
+    await openCredits();
+    const input = () => dlgInput("Extras deste mês")!;
+    await click(byText('[role="dialog"] button', "+500"));
+    await click(byText('[role="dialog"] button', "+1.000"));
+    await click(byText('[role="dialog"] button', "+5.000"));
+    expect(input().value).toBe("6500");
+    expect(putCredits()).toEqual([]); // nada salvo ainda
+    await click(dlgBtn("Salvar extras"));
+    await flush();
+    expect(putCredits()).toEqual([{ method: "PUT", body: { extraCredits: 6500 } }]);
+    expect(dialog()!.textContent).toContain("Hoje: 6.500 extras");
+    expect(box()).toContain("extras 6.500 = 7.500");
+    await type(input(), "0");
+    await click(dlgBtn("Salvar extras"));
+    await flush();
+    expect(putCredits().at(-1)).toEqual({ method: "PUT", body: { extraCredits: 0 } });
+    expect(box()).toContain("extras 0 = 1.000");
+    await type(input(), "100001");
+    expect(dlgBtn("Salvar extras").disabled).toBe(true);
+    expect(dialog()!.textContent).toContain("Informe de 0 a 100.000");
+  });
+
+  it("erro 400 do backend aparece no bloco e nada é anunciado como feito", async () => {
+    await openCredits();
+    const before = toasts();
+    creditsError = "Reative o cliente antes de mudar os créditos.";
+    await type(dlgInput("Extras deste mês"), "100");
+    await click(dlgBtn("Salvar extras"));
+    await flush();
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent).toContain("Reative o cliente antes de mudar os créditos.");
+    expect(toasts()).toBe(before);
+  });
+
+  it("zerar consumo: pede confirmação, cancelar não chama nada, confirmar manda reset", async () => {
+    await openCredits();
+    expect(dialog()!.textContent).toContain("Usados: 312 de 1.000");
+    await click(dlgBtn("Zerar consumo"));
+    expect(dialog()!.textContent).toContain("O consumo volta a contar de agora. O histórico continua na Auditoria.");
+    await click(dlgBtn("Cancelar"));
+    expect(putCredits()).toEqual([]);
+    expect(dialog()!.textContent).not.toContain("O consumo volta a contar de agora");
+    await click(dlgBtn("Zerar consumo"));
+    await click(dlgBtn("Sim, zerar consumo"));
+    await flush();
+    expect(putCredits()).toEqual([{ method: "PUT", body: { reset: true } }]);
+    expect(dialog()!.textContent).toContain("Usados: 0 de 1.000");
+    expect(dialog()!.textContent).toContain("Zerado em");
+    expect(box()).toContain("usados 0");
+    expect(toasts()).toContain("Consumo de Padaria Sol zerado");
+  });
+
+  it("teste do Pro: iniciar (14 por padrão), redefinir a partir de hoje e encerrar (contratou)", async () => {
+    await openCredits();
+    const days = () => dialog()!.querySelector("#cp-pc-trial")!.closest("form")!.querySelector("input")!;
+    expect(dialog()!.textContent).toContain("Sem teste em andamento.");
+    expect(days().value).toBe("14");
+    expect(dialog()!.textContent).not.toContain("Encerrar teste");
+    await click(dlgBtn("Iniciar teste"));
+    await flush();
+    expect(calls.find((c) => c.url.endsWith("/trial"))?.body).toEqual({ days: 14 });
+    expect(dialog()!.textContent).toMatch(/Em teste: termina em \d\d\/\d\d \(faltam 14 dias\)/);
+    await type(days(), "61");
+    expect(dlgBtn("Redefinir teste").disabled).toBe(true);
+    await type(days(), "30");
+    await click(dlgBtn("Redefinir teste"));
+    await flush();
+    expect(calls.filter((c) => c.url.endsWith("/trial")).at(-1)?.body).toEqual({ days: 30 });
+    expect(dialog()!.textContent).toContain("faltam 30 dias");
+    const before = calls.length;
+    await click(dlgBtn("Encerrar teste (contratou)"));
+    expect(calls.length).toBe(before); // pede confirmação antes
+    await click(dlgBtn("Cancelar"));
+    expect(dialog()!.textContent).toContain("faltam 30 dias");
+    await click(dlgBtn("Encerrar teste (contratou)"));
+    await click(dlgBtn("Sim, encerrar teste"));
+    await flush();
+    expect(calls.filter((c) => c.url.endsWith("/trial")).at(-1)?.body).toEqual({ days: null });
+    expect(dialog()!.textContent).toContain("Sem teste em andamento.");
+    expect(toasts()).toContain("Padaria Sol saiu do teste");
+  });
+
+  it("Esc fecha o diálogo de plano e créditos e devolve o foco ao botão", async () => {
+    await mount();
+    await open("Padaria Sol");
+    const btn = byText("article button", "Plano e créditos")!;
+    btn.focus();
+    await click(btn);
+    await esc();
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(btn);
+  });
+
+  it("revogado: Plano e créditos e Pausar ficam desabilitados com a dica de reativar", async () => {
+    await mount();
+    await open("Doce Encanto");
+    for (const t of ["Plano e créditos", "Pausar"]) {
+      const b = byText("article button", t) as HTMLButtonElement;
+      expect(b.disabled).toBe(true);
+      expect(b.title).toBe("Reative o Copiloto para mudar");
+    }
+    expect(byText("article button", "Retomar")).toBeUndefined();
   });
 });

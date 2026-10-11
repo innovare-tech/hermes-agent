@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CatalogTool, Client, ClientDetail } from "./api";
 import {
   askedBy, auditView, avatarColor, bannerOf, byLabel, canRevoke, countOf, creditBand, dayBars, directoryInfo, fmtTokens, fmtUsd, initial, isNewClient, kpiRow, lastLabel, lastParts, mergeClients, nextPlan, pageLabel,
+  intIn, limitSummary, STATUS, STATUS_FILTERS, trialDaysLeft,
   planDiff, planName, profilePreview, purgeDays, purgeLabel, queryText, replaceClient, rowLast, sortClients, toolUsage, toolsOf,
 } from "./model";
 
@@ -257,5 +258,34 @@ describe("revogar e criar", () => {
     expect(directoryInfo({ plan: "Pro", channelCount: 3 })).toBe("Pro do Aibiz · 3 canais");
     expect(directoryInfo({ channelCount: 1 })).toBe("1 canal");
     expect(directoryInfo({})).toBe("cliente do banco da Aibiz");
+  });
+});
+
+describe("pausado e créditos", () => {
+  const d = (p: Partial<ClientDetail>) => ({ ...cl({ systemClientId: "x" }), ...p }) as ClientDetail;
+  it("pausado: pílula e chip em tom de aviso, banner com quem, quando e motivo, e ação Retomar", () => {
+    expect(STATUS.paused).toEqual({ label: "Pausado", color: "var(--warn)" });
+    expect(STATUS_FILTERS.map((f) => f.label)).toContain("Pausados");
+    expect(countOf({ all: 3, active: 1, no_credit: 0, paused: 2, revoked: 0 }, "paused")).toBe(2);
+    const b = bannerOf(d({ status: "paused", paused: { at: NOW, by: "Carla", reason: "Pagamento em atraso" } }), NOW);
+    expect(b?.tone).toBe("warn");
+    expect(b?.text).toMatch(/^Pausado em \d\d\/\d\d por Carla — Pagamento em atraso\./);
+    expect(b?.action).toEqual({ label: "Retomar", resume: true });
+    expect(bannerOf(d({ status: "paused", paused: { at: NOW, by: "painel", reason: null } }), NOW)?.text).toMatch(/^Pausado em \d\d\/\d\d pela equipe \(painel\)\./);
+  });
+  it("pausado vai depois dos ativos e antes dos revogados", () => {
+    const l = sortClients([cl({ systemClientId: "r", status: "revoked" }), cl({ systemClientId: "p", status: "paused" }), cl({ systemClientId: "a", status: "active" })], NOW);
+    expect(l.map((c) => c.systemClientId)).toEqual(["a", "p", "r"]);
+  });
+  it("resumo do limite, faixas dos campos e dias do teste", () => {
+    expect(limitSummary(1000, 500, 312)).toBe("Limite deste mês: franquia 1.000 + extras 500 = 1.500; usados 312");
+    expect(intIn("60", 1, 60)).toBe(60);
+    expect(intIn("61", 1, 60)).toBeNull();
+    expect(intIn("0", 1, 60)).toBeNull();
+    expect(intIn("", 0, 10)).toBeNull();
+    expect(intIn("1e3", 0, 5000)).toBeNull();
+    expect(intIn("-5", 0, 10)).toBeNull();
+    expect(trialDaysLeft(NOW + 14 * DAY - 5, NOW)).toBe(14);
+    expect(trialDaysLeft(NOW - DAY, NOW)).toBe(0);
   });
 });

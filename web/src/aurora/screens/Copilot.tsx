@@ -5,15 +5,16 @@ import { Icon } from "../Icon";
 import { AddDialog } from "../copilot/AddDialog";
 import { copilotApi, type Client, type ClientDetail, type ClientsPage, type Counts, type CopilotSettings, type Plan } from "../copilot/api";
 import { ClientDetailView, type TabKey } from "../copilot/Detail";
-import { NeedSettings, PlanDialog, ReactivateDialog, RevokeDialog, RotateDialog } from "../copilot/Dialogs";
+import { CreditsDialog, NeedSettings, PauseDialog, PlanDialog, ReactivateDialog, RevokeDialog, RotateDialog } from "../copilot/Dialogs";
 import { ClientList, type Filters } from "../copilot/List";
 import { fmtUsd, kpiRow, mergeClients, monthName, planName, replaceClient, sortClients } from "../copilot/model";
 import { DetailSkeleton, EmptyState, ErrorState, Pick } from "../copilot/States";
 import "../copilot/copilot.css";
+import { errText } from "../health/api";
 import { nowSec } from "../health/model";
 import { toast } from "../store";
 
-type Dlg = { kind: "add" | "rotate" | "revoke" | "reactivate" } | { kind: "plan"; initial?: Plan } | null;
+type Dlg = { kind: "add" | "rotate" | "revoke" | "reactivate" | "credits" | "pause" } | { kind: "plan"; initial?: Plan } | null;
 
 const NO_FILTERS: Filters = { q: "", status: "", plan: "" };
 
@@ -294,15 +295,12 @@ export function Copilot() {
                     onRotate: () => setDlg({ kind: "rotate" }),
                     onRevoke: () => setDlg({ kind: "revoke" }),
                     onReactivate: () => setDlg({ kind: "reactivate" }),
-                    onTrial: (days) =>
-                      copilotApi.setTrial(detail.systemClientId, days).then(
-                        (c) => (apply(c), toast(days ? `${c.name} em teste do Pro` : `${c.name} saiu do teste`, days ? `${days} dias; termina sozinho.` : "Segue no plano atual, sem data de fim.")),
-                        () => toast("Não consegui mudar o teste", "Nada foi alterado. Tente de novo."),
-                      ),
-                    onExtra: (credits) =>
-                      copilotApi.addExtraCredits(detail.systemClientId, credits).then(
-                        (c) => (apply(c), toast(`+${credits} créditos para ${c.name}`, "Valem só neste mês.")),
-                        () => toast("Não consegui somar os créditos", "Nada foi alterado. Tente de novo."),
+                    onCredits: () => setDlg({ kind: "credits" }),
+                    onPause: () => setDlg({ kind: "pause" }),
+                    onResume: () =>
+                      copilotApi.resume(detail.systemClientId).then(
+                        (c) => (apply(c), toast(`${c.name} retomado`, "Perguntas, alertas e briefing voltam a funcionar.")),
+                        (e) => toast("Não consegui retomar", errText(e, "Nada foi alterado. Tente de novo.")),
                       ),
                   }}
                 />
@@ -329,6 +327,31 @@ export function Copilot() {
       ) : (
         needSettings(`Mudar o plano de ${detail.name}`)
       ))}
+      {dlg?.kind === "credits" && detail && (settings ? (
+        <CreditsDialog
+          client={detail}
+          settings={settings}
+          now={now}
+          onClose={close}
+          onChanged={(c, title, sub) => {
+            apply(c);
+            toast(title, sub);
+          }}
+        />
+      ) : (
+        needSettings(`Plano e créditos de ${detail.name}`)
+      ))}
+      {dlg?.kind === "pause" && detail && (
+        <PauseDialog
+          client={detail}
+          onClose={close}
+          onDone={(c) => {
+            apply(c);
+            close();
+            toast(`${c.name} pausado`, "Perguntas, alertas e briefing pararam. A chave e o histórico ficam.");
+          }}
+        />
+      )}
       {dlg?.kind === "rotate" && detail && (
         <RotateDialog
           client={detail}

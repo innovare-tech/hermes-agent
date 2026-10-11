@@ -38,7 +38,7 @@ const PROFILES_ROUTE = "/settings/perfis";
 const profileHref = (id: string) => `${PROFILES_ROUTE}?perfil=${encodeURIComponent(id)}`;
 const REVOKED_HINT = "Reative o Copiloto para mudar";
 
-export type DetailActions = { onPlan: (initial?: Plan) => void; onRotate: () => void; onRevoke: () => void; onReactivate: () => void; onTrial: (days: number | null) => void; onExtra: (credits: number) => void };
+export type DetailActions = { onPlan: (initial?: Plan) => void; onRotate: () => void; onRevoke: () => void; onReactivate: () => void; onCredits: () => void; onPause: () => void; onResume: () => void };
 
 export function ClientDetailView({ d, now, tab, onTab, planLabels, actions }: { d: ClientDetail; now: number; tab: TabKey; onTab: (t: TabKey) => void; planLabels?: Record<string, string>; actions: DetailActions }) {
   const revoked = d.status === "revoked";
@@ -46,8 +46,7 @@ export function ClientDetailView({ d, now, tab, onTab, planLabels, actions }: { 
   const last = lastParts(d.lastActivityAt, now);
   const m = d.month;
   const tid = useId();
-  const [extra, setExtra] = useState<string | null>(null);
-  const inTrial = !!d.trialUntil;
+  const paused = d.status === "paused";
   const kpis = [
     { l: "Conversas no mês", v: fmtInt(m.conversations), s: "sessões de conversa" },
     { l: "Gasto no mês", v: fmtUsd(m.spendUsd), s: "custo de IA deste perfil" },
@@ -87,28 +86,20 @@ export function ClientDetailView({ d, now, tab, onTab, planLabels, actions }: { 
           <button className="cp-act" disabled={revoked} title={revoked ? REVOKED_HINT : undefined} aria-describedby={revoked ? `${tid}-hint` : undefined} onClick={() => actions.onPlan()}>
             Mudar plano
           </button>
-          <button className="cp-act" disabled={revoked} title={revoked ? REVOKED_HINT : "Teste do Pro de 14 dias: termina sozinho"} onClick={() => actions.onTrial(inTrial ? null : 14)}>
-            {inTrial ? "Encerrar teste" : "Teste do Pro (14 dias)"}
+          <button className="cp-act" disabled={revoked} title={revoked ? REVOKED_HINT : "Teste do Pro, franquia, créditos extras e consumo do mês"} aria-describedby={revoked ? `${tid}-hint` : undefined} onClick={actions.onCredits}>
+            <Icon name="coins" size={13} />
+            Plano e créditos
           </button>
-          {extra === null ? (
-            <button className="cp-act" disabled={revoked} title={revoked ? REVOKED_HINT : "Pacote avulso: vale só neste mês"} onClick={() => setExtra("")}>
-              Créditos extras
+          {paused ? (
+            <button className="cp-act solid" disabled={revoked} onClick={actions.onResume}>
+              <Icon name="play" size={13} />
+              Retomar
             </button>
           ) : (
-            <form
-              className="cp-act"
-              style={{ display: "inline-flex", gap: 6, alignItems: "center" }}
-              onSubmit={(e) => {
-                e.preventDefault();
-                const n = parseInt(extra, 10);
-                if (n > 0) actions.onExtra(n);
-                setExtra(null);
-              }}
-            >
-              <input type="number" min={1} max={100000} autoFocus value={extra} onChange={(e) => setExtra(e.target.value)} aria-label="Créditos extras deste mês" style={{ width: 80 }} />
-              <button type="submit">Somar</button>
-              <button type="button" onClick={() => setExtra(null)}>Cancelar</button>
-            </form>
+            <button className="cp-act" disabled={revoked} title={revoked ? REVOKED_HINT : "Perguntas, alertas e briefing param; a chave e o histórico ficam"} aria-describedby={revoked ? `${tid}-hint` : undefined} onClick={actions.onPause}>
+              <Icon name="circle-pause" size={13} />
+              Pausar
+            </button>
           )}
           <button className="cp-act" disabled={revoked} title={revoked ? REVOKED_HINT : undefined} aria-describedby={revoked ? `${tid}-hint` : undefined} onClick={actions.onRotate}>
             <Icon name="key-round" size={13} />
@@ -136,7 +127,7 @@ export function ClientDetailView({ d, now, tab, onTab, planLabels, actions }: { 
           <Icon name={banner.icon} size={16} color={banner.tone === "warn" ? "var(--warn)" : banner.tone === "ok" ? "var(--ok)" : "var(--fg2)"} />
           <span style={{ flex: 1 }}>{banner.text}</span>
           {banner.action && (
-            <button className="au-outline" style={{ padding: "6px 11px", fontSize: 12 }} onClick={() => actions.onPlan(banner.action!.plan)}>
+            <button className="au-outline" style={{ padding: "6px 11px", fontSize: 12 }} onClick={() => (banner.action!.resume ? actions.onResume() : actions.onPlan(banner.action!.plan))}>
               {banner.action.label}
             </button>
           )}

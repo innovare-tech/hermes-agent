@@ -267,3 +267,34 @@ def test_radar_usage_counts_by_session_and_day_without_question_text(cp, monkeyp
     assert u["renewsAt"] > time.time()
     assert u["forecastDepletesAt"] is None or u["forecastDepletesAt"] < u["renewsAt"]  # só avisa se acabar antes de renovar
     assert cp.radar_usage("c1", since=time.time() + 60)["bySession"] == []  # resumo do teste: só o que veio depois
+
+
+def test_pause_reset_and_flexible_credits(cp, monkeypatch):
+    monkeypatch.setattr("gateway.session_context.get_session_env",
+                        lambda name, default="": "api_server" if name == "HERMES_SESSION_PLATFORM" else default)
+    pid = cp.create("c1", "starter")["profileId"]
+    cp.save_settings({"plans": {"starter": {"credits": 10}}})
+    with cp._in_profile(pid):
+        cp.record_turn(pid, {"total_tokens": 50000}, "s1", "tudo", "")  # 10 créditos: acabou
+        assert cp.quota_block(pid)[0] == "no_credit"
+    # Franquia combinada com o cliente vale no lugar da do plano; None volta à do plano.
+    assert cp.set_monthly_credits("c1", 30)["month"]["creditsLimit"] == 30
+    with cp._in_profile(pid):
+        assert cp.quota_block(pid) is None
+    assert cp.set_monthly_credits("c1", None)["month"]["creditsLimit"] == 10
+    # Extras com valor exato (corrige um pacote lançado errado).
+    cp.add_extra_credits("c1", 50)
+    assert cp.set_extra_credits("c1", 5)["month"]["extraCredits"] == 5
+    with pytest.raises(ValueError):
+        cp.set_extra_credits("c1", -1)
+    # Zerar o consumo do mês: conta de novo a partir de agora, o histórico continua.
+    out = cp.reset_month_credits("c1")
+    assert out["month"]["credits"] == 0 and out["status"] == "active" and out["creditsResetAt"]
+    assert cp.radar_usage("c1")["bySession"] == []
+    # Pausar não revoga: a chave fica, mas o Radar para; retomar volta ao normal.
+    p = cp.pause("c1", "conversa com o financeiro")
+    assert p["status"] == "paused" and p["paused"]["reason"] == "conversa com o financeiro"
+    with cp._in_profile(pid):
+        assert cp.quota_block(pid) == ("paused", "O Aibiz Radar está pausado. Fale com a Aibiz para reativar.")
+    assert cp.radar_status("c1")["state"] == "paused" and cp.list_clients()["counts"]["paused"] == 1
+    assert cp.resume("c1")["status"] == "active"
