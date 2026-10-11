@@ -13,7 +13,7 @@ Design de referência: `design_handoff_hermes_web_ui/Design Nova parte/A8 - Copi
   - **Pro:** tudo do Starter, mais "por que foi para esse setor", auditar atendente, mensagens que não entraram, mapa dos dados, consulta livre e análise livre.
   - Os créditos do mês de cada plano são configuráveis.
 - **Cota** (até existir a carteira da Aibiz, ver `ms-aibiz-copilot-mcp/docs/SPEC-creditos-e-chat.md`).
-  - Crédito = peso da ferramenta + 1 a cada 2.000 tokens do turno.
+  - Crédito = peso da ferramenta + 1 a cada 5.000 tokens do turno.
   - Ao zerar, a API responde **402** "Sem saldo"; revogado também é recusado.
 - **Rotacionar a chave:** "agora" corta a antiga na hora; "em 24 horas" mantém a antiga válida até `API_SERVER_KEY_PREVIOUS_UNTIL`.
 - **Revogar:**

@@ -121,9 +121,9 @@ def test_quota_audit_and_usage(cp, monkeypatch):
         cp.record_tool("terminal", {}, "x", 1, "s1")  # fora do MCP: ignorado
         spent = cp.record_turn(pid, {"input_tokens": 100, "output_tokens": 50, "total_tokens": 4100}, "s1",
                                "Por que caiu?", json.dumps({"name": "Ana", "via": "Aibiz Manager"}))
-        assert spent == 3 + 3  # o turno devolve o que gastou (rodapé "usou N créditos")
-        assert cp.month_usage()["credits"] == 3 + 3  # peso do timeline + 3 créditos de tokens (4100/2000, pra cima)
-        cp.record_turn(pid, {"total_tokens": 9000}, "s2", "mais", "")
+        assert spent == 3 + 1  # o turno devolve o que gastou (rodapé "usou N créditos")
+        assert cp.month_usage()["credits"] == 3 + 1  # peso do timeline + 1 crédito de tokens (4100/5000, pra cima)
+        cp.record_turn(pid, {"total_tokens": 30000}, "s2", "mais", "")
         assert cp.quota_block(pid)[0] == "no_credit"
     audit = cp.audit("c1")["items"]
     assert [a["result"] for a in audit] == ["blocked_scope", "ok"]
@@ -186,6 +186,8 @@ def test_soul_teaches_the_database_and_refresh_reapplies_plan_tools(cp):
         cfg = read_raw_config()
     assert "team_quality" in cfg["mcp_servers"]["aibiz_ops"]["tools"]["include"]
     assert cfg["tools"]["tool_search"]["enabled"] == "off"
+    assert cfg["agent"]["tool_use_enforcement"] is False and "markdown" in cfg["platform_hints"]["api_server"]["replace"]
+    assert "Copiloto" not in soul  # o produto é o Aibiz Radar
 
 
 def test_copilot_model_defaults_to_strongest_and_changes_reach_every_client(cp):
@@ -219,7 +221,7 @@ def test_trial_extra_credits_and_radar_status(cp, monkeypatch):
     assert st["renewsAt"] > time.time()
     cp.save_settings({"plans": {"pro": {"credits": 10}}})
     with cp._in_profile(pid):
-        cp.record_turn(pid, {"total_tokens": 20000}, "s1", "tudo", "")  # 10 créditos: acabou
+        cp.record_turn(pid, {"total_tokens": 50000}, "s1", "tudo", "")  # 10 créditos: acabou
         assert cp.quota_block(pid)[0] == "no_credit"
     assert cp.radar_status("c1")["state"] == "trial"  # sem crédito continua em teste (alertas seguem)
     cp.add_extra_credits("c1", 5)
