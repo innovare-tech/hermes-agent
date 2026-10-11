@@ -1,10 +1,10 @@
-// Diálogos do detalhe: Rotacionar chave, Revogar acesso, Mudar plano e Reativar.
+// Diálogos do detalhe: Rotacionar chave, Revogar acesso, Mudar plano, Reativar, Pausar e Plano e créditos.
 // A chave nova mora só no estado de cada diálogo; fechar apaga.
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Icon } from "../Icon";
 import { errText } from "../health/api";
 import { copilotApi, type ClientDetail, type CopilotSettings, type Plan } from "./api";
-import { canRevoke, fmtInt, planDiff, planName, PLANS, toolsOf } from "./model";
+import { canRevoke, dayMonth, fmtInt, intIn, limitSummary, planDiff, planName, PLANS, plural, toolsOf, trialDaysLeft } from "./model";
 import { CpDialog, InlineError, KeyBox, KeyWarn, radioProps, spinIcon } from "./parts";
 
 type Done = (c: ClientDetail) => void;
@@ -326,6 +326,241 @@ export function ReactivateDialog({ client, onClose, onDone }: { client: ClientDe
           <KeyWarn />
         </div>
       )}
+    </CpDialog>
+  );
+}
+
+// ---- Pausar ----
+
+export function PauseDialog({ client, onClose, onDone }: { client: ClientDetail; onClose: () => void; onDone: Done }) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const run = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr("");
+    try {
+      onDone(await copilotApi.pause(client.systemClientId, reason));
+    } catch (e) {
+      setErr(errText(e, "Não consegui pausar. Nada mudou."));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <CpDialog
+      title={`Pausar ${client.name}?`}
+      icon="circle-pause"
+      lead="Perguntas, alertas e briefing param; a chave e o histórico ficam. Retome quando quiser."
+      busy={busy}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="au-outline" onClick={onClose} disabled={busy}>
+            Cancelar
+          </button>
+          <button className="au-primary" onClick={run} disabled={busy}>
+            {spinIcon(busy, "circle-pause")}
+            {busy ? "Pausando…" : "Pausar"}
+          </button>
+        </>
+      }
+    >
+      <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <span style={{ fontSize: 13 }}>
+          Motivo <span style={{ color: "var(--fg3)" }}>(opcional, fica no registro)</span>
+        </span>
+        <input autoFocus className="cp-input" style={{ fontSize: 13 }} value={reason} maxLength={300} placeholder="Ex.: pagamento em atraso" onChange={(e) => setReason(e.target.value)} onKeyDown={(e) => e.key === "Enter" && run()} disabled={busy} />
+      </label>
+      {err && <InlineError>{err}</InlineError>}
+    </CpDialog>
+  );
+}
+
+// ---- Plano e créditos ----
+
+type Sec = "trial" | "end" | "fran" | "extra" | "reset" | "";
+const QUICK_EXTRA = [500, 1000, 5000];
+const note = { fontSize: 12, color: "var(--fg2)", lineHeight: 1.45 } as const;
+const btn = { padding: "6px 11px", fontSize: 12.5 } as const;
+const row = { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } as const;
+
+function Section({ id, title, children, onSubmit }: { id: string; title: string; children: ReactNode; onSubmit?: () => void }) {
+  return (
+    <form className="cp-box" style={{ gap: 9 }} aria-labelledby={id} noValidate onSubmit={(e) => (e.preventDefault(), onSubmit?.())}>
+      <b id={id} style={{ fontSize: 13 }}>{title}</b>
+      {children}
+    </form>
+  );
+}
+
+/** Teste do Pro, franquia mensal, extras e zerar consumo: cada bloco salva sozinho e o diálogo fica aberto. */
+export function CreditsDialog({ client, settings, now, onClose, onChanged }: { client: ClientDetail; settings: CopilotSettings; now: number; onClose: () => void; onChanged: (c: ClientDetail, title: string, sub?: string) => void }) {
+  const sid = client.systemClientId;
+  const m = client.month;
+  const planCredits = settings.plans[client.plan].credits;
+  const savedFran = m.planCredits ?? client.monthlyCredits ?? planCredits;
+  const savedExtra = m.extraCredits ?? 0;
+  const until = client.trialUntil ?? null;
+  const running = !!until && until > now;
+
+  const [days, setDays] = useState("14");
+  const [mode, setMode] = useState<"plan" | "custom">(client.monthlyCredits != null ? "custom" : "plan");
+  const [fran, setFran] = useState(String(client.monthlyCredits ?? planCredits));
+  const [extra, setExtra] = useState(String(savedExtra));
+  const [busy, setBusy] = useState<Sec>("");
+  const [err, setErr] = useState<{ k: Sec; t: string } | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  const daysN = intIn(days, 1, 60);
+  const franN = intIn(fran, 1, 1_000_000);
+  const extraN = intIn(extra, 0, 100_000);
+  const franBad = mode === "custom" && franN === null;
+  const franChanged = mode === "plan" ? client.monthlyCredits != null : franN !== null && franN !== client.monthlyCredits;
+  const extraChanged = extraN !== null && extraN !== savedExtra;
+  const draftFran = mode === "plan" ? planCredits : (franN ?? savedFran);
+  const draftExtra = extraN ?? savedExtra;
+  const unsaved = draftFran !== savedFran || draftExtra !== savedExtra;
+
+  const run = async (k: Sec, call: () => Promise<ClientDetail>, title: (c: ClientDetail) => string, sub: string, failMsg: string) => {
+    if (busy) return;
+    setBusy(k);
+    setErr(null);
+    try {
+      const c = await call();
+      setConfirmReset(false);
+      onChanged(c, title(c), sub);
+    } catch (e) {
+      setErr({ k, t: errText(e, failMsg) });
+    } finally {
+      setBusy("");
+    }
+  };
+  const fail = (k: Sec) => (err?.k === k ? <InlineError>{err.t}</InlineError> : null);
+
+  const saveTrial = () => daysN !== null && run("trial", () => copilotApi.setTrial(sid, daysN), (c) => `${c.name} em teste do Pro`, `${plural(daysN, "dia", "dias")} a partir de hoje; termina sozinho.`, "Não consegui mudar o teste. Nada mudou.");
+  const saveFran = () => franChanged && !franBad && run("fran", () => copilotApi.setCredits(sid, { monthlyCredits: mode === "plan" ? null : franN }), (c) => `Franquia de ${c.name} atualizada`, mode === "plan" ? "Volta a valer a do plano." : `${fmtInt(franN!)} créditos por mês.`, "Não consegui mudar a franquia. Nada mudou.");
+  const saveExtra = () => extraChanged && run("extra", () => copilotApi.setCredits(sid, { extraCredits: extraN! }), (c) => `Extras de ${c.name}: ${fmtInt(extraN!)}`, "Valem só neste mês.", "Não consegui mudar os extras. Nada mudou.");
+
+  return (
+    <CpDialog
+      title={`Plano e créditos de ${client.name}`}
+      icon="coins"
+      width={560}
+      lead="Ajuste o teste, a franquia e os créditos deste cliente. Cada bloco salva sozinho e vale na hora."
+      busy={!!busy}
+      onClose={onClose}
+      footer={
+        <button className="au-primary" onClick={onClose} disabled={!!busy}>
+          Fechar
+        </button>
+      }
+    >
+      <div className="cp-box" role="status" style={{ gap: 3 }}>
+        <b style={{ fontSize: 13 }}>{limitSummary(draftFran, draftExtra, m.credits)}</b>
+        {unsaved && <span style={note}>Ainda não salvo: salve o bloco que você mudou.</span>}
+      </div>
+
+      <Section id="cp-pc-trial" title="Teste do Pro" onSubmit={saveTrial}>
+        <span style={note}>
+          {running ? `Em teste: termina em ${dayMonth(until!)} (faltam ${plural(trialDaysLeft(until!, now), "dia", "dias")}).` : until ? `O teste terminou em ${dayMonth(until)}.` : "Sem teste em andamento."}
+        </span>
+        <div style={row}>
+          <label style={{ ...row, fontSize: 12.5 }}>
+            {running ? "Nova duração, a partir de hoje" : "Dias de teste"}
+            <input className="cp-input" type="number" min={1} max={60} style={{ width: 80 }} value={days} onChange={(e) => setDays(e.target.value)} disabled={!!busy} />
+          </label>
+          <span style={note}>de 1 a 60</span>
+          <button type="submit" className="au-primary" style={btn} disabled={daysN === null || !!busy}>
+            {spinIcon(busy === "trial", "hourglass")}
+            {running ? "Redefinir teste" : "Iniciar teste"}
+          </button>
+          {until && (
+            <button type="button" className="au-outline" style={btn} disabled={!!busy} onClick={() => run("end", () => copilotApi.setTrial(sid, null), (c) => `${c.name} saiu do teste`, "Segue no plano atual, sem data de fim.", "Não consegui encerrar o teste. Nada mudou.")}>
+              {spinIcon(busy === "end", "check")}
+              Encerrar teste (contratou)
+            </button>
+          )}
+        </div>
+        {fail("trial")}
+        {fail("end")}
+      </Section>
+
+      <Section id="cp-pc-fran" title="Franquia mensal" onSubmit={saveFran}>
+        <span style={note}>
+          Do plano {planName(client.plan, settings.planLabels)}: {fmtInt(planCredits)} créditos/mês.
+          {client.monthlyCredits != null && ` Combinada com o cliente: ${fmtInt(client.monthlyCredits)} créditos/mês.`}
+        </span>
+        <div className="cp-seg" role="radiogroup" aria-label="Franquia mensal">
+          {([["plan", "Usar a do plano"], ["custom", "Combinada"]] as const).map(([v, l]) => (
+            <button key={v} type="button" {...radioProps<"plan" | "custom">(v, ["plan", "custom"], mode, setMode)} disabled={!!busy}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <div style={row}>
+          {mode === "custom" && (
+            <>
+              <input className="cp-input" type="number" min={1} max={1000000} style={{ width: 120 }} aria-label="Créditos por mês combinados" value={fran} onChange={(e) => setFran(e.target.value)} disabled={!!busy} />
+              <span style={{ fontSize: 12.5 }}>créditos/mês</span>
+            </>
+          )}
+          <button type="submit" className="au-primary" style={btn} disabled={!franChanged || franBad || !!busy}>
+            {spinIcon(busy === "fran", "check")}
+            Salvar franquia
+          </button>
+        </div>
+        {franBad && <span style={{ ...note, color: "var(--err)" }}>Informe de 1 a 1.000.000 créditos por mês.</span>}
+        {fail("fran")}
+      </Section>
+
+      <Section id="cp-pc-extra" title="Créditos extras deste mês" onSubmit={saveExtra}>
+        <span style={note}>Hoje: {fmtInt(savedExtra)} extras. Defina o valor exato; 0 tira todos.</span>
+        <div style={row}>
+          <input className="cp-input" type="number" min={0} max={100000} style={{ width: 120 }} aria-label="Extras deste mês" value={extra} onChange={(e) => setExtra(e.target.value)} disabled={!!busy} />
+          {QUICK_EXTRA.map((n) => (
+            <button key={n} type="button" className="au-outline" style={btn} disabled={!!busy} onClick={() => setExtra(String(Math.min(100_000, (extraN ?? 0) + n)))}>
+              +{fmtInt(n)}
+            </button>
+          ))}
+          <button type="submit" className="au-primary" style={btn} disabled={!extraChanged || !!busy}>
+            {spinIcon(busy === "extra", "check")}
+            Salvar extras
+          </button>
+        </div>
+        {extraN === null && <span style={{ ...note, color: "var(--err)" }}>Informe de 0 a 100.000 créditos.</span>}
+        {fail("extra")}
+      </Section>
+
+      <Section id="cp-pc-reset" title="Zerar consumo do mês">
+        <span style={note}>
+          Usados: {fmtInt(m.credits)} de {fmtInt(m.creditsLimit)}.{client.creditsResetAt ? ` Zerado em ${dayMonth(client.creditsResetAt)}.` : ""}
+        </span>
+        {confirmReset ? (
+          <div className="cp-warn" role="alert" style={{ flexDirection: "column", alignItems: "flex-start" }}>
+            <span>O consumo volta a contar de agora. O histórico continua na Auditoria.</span>
+            <div style={row}>
+              <button type="button" className="au-primary au-danger" style={btn} disabled={!!busy} onClick={() => run("reset", () => copilotApi.setCredits(sid, { reset: true }), (c) => `Consumo de ${c.name} zerado`, "O histórico continua na Auditoria.", "Não consegui zerar o consumo. Nada mudou.")}>
+                {spinIcon(busy === "reset", "rotate-ccw")}
+                Sim, zerar consumo
+              </button>
+              <button type="button" className="au-outline" style={btn} disabled={!!busy} onClick={() => setConfirmReset(false)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={row}>
+            <button type="button" className="au-outline" style={btn} disabled={!!busy} onClick={() => setConfirmReset(true)}>
+              <Icon name="rotate-ccw" size={13} />
+              Zerar consumo
+            </button>
+          </div>
+        )}
+        {fail("reset")}
+      </Section>
     </CpDialog>
   );
 }

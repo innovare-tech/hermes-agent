@@ -4,10 +4,10 @@
 import { fetchJSON } from "@/lib/api";
 
 export type Plan = "starter" | "pro";
-export type Status = "active" | "trial" | "trial_ended" | "no_credit" | "revoked";
+export type Status = "active" | "trial" | "trial_ended" | "no_credit" | "paused" | "revoked";
 export type AuditResult = "ok" | "blocked_scope" | "blocked_query" | "error";
 
-/** `creditsLimit` = franquia do plano + extras do mês. */
+/** `planCredits` = franquia em vigor (combinada ou do plano); `creditsLimit` = franquia + extras do mês; `credits` = usado desde o começo do mês (ou do último zerar). */
 export type Month = { conversations: number; credits: number; creditsLimit: number; planCredits?: number; extraCredits?: number; tokens: number; toolCalls: number; spendUsd: number | null };
 
 export type Client = {
@@ -26,6 +26,13 @@ export type Client = {
   keyRotatedAt: number | null;
   /** Fim do teste do Pro (segundos); null = contratado. */
   trialUntil?: number | null;
+  trialStartedAt?: number | null;
+  /** Pausado pela equipe: perguntas, alertas e briefing param; chave e histórico ficam. */
+  paused?: { at: number; by: string | null; reason: string | null } | null;
+  /** Franquia mensal combinada com o cliente; null = a do plano. */
+  monthlyCredits?: number | null;
+  /** Segundos: o consumo do mês conta a partir deste instante (zerado pela equipe). */
+  creditsResetAt?: number | null;
   revoked: { at: number; by: string | null; reason: string | null; purgeAt: number } | null;
 };
 
@@ -33,7 +40,7 @@ export type ToolRow = { key: string; label: string; weight: number; enabled: boo
 export type Usage = { daily: { day: string; credits: number }[]; byTool: { key: string; uses: number; credits: number }[]; tokens: number; tokenCredits: number };
 export type ClientDetail = Client & { tools: ToolRow[]; usage: Usage; filter: { systemClientId: string } };
 
-export type Counts = { all: number; active: number; trial?: number; trial_ended?: number; no_credit: number; revoked: number };
+export type Counts = { all: number; active: number; trial?: number; trial_ended?: number; no_credit: number; paused?: number; revoked: number };
 export type ClientsPage = {
   items: Client[];
   /** Total com a busca e os filtros aplicados. */
@@ -101,5 +108,9 @@ export const copilotApi = {
   setPlan: (id: string, plan: Plan) => fetchJSON<ClientDetail>(`/api/copilot/clients/${sid(id)}`, j("PATCH", { plan })),
   /** Teste do Pro por `days` dias; `null` = contratou (sai do teste). */
   setTrial: (id: string, days: number | null) => fetchJSON<ClientDetail>(`/api/copilot/clients/${sid(id)}/trial`, j("POST", { days })),
+  /** Qualquer combinação: franquia combinada (`null` = a do plano), extras EXATOS do mês e `reset` (zera o consumo a partir de agora). */
+  setCredits: (id: string, patch: { monthlyCredits?: number | null; extraCredits?: number; reset?: true }) => fetchJSON<ClientDetail>(`/api/copilot/clients/${sid(id)}/credits`, j("PUT", patch)),
+  pause: (id: string, reason: string) => fetchJSON<ClientDetail>(`/api/copilot/clients/${sid(id)}/pause`, j("POST", { reason: reason.trim() || undefined })),
+  resume: (id: string) => fetchJSON<ClientDetail>(`/api/copilot/clients/${sid(id)}/resume`, j("POST", {})),
   addExtraCredits: (id: string, credits: number) => fetchJSON<ClientDetail>(`/api/copilot/clients/${sid(id)}/extra-credits`, j("POST", { credits })),
 };
