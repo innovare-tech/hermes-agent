@@ -55,7 +55,7 @@ CATALOG: list[dict] = [
     {"key": "aggregate", "label": "Análise livre", "plans": ["pro"], "weight": 2},
 ]
 WEIGHT = {t["key"]: t["weight"] for t in CATALOG}
-TOKENS_PER_CREDIT = 5000  # custo real ~US$0,045 por pergunta com 1 ferramenta = ~5 créditos
+TOKENS_PER_CREDIT = 5000  # pergunta com 1 ferramenta: ~15 mil tokens (~US$0,04) + peso = ~6 créditos
 MCP_SERVER = "aibiz_ops"
 TOOL_PREFIX = f"mcp__{MCP_SERVER}__"
 AUDIENCE = "aibiz-copilot-mcp"
