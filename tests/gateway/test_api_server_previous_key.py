@@ -85,3 +85,17 @@ def test_radar_client_reads_registry_in_the_request_profile(monkeypatch):
     finally:
         _api_request_profile.reset(token)
     assert json.loads(resp.text) == {"sid": "emp-A", "profile": "aibiz"}
+
+
+def test_radar_clients_list_needs_the_gateway_key(monkeypatch):
+    """A lista de empresas com Radar (motor de alertas da porta) só abre com a chave de serviço."""
+    from ops_center import copilot
+
+    gateway = "g" * 40
+    monkeypatch.setenv("COPILOT_GATEWAY_KEY", gateway)
+    monkeypatch.setattr(copilot, "radar_clients", lambda: [{"systemClientId": "emp-A", "state": "active"}])
+    adapter = APIServerAdapter(PlatformConfig(enabled=True))
+    ok = asyncio.run(adapter._handle_radar_clients(SimpleNamespace(headers={"Authorization": f"Bearer {gateway}"})))
+    assert json.loads(ok.text) == {"items": [{"systemClientId": "emp-A", "state": "active"}]}
+    denied = asyncio.run(adapter._handle_radar_clients(SimpleNamespace(headers={"Authorization": "Bearer outra"})))
+    assert denied.status == 401
