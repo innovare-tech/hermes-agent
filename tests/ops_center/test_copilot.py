@@ -219,6 +219,7 @@ def test_trial_extra_credits_and_radar_status(cp, monkeypatch):
     st = cp.radar_status("c1")
     assert st["state"] == "trial" and st["profileId"] == pid and st["credits"] == {"used": 0, "limit": 5000, "extra": 0}
     assert st["renewsAt"] > time.time()
+    assert out["trialUntil"] - st["trialStartedAt"] == pytest.approx(14 * 86400, abs=5)
     cp.save_settings({"plans": {"pro": {"credits": 10}}})
     with cp._in_profile(pid):
         cp.record_turn(pid, {"total_tokens": 50000}, "s1", "tudo", "")  # 10 créditos: acabou

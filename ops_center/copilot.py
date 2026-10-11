@@ -537,7 +537,8 @@ def set_trial(sid: str, days: Optional[int]) -> dict:
         raise ValueError("o teste vai de 1 a 60 dias")
     if days is not None and _row(sid)["plan"] != "pro":
         set_plan(sid, "pro")
-    _set_meta(sid, trialUntil=time.time() + int(days) * 86400 if days else None)
+    now = time.time()
+    _set_meta(sid, trialUntil=now + int(days) * 86400 if days else None, trialStartedAt=now if days else None)
     return get(sid)
 
 
@@ -565,6 +566,7 @@ def radar_status(sid: str) -> dict:
     state = ("trial" if out["trialUntil"] else "active") if out["status"] == "no_credit" else out["status"]
     return {"state": state, "plan": out["plan"],
             "profileId": out["profileId"], "name": out["name"], "trialEndsAt": out["trialUntil"],
+            "trialStartedAt": out["trialStartedAt"],
             "renewsAt": _renews_at(time.time()), "firstScanDone": out["firstScanDone"],
             "credits": {"used": m["credits"], "limit": m["planCredits"], "extra": m["extraCredits"]}}
 
@@ -771,7 +773,7 @@ def _summary(r: dict) -> dict:
     base, extra = _limit(meta, now, settings()["plans"][r["plan"]]["credits"])
     return {"systemClientId": r["system_client_id"], "name": r["name"], "plan": r["plan"], "profileId": r["profile_id"],
             "status": _state(bool(r["revoked_at"]), meta, u["credits"], base + extra, now), "createdAt": r["created_at"],
-            "trialUntil": meta.get("trialUntil"), "firstScanDone": bool(meta.get("firstScanDone")),
+            "trialUntil": meta.get("trialUntil"), "trialStartedAt": meta.get("trialStartedAt"), "firstScanDone": bool(meta.get("firstScanDone")),
             "month": {"conversations": u["conversations"], "credits": u["credits"], "creditsLimit": base + extra,
                       "planCredits": base, "extraCredits": extra,
                       "tokens": u["tokens"], "toolCalls": u["toolCalls"], "spendUsd": _spend(r["profile_id"])},
