@@ -273,6 +273,7 @@ def test_pause_reset_and_flexible_credits(cp, monkeypatch):
     monkeypatch.setattr("gateway.session_context.get_session_env",
                         lambda name, default="": "api_server" if name == "HERMES_SESSION_PLATFORM" else default)
     pid = cp.create("c1", "starter")["profileId"]
+    assert cp.get("c1")["monthlyCredits"] is None  # recém-criado: vale a do plano, nada combinado
     cp.save_settings({"plans": {"starter": {"credits": 10}}})
     with cp._in_profile(pid):
         cp.record_turn(pid, {"total_tokens": 50000}, "s1", "tudo", "")  # 10 créditos: acabou
@@ -281,7 +282,12 @@ def test_pause_reset_and_flexible_credits(cp, monkeypatch):
     assert cp.set_monthly_credits("c1", 30)["month"]["creditsLimit"] == 30
     with cp._in_profile(pid):
         assert cp.quota_block(pid) is None
-    assert cp.set_monthly_credits("c1", None)["month"]["creditsLimit"] == 10
+    assert cp.get("c1")["monthlyCredits"] == 30
+    cp.save_settings({"plans": {"starter": {"credits": 12}}})  # mudar a franquia do plano não apaga a combinada
+    assert cp.get("c1")["month"]["creditsLimit"] == 30
+    assert cp.set_monthly_credits("c1", None)["month"]["creditsLimit"] == 12
+    assert cp.get("c1")["monthlyCredits"] is None
+    cp.save_settings({"plans": {"starter": {"credits": 10}}})
     # Extras com valor exato (corrige um pacote lançado errado).
     cp.add_extra_credits("c1", 50)
     assert cp.set_extra_credits("c1", 5)["month"]["extraCredits"] == 5

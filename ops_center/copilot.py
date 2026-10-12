@@ -567,7 +567,8 @@ def set_monthly_credits(sid: str, credits: Optional[int]) -> dict:
     """Franquia mensal combinada com este cliente; ``None`` volta à do plano."""
     if credits is not None and not 1 <= int(credits) <= 1_000_000:
         raise ValueError("franquia mensal: de 1 a 1.000.000 créditos")
-    _set_meta(sid, credits=int(credits) if credits is not None else None)
+    # Campo próprio: ``credits`` é a cópia da franquia do plano (set_plan/save_settings a reescrevem).
+    _set_meta(sid, customCredits=int(credits) if credits is not None else None)
     return get(sid)
 
 
@@ -712,7 +713,8 @@ def _month_key(now: float) -> str:
 
 def _limit(meta: dict, now: float, plan_credits: Optional[int] = None) -> tuple[int, int]:
     """(franquia do plano, créditos extras deste mês). Extras de outro mês não valem mais."""
-    base = int(meta.get("credits") or plan_credits or PLANS.get(meta.get("plan") or "starter", PLANS["starter"])["credits"])
+    base = int(meta.get("customCredits") or meta.get("credits") or plan_credits
+               or PLANS.get(meta.get("plan") or "starter", PLANS["starter"])["credits"])
     extra = meta.get("extra") or {}
     return base, int(extra.get("credits") or 0) if extra.get("month") == _month_key(now) else 0
 
@@ -816,7 +818,7 @@ def _summary(r: dict) -> dict:
     return {"systemClientId": r["system_client_id"], "name": r["name"], "plan": r["plan"], "profileId": r["profile_id"],
             "status": _state(bool(r["revoked_at"]), meta, u["credits"], base + extra, now), "createdAt": r["created_at"],
             "trialUntil": meta.get("trialUntil"), "trialStartedAt": meta.get("trialStartedAt"),
-            "paused": meta.get("paused"), "monthlyCredits": meta.get("credits"), "creditsResetAt": meta.get("creditsResetAt"),
+            "paused": meta.get("paused"), "monthlyCredits": meta.get("customCredits"), "creditsResetAt": meta.get("creditsResetAt"),
             "firstScanDone": bool(meta.get("firstScanDone")),
             "month": {"conversations": u["conversations"], "credits": u["credits"], "creditsLimit": base + extra,
                       "planCredits": base, "extraCredits": extra,
