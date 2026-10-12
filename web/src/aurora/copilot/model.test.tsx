@@ -287,5 +287,6 @@ describe("pausado e créditos", () => {
     expect(intIn("-5", 0, 10)).toBeNull();
     expect(trialDaysLeft(NOW + 14 * DAY - 5, NOW)).toBe(14);
     expect(trialDaysLeft(NOW - DAY, NOW)).toBe(0);
+    expect(trialDaysLeft(NOW + 2 * DAY + 3, NOW)).toBe(2); // salvo segundos depois do "agora" da tela: não vira 3
   });
 });
