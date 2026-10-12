@@ -210,7 +210,9 @@ export function planDiff(catalog: CatalogTool[], from: Plan, to: Plan, credits: 
 export const nextPlan = (p: Plan): Plan | null => PLANS[PLANS.indexOf(p) + 1] ?? null;
 
 /** Dias que faltam do teste (arredonda para cima; nunca negativo). */
-export const trialDaysLeft = (until: number, now: number) => Math.max(0, Math.ceil((until - now) / 86400));
+/** Dias de calendário (Brasília) até o fim do teste, como a porta e o Manager contam: 0 = último dia. */
+const spDay = (sec: number) => Date.parse(new Date(sec * 1000).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }));
+export const trialDaysLeft = (until: number, now: number) => Math.max(0, Math.round((spDay(until) - spDay(now)) / 86_400_000));
 
 /** "Limite deste mês: franquia 1.000 + extras 500 = 1.500; usados 312". */
 export const limitSummary = (franchise: number, extras: number, used: number) => `Limite deste mês: franquia ${fmtInt(franchise)} + extras ${fmtInt(extras)} = ${fmtInt(franchise + extras)}; usados ${fmtInt(used)}`;
