@@ -166,7 +166,8 @@ textarea::placeholder,input::placeholder{color:var(--fg3)}
 .au-avatar{flex:none;border-radius:50%;background:var(--panel2);display:grid;place-items:center;font-weight:600;color:var(--fg2)}
 .au-tag{font-family:var(--fm);font-size:10.5px;padding:2px 9px;border-radius:999px;border:1px solid currentColor;white-space:nowrap;flex:none}
 .au-primary{padding:9px 16px;border-radius:var(--r2);border:0;background:var(--acc);color:var(--accFg);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:8px}
-.au-primary:hover{box-shadow:0 8px 22px -6px var(--acc)}
+.au-primary:hover:not(:disabled){box-shadow:0 8px 22px -6px var(--acc)}
+.au-primary:disabled,.au-outline:disabled{opacity:.45;cursor:not-allowed}
 .au-outline{padding:9px 15px;border-radius:var(--r2);border:1px solid var(--line2);background:transparent;color:var(--fg);font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
 .au-outline:hover{border-color:var(--acc)}
 .au-outline.danger:hover{border-color:var(--err);color:var(--err)}
