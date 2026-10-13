@@ -63,7 +63,7 @@ _I = re.I
 HARD_DENY = [
     {"label": "Apagar banco ou tabela", "reads": False, "patterns": [
         re.compile(r"\b(drop|truncate)\s+(table|database|schema|collection)\b", _I),
-        re.compile(r"\bdropDatabase\s*\(|\.drop\s*\(\s*\)|\bdrop_?collection\b|\bdrop_?database\b", _I)]},
+        re.compile(r"\bdropDatabase\s*\(|\.drop\s*\(\s*\)|(?<![A-Za-z0-9])drop[_-]?(collection|database)\b", _I)]},
     {"label": "Apagar ou alterar em massa", "reads": False, "patterns": [
         re.compile(r"\bdelete\s+from\s+[\w.\"`]+\s*(;|$|\)|')", _I),
         re.compile(r"\bupdate\s+[\w.\"`]+\s+set\b(?![^;]*\bwhere\b)", _I),
@@ -209,7 +209,8 @@ def classify_command(command: str) -> str:
     return f"{group}.read"
 
 
-_MCP_SHELL_TOOLS = {"run-command"}
+# Nomes já no formato registrado (hífen vira ``_``): ``mcp__vps_aibiz__run_command``.
+_MCP_SHELL_TOOLS = {"run_command"}
 
 
 def _mcp_parts(tool_name: str) -> Optional[tuple[str, str]]:
@@ -221,10 +222,20 @@ def _mcp_parts(tool_name: str) -> Optional[tuple[str, str]]:
 
 
 def _mcp_read_only(server: str, tool: str) -> bool:
+    """``server``/``tool`` vêm do nome registrado (sanitizado); as dicas de leitura ficam sob os nomes
+    originais (``vps-aibiz``/``list-connections``). Casa sanitizando os dois lados; se mais de uma
+    ferramenta cair no mesmo nome, só é leitura quando todas forem."""
     try:
-        from tools.mcp_tool_handlers import _tool_is_read_only
+        from tools.mcp_tool_common import _core
+        from tools.mcp_tool_schema import sanitize_mcp_name_component as clean
+        from tools.mcp_tool_scope import _key_name, _key_visible_in_scope
 
-        return _tool_is_read_only(server, tool)
+        scope = _core._mcp_registry_scope()
+        hits = [ro is True
+                for key, hints in list(_core._tool_read_only_hints.items())
+                if clean(_key_name(key)) == server and _key_visible_in_scope(key, scope)
+                for name, ro in list(hints.items()) if clean(name) == tool]
+        return bool(hits) and all(hits)
     except Exception:
         return False
 

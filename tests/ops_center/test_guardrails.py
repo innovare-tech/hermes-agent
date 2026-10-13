@@ -213,12 +213,27 @@ def test_ssh_mcp_run_command_judged_by_its_command(monkeypatch):
     monkeypatch.setattr(guardrails, "_send_approval_prompt", lambda *a: True)
     monkeypatch.setattr(guardrails, "_mcp_read_only", lambda s, t: False)
     with session(platform="telegram", chat_type="group", chat_id="-100", user_id="11"):
-        assert guardrails.check("mcp__vps-aibiz__run-command", {"command": "pm2 logs calls-api --lines 50 --nostream"}) is None
-        assert guardrails.check("mcp__vps-aibiz__run-command", {"command": "git -C /opt/x status"}) is None
-        assert "Pedi aprovação" in guardrails.check("mcp__vps-aibiz__run-command", {"command": "pm2 restart calls-api"})
-        assert "Pedi aprovação" in guardrails.check("mcp__vps-aibiz__run-command", {"command": "cat a > b"})
-        assert "Pedi aprovação" in guardrails.check("mcp__vps-aibiz__privileged-command", {"command": "ls"})
-        assert "sempre bloqueado" in guardrails.check("mcp__vps-aibiz__run-command", {"command": "rm -rf /opt/x"})
+        assert guardrails.check("mcp__vps_aibiz__run_command", {"command": "pm2 logs calls-api --lines 50 --nostream"}) is None
+        assert guardrails.check("mcp__vps_aibiz__run_command", {"command": "git -C /opt/x status"}) is None
+        assert "Pedi aprovação" in guardrails.check("mcp__vps_aibiz__run_command", {"command": "pm2 restart calls-api"})
+        assert "Pedi aprovação" in guardrails.check("mcp__vps_aibiz__run_command", {"command": "cat a > b"})
+        assert "Pedi aprovação" in guardrails.check("mcp__vps_aibiz__privileged_command", {"command": "ls"})
+        assert "sempre bloqueado" in guardrails.check("mcp__vps_aibiz__run_command", {"command": "rm -rf /opt/x"})
+        assert "sempre bloqueado" in guardrails.check("mcp__MongoDB__drop_collection", {"collection": "x"})
+
+
+def test_mcp_read_only_matches_registered_name_against_original(monkeypatch):
+    """Registrado ``mcp__vps_aibiz__list_connections``; a dica de leitura está em ``vps-aibiz``/``list-connections``."""
+    import tools.mcp_tool as core
+    from ops_center import guardrails
+
+    monkeypatch.setattr(core, "_tool_read_only_hints", {
+        "vps-aibiz": {"list-connections": True, "run-command": None},
+        "dup": {"get-x": True, "get_x": False}})
+    assert guardrails._mcp_read_only("vps_aibiz", "list_connections") is True
+    assert guardrails._mcp_read_only("vps_aibiz", "run_command") is False
+    assert guardrails._mcp_read_only("vps_aibiz", "nao_existe") is False
+    assert guardrails._mcp_read_only("dup", "get_x") is False  # colisão: uma escreve, então escreve
 
 
 def test_core_pre_tool_call_path_enforces_it():
