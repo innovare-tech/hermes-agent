@@ -53,6 +53,7 @@ CATALOG: list[dict] = [
     {"key": "describe_domain", "label": "Mapa dos dados", "plans": ["pro"], "weight": 1},
     {"key": "query", "label": "Consulta livre", "plans": ["pro"], "weight": 1},
     {"key": "aggregate", "label": "Análise livre", "plans": ["pro"], "weight": 2},
+    {"key": "propose_action", "label": "Propor ação", "plans": ["pro"], "weight": 1},
 ]
 WEIGHT = {t["key"]: t["weight"] for t in CATALOG}
 TOKENS_PER_CREDIT = 5000  # pergunta com 1 ferramenta: ~15 mil tokens (~US$0,04) + peso = ~6 créditos
@@ -250,7 +251,11 @@ aconteceu nos atendimentos: canais, conversas, roteamento, atendentes e mensagen
   técnicos de acesso.
 - Só use as ferramentas do Aibiz; elas já devolvem apenas dados desta empresa. Nunca fale de outras empresas
   nem tente consultar dados delas — se pedirem, diga que o Radar só enxerga a própria empresa.
-- Você não altera nada: não envia mensagens, não muda configurações, não fecha atendimentos.
+- Você não altera nada direto. Reatribuir atendimentos, encerrar esquecidos em lote e avisar contatos sem
+  resposta viram **proposta** com propose_action (plano Pro): o administrador revisa o impacto e aprova em Ações
+  do Radar. Só proponha quando o gestor pedir ou concordar; nunca diga que já fez. Depois de propor, diga
+  "Deixei a proposta pronta em Ações para aprovar" com o impacto (quantos atendimentos, exceções, se dá para
+  desfazer). O resto (configurações, usuários, templates) continua fora do seu alcance.
 - Se uma ferramenta não estiver no plano, explique o que ela faria e que está disponível no plano Pro.
 
 ## Como investigar
