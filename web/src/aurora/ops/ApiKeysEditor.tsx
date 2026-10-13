@@ -24,6 +24,7 @@ const KEY_NAME: Record<string, string> = {
 /** Descrições em pt-BR das chaves do próprio Hermes (Saúde, Copiloto, triagem). */
 const KEY_DESC: Record<string, string> = {
   AIBIZ_MONGO_URI: "Conexão com o MongoDB da Aibiz (usuário só leitura): diretório de clientes e Saúde",
+  AIBIZ_MONGO_RW_URI: "Conexão com o MongoDB da Aibiz com escrita: só com aprovação no Telegram",
   HEALTH_SSH_KEY: "Chave SSH (privada, em base64) do usuário de monitoramento das VPS",
   K8S_TOKEN: "Token da conta de serviço de leitura do Kubernetes (Saúde)",
   K8S_CA_CERT: "Certificado (CA) do cluster Kubernetes, em base64",
@@ -119,6 +120,48 @@ function Row({ k, onChange, viaLogin }: { k: ApiKey; onChange: () => void; viaLo
   );
 }
 
+const ENV_NAME = /^[A-Z_][A-Z0-9_]*$/;
+
+/** Chave com nome livre (ex.: AIBIZ_MONGO_RW_URI), para o que o catálogo não conhece. */
+function NewKey({ taken, onChange }: { taken: Set<string>; onChange: () => void }) {
+  const [name, setName] = useState("");
+  const [value, setValue] = useState("");
+  const key = name.trim().toUpperCase();
+  const error = !key ? "" : !ENV_NAME.test(key) ? "Use letras maiúsculas, números e _ (ex.: MINHA_CHAVE)" : taken.has(key) ? "Essa chave já existe: troque o valor na linha dela" : "";
+  const ready = !!key && !error && !!value.trim();
+  const save = async () => {
+    if (!ready) return;
+    try {
+      await agent.setApiKey(key, value.trim());
+      toast(`${key} salva`);
+      setName("");
+      setValue("");
+      onChange();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Não consegui salvar");
+    }
+  };
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        save();
+      }}
+      style={{ display: "flex", flexDirection: "column", gap: 6, padding: "11px 16px", borderBottom: "1px solid var(--line)" }}
+    >
+      <span style={{ fontSize: 13.5, fontWeight: 500 }}>Nova chave</span>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input aria-label="Nome da nova chave" value={name} onChange={(e) => setName(e.target.value)} placeholder="NOME_DA_CHAVE" className="au-inline" style={{ flex: "1 1 180px", fontFamily: "var(--fm)" }} />
+        <input aria-label="Valor da nova chave" type="password" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} placeholder="valor" className="au-inline" style={{ flex: "2 1 220px" }} />
+        <button type="submit" className="au-primary" disabled={!ready}>
+          Salvar
+        </button>
+      </div>
+      {error && <span style={{ fontSize: 12, color: "var(--err)" }}>{error}</span>}
+    </form>
+  );
+}
+
 /** Chaves do .env desta máquina (provedores de modelo e ferramentas). O valor salvo nunca volta para a tela. */
 export function ApiKeysEditor({ onChange }: { onChange?: () => void }) {
   const [keys, , reload] = useAgentData(() => agent.apiKeys(), []);
@@ -146,6 +189,15 @@ export function ApiKeysEditor({ onChange }: { onChange?: () => void }) {
         <input aria-label="Buscar chave" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar (OpenRouter, Anthropic…)" className="au-inline" style={{ flex: 1, minWidth: 180, padding: "8px 12px", border: "1px solid var(--line2)", borderRadius: "var(--r2)", background: "var(--panel)" }} />
       </div>
       <div style={{ display: "flex", flexDirection: "column", border: "1px solid var(--line)", borderRadius: "var(--r)", background: "var(--panel)" }}>
+        {tab === "custom" && keys && (
+          <NewKey
+            taken={new Set(keys.map((k) => k.key))}
+            onChange={() => {
+              reload();
+              onChange?.();
+            }}
+          />
+        )}
         {list.map((k) => (
           <Row
             key={k.key}

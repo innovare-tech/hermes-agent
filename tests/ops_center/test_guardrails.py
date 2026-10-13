@@ -206,6 +206,21 @@ def test_mcp_tool_without_rule_needs_approval_unless_read_only(monkeypatch):
         assert "grupo de cliente" in guardrails.check("mcp__asaas__refund", {"id": "pay_1"})
 
 
+def test_ssh_mcp_run_command_judged_by_its_command(monkeypatch):
+    from ops_center import guardrails
+
+    guardrails.save_settings({"enabled": True})
+    monkeypatch.setattr(guardrails, "_send_approval_prompt", lambda *a: True)
+    monkeypatch.setattr(guardrails, "_mcp_read_only", lambda s, t: False)
+    with session(platform="telegram", chat_type="group", chat_id="-100", user_id="11"):
+        assert guardrails.check("mcp__vps-aibiz__run-command", {"command": "pm2 logs calls-api --lines 50 --nostream"}) is None
+        assert guardrails.check("mcp__vps-aibiz__run-command", {"command": "git -C /opt/x status"}) is None
+        assert "Pedi aprovação" in guardrails.check("mcp__vps-aibiz__run-command", {"command": "pm2 restart calls-api"})
+        assert "Pedi aprovação" in guardrails.check("mcp__vps-aibiz__run-command", {"command": "cat a > b"})
+        assert "Pedi aprovação" in guardrails.check("mcp__vps-aibiz__privileged-command", {"command": "ls"})
+        assert "sempre bloqueado" in guardrails.check("mcp__vps-aibiz__run-command", {"command": "rm -rf /opt/x"})
+
+
 def test_core_pre_tool_call_path_enforces_it():
     from hermes_cli.plugins import _get_pre_tool_call_directive_details
 
