@@ -147,6 +147,7 @@ _READ_SUBCMDS = {
     "systemctl": {"status", "list-units", "list-timers", "is-active", "is-enabled", "show", "cat"},
     "git": {"status", "log", "diff", "show", "branch", "remote", "rev-parse", "ls-files", "blame"},
     "gcloud": {"list", "describe", "get-credentials", "info", "version", "config"},
+    "pm2": {"list", "ls", "jlist", "prettylist", "logs", "describe", "show", "status", "info", "env"},
 }
 _DB_WRITE = re.compile(
     r"\.(insert(One|Many)?|update(One|Many)?|delete(One|Many)?|remove|drop(Database|Indexes|Index)?|replaceOne|"
@@ -208,6 +209,9 @@ def classify_command(command: str) -> str:
     return f"{group}.read"
 
 
+_MCP_SHELL_TOOLS = {"run-command"}
+
+
 def _mcp_parts(tool_name: str) -> Optional[tuple[str, str]]:
     if not tool_name.startswith("mcp__"):
         return None
@@ -241,6 +245,10 @@ def classify(tool_name: str, args: dict) -> Optional[dict]:
     if mcp:
         server, tool = mcp
         writes = not _mcp_read_only(server, tool)
+        command = args.get("command")
+        if writes and tool in _MCP_SHELL_TOOLS and isinstance(command, str):
+            # Shell remoto (ssh-mcp): julga o comando como o terminal; o que não reconhece segue escrita.
+            writes = classify_command(command).endswith(".write")
         return {"key": f"mcp.{server}.{tool}", "group": f"mcp:{server}", "label": f"{server} · {tool}",
                 "writes": writes, "command": f"{tool_name} {json.dumps(args, ensure_ascii=False)}"[:4000]}
     return None
