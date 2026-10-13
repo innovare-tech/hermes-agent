@@ -436,6 +436,46 @@ def _alert_hard_deny(org: Optional[str], action: dict, rule: str) -> None:
         logger.debug("ops_center: alerta de bloqueio não enviado", exc_info=True)
 
 
+_SOURCE_FIELDS = {"platform": "PLATFORM", "chat_id": "CHAT_ID", "chat_type": "CHAT_TYPE", "chat_name": "CHAT_NAME",
+                  "thread_id": "THREAD_ID", "user_id": "USER_ID", "user_id_alt": "USER_ID_ALT", "user_name": "USER_NAME",
+                  "scope_id": "SCOPE_ID", "parent_chat_id": "PARENT_CHAT_ID", "profile": "PROFILE"}
+
+
+def _session_source() -> Optional[dict]:
+    """Conversa que pediu (para acordá-la com o resultado depois da aprovação); só chat do Telegram."""
+    src = {k: _session(f"HERMES_SESSION_{v}") or None for k, v in _SOURCE_FIELDS.items()}
+    return src if src["platform"] == "telegram" and src["chat_id"] else None
+
+
+def result_text(result: Any, limit: int = 3500) -> str:
+    """Resultado de ferramenta para gente: tira o envelope JSON (``{"result": …}``, ``{"output": …}``,
+    ``{"error": …}``) e as quebras escapadas; o resto vira JSON indentado."""
+    try:
+        data = json.loads(result) if isinstance(result, str) else result
+    except (TypeError, ValueError):
+        data = result
+    if isinstance(data, dict):
+        if data.get("error"):
+            data = f"Erro: {data['error']}"
+        else:
+            for key in ("result", "output", "content", "stdout", "text"):
+                if isinstance(data.get(key), str):
+                    data = data[key]
+                    break
+    text = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, indent=2, default=str)
+    text = text.strip() or "(sem saída)"
+    return text if len(text) <= limit else text[:limit] + "\n… (cortado)"
+
+
+def wake_text(a: dict, result: Any) -> str:
+    """Turno interno que devolve à conversa o resultado da chamada aprovada."""
+    return (f"[Pedido #{a.get('id')} aprovado por {a.get('decided_by') or 'alguém da equipe'} e já executado pelo Hermes: "
+            f"{a.get('summary') or a.get('tool')}.\nComando: {(a.get('command') or '')[:800]}\nResultado:\n"
+            f"{result_text(result, 6000)}]\n"
+            "Conte à equipe, em poucas linhas e em português, o que aconteceu e o que isso significa; se a tarefa "
+            "original ainda tiver passos, continue. Não rode de novo o comando aprovado.")
+
+
 def _approval_target() -> tuple[str, Optional[str], Optional[str]]:
     """(plataforma, chat, tópico): o próprio chat da equipe no Telegram, senão o destino configurado."""
     if _session("HERMES_SESSION_PLATFORM") == "telegram" and _session("HERMES_SESSION_CHAT_ID"):
@@ -472,7 +512,7 @@ def _request_approval(cfg: dict, org: str, action: dict, tool_name: str, args: d
         origin=org, requested_by=who, requested_by_id=who_id, context=ctx, action=action["key"],
         summary=action["label"], command=action["command"], tool=tool_name, args=args, status="pending",
         target=f"{platform}:{chat_id}" + (f":{thread_id}" if thread_id else ""),
-        expires_at=time.time() + APPROVAL_TTL_MIN * 60)
+        expires_at=time.time() + APPROVAL_TTL_MIN * 60, session_source=_session_source())
     sent = _send_approval_prompt(aid, chat_id, thread_id)
     if not sent:
         store.update_approval(aid, status="blocked", note="não consegui enviar o pedido ao Telegram")
@@ -631,7 +671,7 @@ def announce(a: dict, result: Optional[str] = None) -> None:
             except Exception:  # noqa: BLE001 — mensagem antiga/apagada: segue para o resultado
                 logger.debug("ops_center: não consegui editar o pedido #%s no Telegram", a.get("id"), exc_info=True)
         if result is not None:
-            payload: dict = {"chat_id": chat, "text": f"Resultado do pedido #{a.get('id')}:\n{str(result)[:3500]}"}
+            payload: dict = {"chat_id": chat, "text": f"Resultado do pedido #{a.get('id')}:\n{result_text(result)}"}
             if thread is not None:
                 payload["message_thread_id"] = thread
             notify._call("sendMessage", payload)

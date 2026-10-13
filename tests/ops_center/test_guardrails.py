@@ -155,6 +155,31 @@ def test_decide_rules_and_exact_execution(monkeypatch):
     assert "scaled" in store.get_approval(1)["result"]
 
 
+def test_approval_keeps_origin_conversation_and_readable_result(monkeypatch):
+    """Aprovado, o resultado volta para a conversa que pediu: o pedido guarda a origem; o texto é legível."""
+    from ops_center import guardrails, store
+
+    guardrails.save_settings({"enabled": True})
+    monkeypatch.setattr(guardrails, "_send_approval_prompt", lambda *a: True)
+    with session(platform="telegram", chat_type="group", chat_id="-100", thread_id="1", user_id="11",
+                 user_name="Kelvin", profile="aibiz"):
+        guardrails.check("terminal", {"command": "pm2 restart calls-api"})
+    a = store.get_approval(1)
+    assert a["session_source"] == {**{k: None for k in guardrails._SOURCE_FIELDS}, "platform": "telegram",
+                                   "chat_id": "-100", "chat_type": "group", "thread_id": "1", "user_id": "11",
+                                   "user_name": "Kelvin", "profile": "aibiz"}
+    with session(cron="1"):
+        assert guardrails._session_source() is None  # fora do Telegram não há conversa para acordar
+
+    assert guardrails.result_text('{"result": "linha 1\\nlinha 2"}') == "linha 1\nlinha 2"
+    assert guardrails.result_text('{"error": "sem chave"}') == "Erro: sem chave"
+    assert guardrails.result_text('{"success": true, "diff": "-a\\n+b"}') == '{\n  "success": true,\n  "diff": "-a\\n+b"\n}'
+    assert guardrails.result_text("x" * 50, limit=10).endswith("… (cortado)")
+    wake = guardrails.wake_text({**a, "decided_by": "Ivair"}, '{"result": "ok"}')
+    assert "Pedido #1 aprovado por Ivair" in wake and "pm2 restart calls-api" in wake and "Resultado:\nok]" in wake
+    assert "Não rode de novo" in wake
+
+
 def test_approval_expires_as_denied(monkeypatch):
     from ops_center import guardrails, store
 

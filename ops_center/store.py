@@ -160,6 +160,9 @@ def _migrate(con: sqlite3.Connection) -> None:
                       ("channel_id", "TEXT"), ("deliver", "TEXT NOT NULL DEFAULT 'local'")):
         if name not in cols:
             con.execute(f"ALTER TABLE playbooks ADD COLUMN {name} {ddl}")
+    cols = {r[1] for r in con.execute("PRAGMA table_info(approvals)")}
+    if "session_source" not in cols:  # conversa de origem: aprovado, o resultado volta para ela
+        con.execute("ALTER TABLE approvals ADD COLUMN session_source TEXT")
 
 
 def _rows(cur: sqlite3.Cursor) -> list[dict[str, Any]]:
@@ -810,8 +813,9 @@ def update_analysis(analysis_id: int, **fields: Any) -> None:
 
 def add_approval(**fields: Any) -> int:
     cols = ("origin", "requested_by", "requested_by_id", "context", "action", "summary", "command", "tool", "args",
-            "status", "rule", "target", "expires_at", "note")
-    vals = [json.dumps(fields.get(k) or {}) if k == "args" else fields.get(k) for k in cols]
+            "status", "rule", "target", "expires_at", "note", "session_source")
+    vals = [json.dumps(fields.get(k) or {}) if k == "args" else
+            (json.dumps(fields[k]) if k == "session_source" and fields.get(k) else fields.get(k)) for k in cols]
     with connect() as c:
         cur = c.execute(f"INSERT INTO approvals(at, {', '.join(cols)}) VALUES(?, {', '.join('?' * len(cols))})",
                         (time.time(), *vals))
@@ -825,6 +829,7 @@ def get_approval(approval_id: int) -> Optional[dict]:
         return None
     a = dict(row)
     a["args"] = json.loads(a.get("args") or "{}")
+    a["session_source"] = json.loads(a["session_source"]) if a.get("session_source") else None
     return a
 
 
