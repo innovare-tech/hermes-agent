@@ -4306,9 +4306,41 @@ class TelegramAdapter(TelegramHeldInboundMixin, BasePlatformAdapter):
             return guardrails.execute_approved(approval_id)
 
         result = await asyncio.to_thread(_run)
+        from ops_center import guardrails
+
+        # A conversa que pediu recebe o resultado e continua (explica, segue a tarefa); sem ela, texto legível.
+        if a.get("session_source") and await self._wake_after_approval({**a, "decided_by": by}, result, home):
+            return
         if cb["chat_id"] is not None:
             meta = {"thread_id": cb["thread_id"]} if cb["thread_id"] is not None else None
-            await self.send(str(cb["chat_id"]), f"Resultado do pedido #{approval_id}:\n{result[:3500]}", metadata=meta)
+            await self.send(str(cb["chat_id"]), f"Resultado do pedido #{approval_id}:\n{guardrails.result_text(result)}",
+                            metadata=meta)
+
+    async def _wake_after_approval(self, a: Dict[str, Any], result: str, home) -> bool:
+        """Acorda a sessão de origem do pedido com o resultado (turno interno). False se não deu."""
+        try:
+            from gateway.run import _async_profile_runtime_scope
+            from gateway.session import SessionSource
+            from gateway.wake import deliver_wake
+            from ops_center import guardrails
+
+            src = a["session_source"]
+            source = SessionSource(
+                platform=Platform.TELEGRAM, chat_id=str(src["chat_id"]), chat_type=src.get("chat_type") or "group",
+                chat_name=src.get("chat_name"), thread_id=src.get("thread_id"), user_id=src.get("user_id"),
+                user_id_alt=src.get("user_id_alt"), user_name=src.get("user_name"), scope_id=src.get("scope_id"),
+                parent_chat_id=src.get("parent_chat_id"), profile=src.get("profile"))
+            text = guardrails.wake_text(a, result)
+            if home:
+                async with _async_profile_runtime_scope(home):
+                    await deliver_wake(self, text=text, source=source)
+            else:
+                await deliver_wake(self, text=text, source=source)
+            return True
+        except Exception:
+            logger.warning("[%s] pedido #%s: não consegui devolver o resultado à conversa", self.name, a.get("id"),
+                           exc_info=True)
+            return False
 
     async def send_slash_confirm(
         self, chat_id: str, title: str, message: str, session_key: str, confirm_id: str,
