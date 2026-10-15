@@ -314,3 +314,71 @@ def test_pause_reset_and_flexible_credits(cp, monkeypatch):
         assert cp.quota_block(pid) == ("paused", "O Aibiz Radar está pausado. Fale com a Aibiz para reativar.")
     assert cp.radar_status("c1")["state"] == "paused" and cp.list_clients()["counts"]["paused"] == 1
     assert cp.resume("c1")["status"] == "active"
+
+
+# ---- juiz da Saúde da IA ----
+
+class _Resp:
+    def __init__(self, text, total=10_000):
+        self.choices = [type("C", (), {"message": type("M", (), {"content": text})()})()]
+        self.usage = type("U", (), {"prompt_tokens": total - 500, "completion_tokens": 500, "total_tokens": total})()
+
+
+CONV = [{"id": "m1", "role": "client", "text": "quanto custa?"},
+        {"id": "m2", "role": "ia", "text": "A consulta custa R$ 80."},
+        {"id": "m3", "role": "human", "text": "Corrigindo: a consulta custa R$ 120."}]
+GOOD = ('Aqui: {"findings":[{"type":"stale_price","messageId":"m2","confidence":0.93,"expected":"R$ 120","ruleRef":"m3",'
+        '"excerptRange":[20,25]},{"type":"stale_price","messageId":"m3","confidence":0.9},'  # m3 não é da IA
+        '{"type":"outro","messageId":"m2","confidence":0.9},{"type":"hallucination","messageId":"m2","confidence":7}]}')
+
+
+def _usage_rows(cp, pid):
+    from ops_center.copilot import _db, _profile_home
+
+    with _db(_profile_home(pid) / "ops.db") as c:
+        return [tuple(r) for r in c.execute("SELECT credits, total_tokens, question FROM copilot_usage")]
+
+
+def test_judge_keeps_only_valid_findings_and_is_free_for_the_client_unless_charged(cp, monkeypatch):
+    import agent.auxiliary_client as aux
+
+    calls = []
+    monkeypatch.setattr(aux, "call_llm", lambda **kw: calls.append(kw) or _Resp(GOOD))
+    pid = cp.create("c1", "pro")["profileId"]
+    with cp._in_profile(pid):
+        free = cp.judge(pid, {"conversation": CONV, "memory": "Consulta: R$ 120", "types": ["stale_price", "hallucination"]})
+        paid = cp.judge(pid, {"conversation": CONV, "types": ["stale_price"], "charge": True})
+        rows = _usage_rows(cp, pid)
+    # só a resposta da IA, tipo pedido; confiança fora de 0–1 vira 1; o resto some
+    assert [(f["type"], f["messageId"]) for f in free["findings"]] == [("stale_price", "m2"), ("hallucination", "m2")]
+    assert free["findings"][1]["confidence"] == 1.0 and free["findings"][0]["excerptRange"] == [20, 25]
+    assert free["credits"] == 0 and paid["credits"] == 2  # 10 mil tokens ÷ 5 mil
+    assert sorted(rows) == [(0, 10000, "radar_audit"), (2, 10000, "radar_audit")]
+    assert calls[0]["temperature"] == 0 and "tools" not in calls[0] and calls[0]["task"] == "radar_audit"
+    assert "[m2] ia: A consulta custa R$ 80." in calls[0]["messages"][1]["content"]
+
+
+def test_judge_skips_the_model_without_ia_replies_retries_once_and_refuses_other_profiles(cp, monkeypatch):
+    import agent.auxiliary_client as aux
+
+    pid = cp.create("c1", "pro")["profileId"]
+    boom = []
+
+    def flaky(**kw):
+        boom.append(1)
+        if len(boom) == 1:
+            raise TimeoutError("ReadTimeout")
+        return _Resp('{"findings":[]}')
+
+    monkeypatch.setattr(aux, "call_llm", flaky)
+    with cp._in_profile(pid):
+        assert cp.judge(pid, {"conversation": [CONV[0]], "types": ["stale_price"]})["findings"] == []
+        assert boom == []  # nada da IA para julgar: não chama o modelo
+        assert cp.judge(pid, {"conversation": CONV})["findings"] == [] and len(boom) == 2  # 1ª falha, 2ª ok
+        monkeypatch.setattr(aux, "call_llm", lambda **kw: (_ for _ in ()).throw(TimeoutError("x")))
+        with pytest.raises(RuntimeError):
+            cp.judge(pid, {"conversation": CONV})
+        with pytest.raises(ValueError):
+            cp.judge(pid, {"conversation": [], "types": ["stale_price"]})
+    with pytest.raises(PermissionError):
+        cp.judge("aibiz", {"conversation": CONV})

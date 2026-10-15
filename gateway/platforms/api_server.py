@@ -1782,6 +1782,7 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             ("GET", "/v1/radar/clients", self._handle_radar_clients),
             ("GET", "/v1/radar/clients/{system_client_id}", self._handle_radar_client),
             ("GET", "/v1/radar/clients/{system_client_id}/usage", self._handle_radar_usage),
+            ("POST", "/v1/radar/judge", self._handle_radar_judge),
             ("POST", "/v1/responses", self._handle_responses),
             ("GET", "/v1/responses/{response_id}", self._handle_get_response),
             ("DELETE", "/v1/responses/{response_id}", self._handle_delete_response),
@@ -4160,6 +4161,32 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             return web.json_response({"error": "sem Radar"}, status=404)
         except ValueError:
             return web.json_response({"error": "since inválido"}, status=400)
+
+    async def _handle_radar_judge(self, request: "web.Request") -> "web.Response":
+        """Juiz da Saúde da IA: a porta manda uma conversa e recebe os achados. Só a chave de serviço, em /p/<cli-*>/.
+        Sem agente nem ferramentas. A revisão agendada não gasta crédito do cliente; ``charge`` ("Conferir agora") gasta."""
+        if not self._is_radar_gateway(request):
+            return self._auth_failed_response()
+        profile = _api_request_profile.get() or ""
+        if not profile.startswith("cli-"):
+            return _error_response("o juiz roda só em perfil de cliente", 403, err_type="invalid_request_error")
+        body, err = await self._read_json_body(request)
+        if err is not None:
+            return err
+        from ops_center import copilot
+        if body.get("charge"):
+            blocked = await asyncio.to_thread(copilot.quota_block, profile)
+            if blocked:
+                return _error_response(blocked[1], 402 if blocked[0] == "no_credit" else 403,
+                                       err_type="insufficient_quota" if blocked[0] == "no_credit" else "copilot_unavailable",
+                                       code=f"copilot_{blocked[0]}")
+        try:
+            return web.json_response(await asyncio.to_thread(copilot.judge, profile, body))
+        except ValueError as e:
+            return _error_response(str(e), 400)
+        except Exception as e:  # noqa: BLE001 — provedor fora do ar: a porta tenta de novo no próximo ciclo
+            logger.warning("radar judge: %s", e)
+            return _error_response("juiz indisponível", 502, err_type="upstream_error")
 
     def _concurrency_limited_response(self) -> Optional["web.Response"]:
         """429 when the concurrent-run cap is reached (0 disables), else None. Uses the same
