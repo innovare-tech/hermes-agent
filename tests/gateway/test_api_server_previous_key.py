@@ -99,3 +99,34 @@ def test_radar_clients_list_needs_the_gateway_key(monkeypatch):
     assert json.loads(ok.text) == {"items": [{"systemClientId": "emp-A", "state": "active"}]}
     denied = asyncio.run(adapter._handle_radar_clients(SimpleNamespace(headers={"Authorization": "Bearer outra"})))
     assert denied.status == 401
+
+
+def test_radar_judge_route_needs_the_service_key_and_a_client_profile(monkeypatch):
+    """POST /v1/radar/judge: sem a chave de serviço 401; perfil da equipe 403; "Conferir agora" sem crédito 402."""
+    from ops_center import copilot
+
+    gateway = "g" * 40
+    monkeypatch.setenv("COPILOT_GATEWAY_KEY", gateway)
+    adapter = APIServerAdapter(PlatformConfig(enabled=True))
+
+    class Req:
+        def __init__(self, token, body):
+            self.headers, self._body = {"Authorization": f"Bearer {token}"}, body
+
+        async def json(self):
+            return self._body
+
+    def call(token, body, profile):
+        t = _api_request_profile.set(profile)
+        try:
+            return asyncio.run(adapter._handle_radar_judge(Req(token, body)))
+        finally:
+            _api_request_profile.reset(t)
+
+    monkeypatch.setattr(copilot, "judge", lambda p, b: {"findings": [], "credits": 0})
+    monkeypatch.setattr(copilot, "quota_block", lambda p: ("no_credit", "acabaram"))
+    assert call("outra", {}, "cli-x").status == 401
+    assert call(gateway, {}, "aibiz").status == 403
+    assert call(gateway, {"charge": True}, "cli-x").status == 402
+    ok = call(gateway, {"conversation": []}, "cli-x")  # agendada: não olha a cota
+    assert ok.status == 200 and json.loads(ok.body) == {"findings": [], "credits": 0}
