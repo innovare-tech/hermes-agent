@@ -51,7 +51,7 @@ def test_create_isolated_profile(cp):
     assert {"terminal", "file", "code_execution", "web", "delegation", "cronjob"} <= set(cfg["agent"]["disabled_toolsets"])
     mcp = cfg["mcp_servers"]["aibiz_ops"]
     assert mcp["trust"] == "untrusted" and mcp["headers"]["Authorization"] == "Bearer ${AIBIZ_MCP_TOKEN}"
-    assert mcp["tools"]["include"] == ["my_channels_status", "channel_metrics", "search_conversations", "timeline", "waiting_now"]
+    assert mcp["tools"]["include"] == ["my_channels_status", "channel_metrics", "search_conversations", "timeline", "waiting_now", "remember"]
     env = _client_env(cp, pid)
     assert env["API_SERVER_KEY"] == out["apiKey"]
     claims = jwt.decode(env["AIBIZ_MCP_TOKEN"], SECRET, algorithms=["HS256"], audience="aibiz-copilot-mcp")
@@ -78,6 +78,16 @@ def test_plan_change_updates_tools_and_token(cp):
     assert "query" in _client_cfg(cp, pid)["mcp_servers"]["aibiz_ops"]["tools"]["include"]
     claims = jwt.decode(_client_env(cp, pid)["AIBIZ_MCP_TOKEN"], SECRET, algorithms=["HS256"], audience="aibiz-copilot-mcp")
     assert claims["plan"] == "pro"
+
+
+def test_remember_is_in_every_plan_and_soul_explains_memory(cp):
+    from hermes_constants import get_hermes_home
+
+    pid = cp.create("c1", "starter")["profileId"]
+    assert "remember" in _client_cfg(cp, pid)["mcp_servers"]["aibiz_ops"]["tools"]["include"]
+    with cp._in_profile(pid):
+        soul = (get_hermes_home() / "SOUL.md").read_text(encoding="utf-8")
+    assert "Memória da empresa" in soul and "remember" in soul and "falta o" in soul
 
 
 def test_rotate_with_and_without_grace(cp):
